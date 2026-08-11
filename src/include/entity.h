@@ -13,7 +13,8 @@ enum {
     ET_NONE = 0,
     ET_BOUNCER,   /* 骨格デモ用: 画面端で反射 */
     ET_BULLET,    /* 弾: 直進し画面外で消滅 */
-    ET_SHOOTER,   /* 射手: fire スクリプトで弾を撒く */
+    ET_SHOOTER,   /* 射手: fire スクリプトで弾を撒く(位置固定) */
+    ET_FIGHTER,   /* 空戦の敵戦闘機: 上から侵入し下へ抜ける */
     ET_COUNT
 };
 

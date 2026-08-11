@@ -32,12 +32,22 @@ static void bh_shooter(Entity *e) {
     run_fire(e);
 }
 
+/* 敵戦闘機(空戦): 下方向へ進み、左右に浅く蛇行しつつ画面下で消滅。fireを持てば発砲も。 */
+static void bh_fighter(Entity *e) {
+    e->y += e->vy;
+    e->x += e->vx;
+    if (e->x < 0 || e->x > (s16)(SCR_W - e->w)) e->vx = -e->vx;   /* 端で横反転=浅い蛇行 */
+    if (e->fire) run_fire(e);
+    if (e->y > SCR_H + 8) e->active = 0;                          /* 下へ抜けたら消滅 */
+}
+
 typedef void (*Behavior)(Entity *);
 static const Behavior behaviors[ET_COUNT] = {
     0,           /* ET_NONE    */
     bh_bouncer,  /* ET_BOUNCER */
     bh_bullet,   /* ET_BULLET  */
     bh_shooter,  /* ET_SHOOTER */
+    bh_fighter,  /* ET_FIGHTER */
 };
 
 void ent_reset(void) {

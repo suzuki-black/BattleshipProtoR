@@ -89,6 +89,22 @@ void vdp_wait_frame(void) {
     while (*j == t) { }
 }
 
+/* ===== スクロール =====
+   R#23 縦スクロールは VRAM 全体(スプライト含む)を縦シフトする。g_vscroll に量を保持し、
+   vdp_sprite_pos が Y へ加算 → 縦スクロール中もスプライトを画面固定に見せる。
+   R#26/27 横スクロール(蛇行)はスプライトに影響しないため補正不要。 */
+static u8 g_vscroll;   /* 現在の縦スクロール量(sprite_pos がYに加算) */
+
+void vdp_set_vscroll(u8 v) {
+    g_vscroll = v;
+    vdp_wreg(23, v);
+}
+
+void vdp_set_hscroll(u8 coarse, u8 fine) {
+    vdp_wreg(26, coarse & 0x3F);   /* 8px単位の粗スクロール */
+    vdp_wreg(27, fine & 0x07);     /* 0-7 の微スクロール    */
+}
+
 /* ===== スプライト(mode2, 16x16) =====
    SCREEN5 の BIOS 既定テーブル配置を使う(C-BIOS/実機共通): 属性0x7600/色0x7400/パターン0x7800。
    R#5/6/11 は CHGMOD(5) が既定値に設定済みなので触らない(相対再配置は環境差で不確実)。 */
@@ -134,7 +150,8 @@ void vdp_sprite_color(u8 slot, u8 color) {
 
 void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum) {
     vdp_write_addr(SPR_ATTR + (u16)slot * 4);
-    VDP_DAT = (u8)(y - 1);   /* 表示Y=属性Y+1 のため -1 */
+    /* 表示Y=属性Y+1 のため -1。縦スクロール量を足して画面固定に補正。 */
+    VDP_DAT = (u8)(y + g_vscroll - 1);
     VDP_DAT = x;
     VDP_DAT = patnum;
     VDP_DAT = 0;

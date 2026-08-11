@@ -24,12 +24,14 @@ RESIDENT_RELS = \
   $(BUILD)/bank.rel \
   $(BUILD)/input.rel \
   $(BUILD)/sound.rel \
+  $(BUILD)/sprites.rel \
   $(BUILD)/entity.rel \
   $(BUILD)/fire.rel \
   $(BUILD)/ops.rel \
   $(BUILD)/scene.rel \
   $(BUILD)/scene_boot.rel \
-  $(BUILD)/scene_demo.rel \
+  $(BUILD)/scene_intro.rel \
+  $(BUILD)/scene_boss.rel \
   $(BUILD)/main.rel
 
 # ── 追加バンク(冷たいコード/データ)。--bank N file の形で rompack へ渡す。

@@ -27,8 +27,8 @@ void boot_init(void) {
 }
 
 u8 boot_update(void) {
-    /* 疎通画面を約1.5秒見せる or トリガで、エンティティ骨格デモ(SC_DEMO)へ遷移。 */
+    /* 疎通画面を約1.5秒見せる or トリガで、空戦イントロ(SC_INTRO)へ遷移。 */
     boot_t++;
-    if (boot_t > 90 || (g_input_edge & INP_TRIG)) return SC_DEMO;
+    if (boot_t > 90 || (g_input_edge & INP_TRIG)) return SC_INTRO;
     return SCENE_NONE;
 }

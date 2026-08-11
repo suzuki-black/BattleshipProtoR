@@ -56,6 +56,8 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 ### 3.1 シーンFSM (`scene.h` / `scene.c`)
 `Scene { init(); update()->次ID; bank }` の表 `registry[]` を1か所に集約。
 `scene_run()` が「入場時 init 1回 → 毎フレーム update → 戻り値で遷移」を回す。**巨大 main() を作らない**。
+- **現在のフロー**: `SC_BOOT`(疎通) → `SC_INTRO`(★空戦イントロ=縦スクロールのみ) → `SC_BOSS`(★戦艦ボス=蛇行)。
+  ★新ルール「各面=空戦イントロ→戦艦ボスの2段」を1面ぶんプロト実装(HANDOFF §2/§7-3)。
 - 冷たいシーンは将来 `bank != 0` にして、ディスパッチャが `g_bank=bank; bcall()` で当該バンクの
   0xA000 エントリを呼ぶ(そのエントリが `g_scene_phase` で init/update を分岐)。今は常駐シーンのみ実装。
 
@@ -70,6 +72,12 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - **run_fire**(発砲スクリプト `fire.c`): `FireDesc{interval, [op,a,kind,spd].., 0}`。現状 FIXED/RING。
   将来 AIMED/予告/レイジ/ゼロ距離抑え込み/固定弾安置を**データで**追加。仕様の原典: 前作 `docs/fire-script-spec.md`。
 - **emit**(弾生成プリミティブ `fire.c`): `emit(x,y,dir,kind,spd)`。16分割方向×弾速で ET_BULLET を1発生成。全発砲を共通化。
+
+### 3.4 スクロール (`vdp.c`)
+- **縦スクロール R#23**(空戦イントロの海): VRAM全体を縦シフト=**スプライトにも効く**。`vdp_set_vscroll` が量を保持し
+  `vdp_sprite_pos` が Y に加算 → 自機/敵を画面固定に見せる。海は256行を波線付きで seamless に。
+- **横スクロール R#26/27**(ボスの蛇行): スプライト非影響。艦体(VRAM)を左右に揺らす。
+  ※プロト簡略化: 弾(スプライト)の発射原点は揺れに追従しない。本番で砲塔追従を入れる。
 - **エンティティ・プール**(実装済み骨格 `entity.c`): 自機/敵機/弾/砲/エフェクトを固定長プール＋
   behavior(type別 update)の関数ポインタ表で回す。空戦の敵機も戦艦の砲も同じ枠。
   描画は**ハードウェアスプライト(mode2, 16x16)**。active を先頭スロットへ詰めて属性/色を書き、
@@ -119,16 +127,18 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 起動 | `src/crt0rom.s` | "AB"ヘッダ / page2有効化 / ASCII8窓初期化 / `_bcall` |
 | 常駐 | `src/core/main.c` | エントリ(初期化→FSM委譲のみ) |
 | 常駐 | `src/core/sys.c` | R800ブースト等の起動初期化 |
-| 常駐 | `src/core/vdp.c` | VDPレジスタ/パレット/VRAM/コマンド(LMMV)/フレーム待ち/スプライト(mode2) |
+| 常駐 | `src/core/vdp.c` | VDPレジスタ/パレット/VRAM/LMMV/フレーム待ち/スプライト(mode2)/スクロール(R#23,26,27) |
 | 常駐 | `src/core/bank.c` | バンク切替 / `g_bank` / bcall glue |
 | 常駐 | `src/core/input.c` | カーソル/トリガ入力(row8直読み) |
 | 常駐 | `src/core/sound.c` | PSG効果音＋H.TIMI 60Hz割込みISR(BGMは#2後) |
 | 常駐 | `src/core/entity.c` | 汎用エンティティプール＋type別behavior＋スプライト描画 |
 | 常駐 | `src/core/fire.c` | 発砲プリミティブ emit＋発砲スクリプト run_fire |
 | 常駐 | `src/core/ops.c` | データ駆動描画 run_ops(艦体等) |
+| 常駐 | `src/core/sprites.c` | スプライトパターン定義＋一括投入(sprites_load) |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
 | バンク | `src/banked/bank_demo.c` | 実バンクコール実証(bank4, 0xA000エントリ, 自己完結) |
-| シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_DEMOへ遷移 |
-| シーン | `src/scenes/scene_demo.c` | 骨格デモ(bouncer×4＋ISR/音/bcallのHUD) |
+| シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_INTROへ遷移 |
+| シーン | `src/scenes/scene_intro.c` | ★空戦イントロ(縦スクロール海＋降下戦闘機＋自機固定)→SC_BOSS |
+| シーン | `src/scenes/scene_boss.c` | ★戦艦ボス(run_ops艦体＋蛇行横スクロール＋主砲散弾) |
 | ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
-| ツール | `tools/test_{boot,sound,bank,spr}.tcl` | openMSX headless 検証(起動/音RAM・PSG/バンクRAM/スプライトVRAM・運動) |
+| ツール | `tools/test_{boot,sound,bank,spr,stage}.tcl` | openMSX headless 検証(起動/音/バンク/スプライト/2段構成) |

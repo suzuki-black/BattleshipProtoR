@@ -15,7 +15,8 @@
 /* シーンID(登録順)。追加時はここと scene.c の registry を対で更新。 */
 enum {
   SC_BOOT = 0,
-  SC_DEMO,
+  SC_INTRO,   /* 空戦イントロ(縦スクロールのみ) */
+  SC_BOSS,    /* 戦艦ボス(蛇行スクロール)       */
   SC_COUNT
 };
 

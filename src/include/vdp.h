@@ -31,8 +31,15 @@ void vdp_fill(u16 dx, u16 dy, u16 nx, u16 ny, u8 color);
 /* 表示同期: VBLANK(JIFFY 更新)を1回待つ。 */
 void vdp_wait_frame(void);
 
+/* ===== スクロール =====
+   縦スクロール R#23 は VRAM 全体を縦シフトし「スプライトにも効く」。
+   よって縦スクロール中もスプライトを画面固定に見せるため、vdp_sprite_pos は
+   現在の縦スクロール量を Y に加算して補正する(この値は vdp_set_vscroll が保持)。 */
+void vdp_set_vscroll(u8 v);                 /* R#23 = v(縦スクロール)。0で無効化。 */
+void vdp_set_hscroll(u8 coarse, u8 fine);   /* R#26=coarse(8px単位)/R#27=fine(0-7)。蛇行はスプライト非影響。 */
+
 /* ===== スプライト(V9938 mode2, 16x16) =====
-   SCREEN5 の高位VRAMにテーブルを置く: 属性0xF780 / 色0xF580 / パターン0xF800。
+   SCREEN5 の BIOS 既定テーブルを使用: 属性0x7600 / 色0x7400 / パターン0x7800(vdp.c参照)。
    色はmode2では行ごと(色表16B/枚)。単色運用は vdp_sprite_color で全16行を塗る。 */
 void vdp_sprite_init(void);                          /* 16x16化＋テーブル基底設定＋全消し */
 void vdp_sprite_pattern(u8 patnum, const u8 *d32);   /* 16x16=32B をパターン patnum へ(patnumは4の倍数) */
