@@ -7,14 +7,23 @@
 #include "vdp.h"
 #include "entity.h"
 #include "sound.h"
+#include "bank.h"
+
+#define BANK_PROOF (*(volatile u8 *)0xE000)   /* bank_demo が 0x5A を書く証跡 */
 
 static u16 demo_t;
+static u8  bank_ok;   /* 実バンクコール成功フラグ */
 
 void demo_init(void) {
     Entity *e;
     vdp_fill(0, 0, 256, 212, 4);   /* 背景を海青で全消し */
     ent_reset();
     demo_t = 0;
+
+    /* 実バンクコール実証: bank4 の bank_entry を呼び、RAM証跡(0xE000==0x5A)を確認 */
+    BANK_PROOF = 0x00;
+    bcall_to(4);
+    bank_ok = (BANK_PROOF == 0x5A);
 
     e = ent_spawn(ET_BOUNCER); if (e) { e->x = 20;  e->y = 30;  e->vx = 3;  e->vy = 2;  e->w = 12; e->h = 12; e->color = 15; }
     e = ent_spawn(ET_BOUNCER); if (e) { e->x = 120; e->y = 50;  e->vx = -2; e->vy = 3;  e->w = 10; e->h = 10; e->color = 8;  }
@@ -28,6 +37,7 @@ static void draw_hud(void) {
     vdp_fill(0, 2, 128, 4, 4);              /* バー領域を消去(青) */
     if (w) vdp_fill(0, 2, w, 4, 15);        /* tickバー(白) */
     vdp_fill(244, 2, 8, 8, snd_active ? 8 : 4);  /* 発音中=赤 / 無音=青 */
+    vdp_fill(232, 2, 8, 8, bank_ok ? 12 : 8);    /* 実バンクコール: 成功=緑 / 失敗=赤 */
 }
 
 u8 demo_update(void) {

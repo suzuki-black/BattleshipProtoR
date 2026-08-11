@@ -31,8 +31,9 @@ RESIDENT_RELS = \
   $(BUILD)/main.rel
 
 # ── 追加バンク(冷たいコード/データ)。--bank N file の形で rompack へ渡す。
-#    例)  ROMPACK_BANKS = --bank 4 build/ending.ihx --bank 5 assets/ship1.bin
-ROMPACK_BANKS =
+#    冷たいコードは「単独コンパイル → --code-loc 0xA000 でリンク → rompack が当該バンクへ格納」。
+#    被呼コードは 0xA000 が単一エントリで自己完結(ARCHITECTURE §2)。
+ROMPACK_BANKS = --bank 4 $(BUILD)/bank_demo.ihx
 
 .PHONY: all rom clean run
 all: rom
@@ -50,12 +51,17 @@ $(BUILD)/%.rel: %.c | $(BUILD)
 $(BUILD)/crt0rom.rel: $(SRC)/crt0rom.s | $(BUILD)
 	sdasz80 -o $@ $<
 
+# 冷たいコード(バンク)を 0xA000 単独リンク。data-loc はバンク関数用の RAM 退避域(0xE900)。
+$(BUILD)/bank_demo.ihx: $(SRC)/banked/bank_demo.c | $(BUILD)
+	sdcc -m$(TARGET) -c $(OPT) $(INC) $< -o $(BUILD)/bank_demo.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE900 $(BUILD)/bank_demo.rel -o $@
+
 # 常駐イメージのリンク(crt0 が先頭 = _HEADER/_CODE 起点)
 $(BUILD)/rom.ihx: $(BUILD)/crt0rom.rel $(RESIDENT_RELS)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc $(CODELOC) --data-loc $(DATALOC) \
 	     $(BUILD)/crt0rom.rel $(RESIDENT_RELS) -o $@
 
-GAME.ROM: $(BUILD)/rom.ihx
+GAME.ROM: $(BUILD)/rom.ihx $(BUILD)/bank_demo.ihx
 	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS)
 
 # openMSX で起動 → 数秒後にスクショ → 終了(headless 検証)

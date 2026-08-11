@@ -14,7 +14,8 @@ turboR専用の縦スクロールSTGエンジン(「1943を凌駕する」本命
   - 汎用エンティティプール＋behavior骨格(scene_boot→scene_demo で bouncer×4)。
   - **H.TIMI 60Hz割込みPSG音ドライバ**。openMSXのRAM/PSGレジスタ直読で「割込み発火(ticks)＋
     エンベロープ実出力(PSG音量の減衰)」を確認済み。
-  - 常駐コード 2849B / 24KB(残り21.2KB)、bank4-15 全空き(96KB)。
+  - **実バンクコール(bcall)**。bank4 の関数を `bcall_to(4)` で実行しRAM証跡(0xE000==0x5A)を確認。
+  - 常駐コード 2902B / 24KB(残り21.2KB)、bank4使用(6B)、残り 11 バンク空き(88KB)。
 
 ## ビルド & 起動
 ```bash

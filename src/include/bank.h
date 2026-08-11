@@ -22,6 +22,7 @@ void bank_restore(void);
    g_bank に呼ぶバンク番号を入れて bcall() を呼ぶ。トランポリンは crt0(_bcall)。
    被呼コードは当該バンクの 0xA000 が単一エントリで自己完結(常駐関数/データ窓に触れない)。 */
 extern u8 g_bank;
-void bcall(void);   /* crt0rom.s の _bcall を呼ぶ */
+void bcall(void);        /* crt0rom.s の _bcall を呼ぶ(低レベル) */
+void bcall_to(u8 bank);  /* g_bank=bank; bcall(); の定型(シーン等から使う) */
 
 #endif /* BANK_H */

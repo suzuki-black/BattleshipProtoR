@@ -59,8 +59,10 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - 冷たいシーンは将来 `bank != 0` にして、ディスパッチャが `g_bank=bank; bcall()` で当該バンクの
   0xA000 エントリを呼ぶ(そのエントリが `g_scene_phase` で init/update を分岐)。今は常駐シーンのみ実装。
 
-### 3.2 バンクコール (`bank.h` / `crt0rom.s`)
-`g_bank = <bank>; bcall();` で任意バンクの 0xA000 エントリを実行(トランポリンは常駐)。実機確定土台。
+### 3.2 バンクコール (`bank.h` / `crt0rom.s`) ← 新ビルドでE2E実証済み
+`bcall_to(<bank>)`(= `g_bank=<bank>; bcall();`)で任意バンクの 0xA000 エントリを実行(トランポリンは常駐)。
+実証: `bank_demo.c` を bank4 に格納 → `bcall_to(4)` → RAM 0xE000 に 0x5A 書込を openMSX で確認。
+冷たいシーンはこの枠(0xA000 単一エントリで自己完結)に載せ、常駐窓を食わない。
 
 ### 3.3 データ駆動(これから載せる、置き場所だけ先に確保)
 - **run_ops**(描画データ駆動): 艦/敵/背景を op配列で描く。データは bank。
@@ -119,7 +121,8 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/sound.c` | PSG効果音＋H.TIMI 60Hz割込みISR(BGMは#2後) |
 | 常駐 | `src/core/entity.c` | 汎用エンティティプール＋type別behavior＋2パス描画 |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
+| バンク | `src/banked/bank_demo.c` | 実バンクコール実証(bank4, 0xA000エントリ, 自己完結) |
 | シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_DEMOへ遷移 |
-| シーン | `src/scenes/scene_demo.c` | エンティティ骨格デモ(bouncer×4) |
+| シーン | `src/scenes/scene_demo.c` | 骨格デモ(bouncer×4＋ISR/音/bcallのHUD) |
 | ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
 | ツール | `tools/test_boot.tcl` / `test_motion.tcl` / `test_sound.tcl` | openMSX headless 起動/運動スクショ・音ドライバのRAM/PSG検証 |

@@ -12,3 +12,8 @@ void bank_data(u8 n) {
 void bank_restore(void) {
     *(volatile u8 *)0x7800 = BANK_DEFAULT;
 }
+
+void bcall_to(u8 bank) {
+    g_bank = bank;
+    bcall();
+}
