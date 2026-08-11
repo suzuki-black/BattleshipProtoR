@@ -12,11 +12,16 @@
 enum {
     ET_NONE = 0,
     ET_BOUNCER,   /* 骨格デモ用: 画面端で反射 */
-    ET_BULLET,    /* 弾: 直進し画面外で消滅 */
+    ET_BULLET,    /* 弾: 直進し画面外で消滅(team で自機/敵を区別) */
     ET_SHOOTER,   /* 射手: fire スクリプトで弾を撒く(位置固定) */
     ET_FIGHTER,   /* 空戦の敵戦闘機: 上から侵入し下へ抜ける */
+    ET_PLAYER,    /* 自機: 入力で移動＋発砲 */
     ET_COUNT
 };
+
+/* 弾/実体の陣営(当たり判定用) */
+#define TEAM_ENEMY  0
+#define TEAM_PLAYER 1
 
 typedef struct Entity {
     u8  active;
@@ -26,9 +31,15 @@ typedef struct Entity {
     u8  w, h;           /* 当たり/反射サイズ(スプライトは16x16固定) */
     u8  color;          /* スプライト色(0-15) */
     u8  pat;            /* スプライトパターン番号(4の倍数) */
-    const u8 *fire;     /* ET_SHOOTER: FireDesc へのポインタ(無ければ NULL) */
-    u8  ftimer;         /* ET_SHOOTER: 次発火までの残りフレーム */
+    u8  team;           /* TEAM_ENEMY / TEAM_PLAYER(弾の帰属) */
+    const u8 *fire;     /* fire スクリプト(ET_SHOOTER/一部FIGHTER)。無ければ NULL */
+    u8  ftimer;         /* 次発火/クールダウンの残りフレーム */
 } Entity;
+
+/* 当たり判定を解決(自機弾×敵戦闘機、敵弾/戦闘機×自機)。撃破/被弾数を計上。 */
+void ent_resolve_collisions(void);
+extern u8 g_kills;      /* 撃破した敵戦闘機の累計 */
+extern u8 g_playerhit;  /* 自機が被弾した累計(プロト) */
 
 void    ent_reset(void);        /* プール全消去 */
 Entity *ent_spawn(u8 type);     /* 空きを1つ確保(既定値で初期化)。無ければ NULL */

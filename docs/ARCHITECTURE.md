@@ -78,6 +78,16 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
   `vdp_sprite_pos` が Y に加算 → 自機/敵を画面固定に見せる。海は256行を波線付きで seamless に。
 - **横スクロール R#26/27**(ボスの蛇行): スプライト非影響。艦体(VRAM)を左右に揺らす。
   ※プロト簡略化: 弾(スプライト)の発射原点は揺れに追従しない。本番で砲塔追従を入れる。
+
+### 3.5 自機・当たり判定 (`player.c` / `entity.c`)
+- **自機**(ET_PLAYER, `player.c`): `g_input` で移動＋クランプ、トリガでクールダウン付き上方発砲(TEAM_PLAYER弾)。
+  現在位置を `g_player_x/y` に公開(AIMED/UIが参照)。
+- **当たり判定**(`ent_resolve_collisions`): 自機弾×敵戦闘機→両消滅・`g_kills`++、敵弾/戦闘機×自機→`g_playerhit`++。
+  16x16 AABB(甘めマージン)。弾の帰属は `Entity.team`(emit=TEAM_ENEMY / 自機発砲=TEAM_PLAYER)。
+
+> **既知バグ(次パスで修正)**: 縦スクロール(R#23)時、スプライトテーブル(page0末尾=ライン232-255)が
+> 可視域に回り込み、画面中央に横帯のゴミが出る(イントロ限定。ボスはR#23=0で無縁)。
+> 修正候補: 表示ページを page1(0x8000+) にして海をそこへ描く(スプライトテーブルはpage0既定=非表示)。
 - **エンティティ・プール**(実装済み骨格 `entity.c`): 自機/敵機/弾/砲/エフェクトを固定長プール＋
   behavior(type別 update)の関数ポインタ表で回す。空戦の敵機も戦艦の砲も同じ枠。
   描画は**ハードウェアスプライト(mode2, 16x16)**。active を先頭スロットへ詰めて属性/色を書き、
@@ -131,7 +141,8 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/bank.c` | バンク切替 / `g_bank` / bcall glue |
 | 常駐 | `src/core/input.c` | カーソル/トリガ入力(row8直読み) |
 | 常駐 | `src/core/sound.c` | PSG効果音＋H.TIMI 60Hz割込みISR(BGMは#2後) |
-| 常駐 | `src/core/entity.c` | 汎用エンティティプール＋type別behavior＋スプライト描画 |
+| 常駐 | `src/core/entity.c` | 汎用エンティティプール＋behavior＋スプライト描画＋当たり判定(team) |
+| 常駐 | `src/core/player.c` | 自機(ET_PLAYER): 入力で移動＋発砲、位置を公開(AIMED/UI用) |
 | 常駐 | `src/core/fire.c` | 発砲プリミティブ emit＋発砲スクリプト run_fire |
 | 常駐 | `src/core/ops.c` | データ駆動描画 run_ops(艦体等) |
 | 常駐 | `src/core/sprites.c` | スプライトパターン定義＋一括投入(sprites_load) |

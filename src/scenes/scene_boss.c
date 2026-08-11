@@ -25,6 +25,7 @@ static u16 boss_t;
 static u8  mtimer;
 
 void boss_init(void) {
+    Entity *e;
     vdp_set_vscroll(0);          /* 縦スクロール停止(スプライト補正も解除) */
     vdp_set_hscroll(0, 0);
     vdp_fill(0, 0, 256, 212, 4); /* 海青 */
@@ -33,6 +34,10 @@ void boss_init(void) {
     sprites_load();
     ent_reset();
     boss_t = 0; mtimer = 0;
+
+    /* 自機(下部・入力操作) */
+    e = ent_spawn(ET_PLAYER);
+    if (e) { e->x = 120; e->y = 188; e->color = 15; e->pat = SPR_BLOCK; }
 }
 
 u8 boss_update(void) {
@@ -53,6 +58,7 @@ u8 boss_update(void) {
     }
 
     ent_update_all();
+    ent_resolve_collisions();
     ent_draw_all();
     return SCENE_NONE;   /* プロト: ボス面に留まる */
 }

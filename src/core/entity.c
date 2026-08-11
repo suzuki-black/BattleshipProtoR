@@ -41,6 +41,8 @@ static void bh_fighter(Entity *e) {
     if (e->y > SCR_H + 8) e->active = 0;                          /* 下へ抜けたら消滅 */
 }
 
+extern void bh_player(Entity *e);   /* player.c(入力/発砲を持つのでゲーム側モジュールへ) */
+
 typedef void (*Behavior)(Entity *);
 static const Behavior behaviors[ET_COUNT] = {
     0,           /* ET_NONE    */
@@ -48,7 +50,46 @@ static const Behavior behaviors[ET_COUNT] = {
     bh_bullet,   /* ET_BULLET  */
     bh_shooter,  /* ET_SHOOTER */
     bh_fighter,  /* ET_FIGHTER */
+    bh_player,   /* ET_PLAYER  */
 };
+
+/* ---- 当たり判定 ---- */
+u8 g_kills;
+u8 g_playerhit;
+
+/* 16x16 実体の AABB 重なり(やや甘めのマージン14)。 */
+static u8 overlap(const Entity *a, const Entity *b) {
+    s16 dx = a->x - b->x, dy = a->y - b->y;
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    return (dx < 14 && dy < 14);
+}
+
+void ent_resolve_collisions(void) {
+    u8 i, j;
+    /* 自機弾(TEAM_PLAYER) × 敵戦闘機 → 相打ちで両消滅、撃破+1 */
+    for (i = 0; i < ENT_MAX; i++) {
+        Entity *b = &pool[i];
+        if (!b->active || b->type != ET_BULLET || b->team != TEAM_PLAYER) continue;
+        for (j = 0; j < ENT_MAX; j++) {
+            Entity *f = &pool[j];
+            if (!f->active || f->type != ET_FIGHTER) continue;
+            if (overlap(b, f)) { b->active = 0; f->active = 0; g_kills++; break; }
+        }
+    }
+    /* 敵弾(TEAM_ENEMY)/敵戦闘機 × 自機 → 敵を消し被弾+1 */
+    for (i = 0; i < ENT_MAX; i++) {
+        Entity *p = &pool[i];
+        if (!p->active || p->type != ET_PLAYER) continue;
+        for (j = 0; j < ENT_MAX; j++) {
+            Entity *e = &pool[j];
+            if (!e->active) continue;
+            if ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_FIGHTER) {
+                if (overlap(e, p)) { e->active = 0; g_playerhit++; }
+            }
+        }
+    }
+}
 
 void ent_reset(void) {
     u8 i;
@@ -63,6 +104,7 @@ Entity *ent_spawn(u8 type) {
             e->active = 1; e->type = type;
             e->x = 0; e->y = 0; e->vx = 0; e->vy = 0;
             e->w = 16; e->h = 16; e->color = 15; e->pat = 0;
+            e->team = TEAM_ENEMY;
             e->fire = (const u8 *)0; e->ftimer = 0;
             return e;
         }

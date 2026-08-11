@@ -20,6 +20,8 @@ static void draw_sea(void) {
     for (;;) { vdp_fill(0, y, 256, 2, 5); if (y >= 240) break; y += 16; }
 }
 
+static u8 last_kills;
+
 void intro_init(void) {
     Entity *e;
     draw_sea();
@@ -27,11 +29,12 @@ void intro_init(void) {
     sprites_load();
     ent_reset();
     intro_t = 0; scroll = 0; rng = 0x1234;
+    g_kills = 0; g_playerhit = 0; last_kills = 0;
     vdp_set_vscroll(0);
 
-    /* 自機(下部中央・固定)。今は静止マーカ(入力対応は後続ステップ)。 */
-    e = ent_spawn(ET_SHOOTER);
-    if (e) { e->x = 120; e->y = 176; e->color = 15; e->pat = SPR_BLOCK; e->fire = (const u8 *)0; }
+    /* 自機(下部中央・入力操作) */
+    e = ent_spawn(ET_PLAYER);
+    if (e) { e->x = 120; e->y = 176; e->color = 15; e->pat = SPR_BLOCK; }
 }
 
 u8 intro_update(void) {
@@ -56,6 +59,8 @@ u8 intro_update(void) {
     }
 
     ent_update_all();
+    ent_resolve_collisions();
+    if (g_kills != last_kills) { sfx(2, SFX_BOOM); last_kills = g_kills; }   /* 撃破音 */
     ent_draw_all();
 
     /* 約5秒で船首が見えてくる → 戦艦ボスへ遷移 */
