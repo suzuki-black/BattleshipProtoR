@@ -6,23 +6,27 @@
 
 #include "types.h"
 
-#define ENT_MAX 16   /* turboR前提で余裕。弾幕化時に拡張 */
+#define ENT_MAX 24   /* turboR前提で余裕(HWスプライト32枚未満)。弾幕化時に拡張 */
 
 /* 種別 = behavior テーブルの添字。追加時は entity.c の behaviors[] と対で更新。 */
 enum {
     ET_NONE = 0,
-    ET_BOUNCER,   /* 骨格デモ用: 画面端で反射する矩形 */
+    ET_BOUNCER,   /* 骨格デモ用: 画面端で反射 */
+    ET_BULLET,    /* 弾: 直進し画面外で消滅 */
+    ET_SHOOTER,   /* 射手: fire スクリプトで弾を撒く */
     ET_COUNT
 };
 
 typedef struct Entity {
     u8  active;
     u8  type;
-    s16 x, y;     /* 位置(px, 左上) */
-    s16 vx, vy;   /* 速度(px/frame) */
-    u8  w, h;     /* 当たり/反射に使うサイズ(スプライトは16x16固定) */
-    u8  color;    /* スプライト色(0-15) */
-    u8  pat;      /* スプライトパターン番号(4の倍数) */
+    s16 x, y;           /* 位置(px, 左上) */
+    s16 vx, vy;         /* 速度(px/frame) */
+    u8  w, h;           /* 当たり/反射サイズ(スプライトは16x16固定) */
+    u8  color;          /* スプライト色(0-15) */
+    u8  pat;            /* スプライトパターン番号(4の倍数) */
+    const u8 *fire;     /* ET_SHOOTER: FireDesc へのポインタ(無ければ NULL) */
+    u8  ftimer;         /* ET_SHOOTER: 次発火までの残りフレーム */
 } Entity;
 
 void    ent_reset(void);        /* プール全消去 */

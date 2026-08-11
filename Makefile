@@ -25,6 +25,8 @@ RESIDENT_RELS = \
   $(BUILD)/input.rel \
   $(BUILD)/sound.rel \
   $(BUILD)/entity.rel \
+  $(BUILD)/fire.rel \
+  $(BUILD)/ops.rel \
   $(BUILD)/scene.rel \
   $(BUILD)/scene_boot.rel \
   $(BUILD)/scene_demo.rel \

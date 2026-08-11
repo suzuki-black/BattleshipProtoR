@@ -3,6 +3,7 @@
    本番でスプライト/run_ops に差し替える(APIは据え置き)。 */
 #include "entity.h"
 #include "vdp.h"
+#include "fire.h"
 
 #define SCR_W 256
 #define SCR_H 212
@@ -19,10 +20,24 @@ static void bh_bouncer(Entity *e) {
     else if (e->y > (s16)(SCR_H - e->h)){ e->y = SCR_H - e->h;    e->vy = -e->vy; }
 }
 
+/* 弾: 直進し画面外(±16マージン)で消滅。 */
+static void bh_bullet(Entity *e) {
+    e->x += e->vx;
+    e->y += e->vy;
+    if (e->x < -16 || e->x > SCR_W || e->y < -16 || e->y > SCR_H) e->active = 0;
+}
+
+/* 射手: 発砲スクリプトを進める(発射は run_fire→emit)。位置は固定(将来 behavior 合成)。 */
+static void bh_shooter(Entity *e) {
+    run_fire(e);
+}
+
 typedef void (*Behavior)(Entity *);
 static const Behavior behaviors[ET_COUNT] = {
     0,           /* ET_NONE    */
     bh_bouncer,  /* ET_BOUNCER */
+    bh_bullet,   /* ET_BULLET  */
+    bh_shooter,  /* ET_SHOOTER */
 };
 
 void ent_reset(void) {
@@ -38,6 +53,7 @@ Entity *ent_spawn(u8 type) {
             e->active = 1; e->type = type;
             e->x = 0; e->y = 0; e->vx = 0; e->vy = 0;
             e->w = 16; e->h = 16; e->color = 15; e->pat = 0;
+            e->fire = (const u8 *)0; e->ftimer = 0;
             return e;
         }
     }

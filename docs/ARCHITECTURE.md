@@ -37,7 +37,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - VDP アクセス(`vdp.c`) / バンク切替(`bank.c`) / 入力(`input.c`)
 - シーンFSM ディスパッチャ(`scene.c`) / 起動初期化(`sys.c`) / エントリ(`main.c`)
 - H.TIMI 60Hz 割込み音ドライバ ISR(実装済 `sound.c`) / エンティティプールの update・draw(実装済 `entity.c`)
-- (将来) run_ops(描画IF) と run_fire(発砲IF) の**インタプリタ本体**
+- run_ops(描画IF `ops.c`) と run_fire(発砲IF `fire.c`)の**インタプリタ本体**(骨格実装済)
 
 ### バンク(bank4+)へ回すもの＝“冷たい/一度きり/データ”
 - 各シーンの重い init/draw(title, 空戦イントロ setup, 撃破演出, ending, gameover, 設定メニュー)
@@ -64,11 +64,12 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 実証: `bank_demo.c` を bank4 に格納 → `bcall_to(4)` → RAM 0xE000 に 0x5A 書込を openMSX で確認。
 冷たいシーンはこの枠(0xA000 単一エントリで自己完結)に載せ、常駐窓を食わない。
 
-### 3.3 データ駆動(これから載せる、置き場所だけ先に確保)
-- **run_ops**(描画データ駆動): 艦/敵/背景を op配列で描く。データは bank。
-- **run_fire**(発砲スクリプト): `FireDesc[interval,rage,telegraph,suppress, emit-ops..., 0]`。
-  難易度メカ(予告/レイジ/ゼロ距離抑え込み/固定弾安置)を**全部データ**に。仕様: `docs/fire-script-spec.md`(前作から移植予定)。
-- **emit**(弾生成プリミティブ): `emit(px,py,dir,kind,spd)`。全発砲サイトを共通化。
+### 3.3 データ駆動(骨格実装済み。難易度メカ等はこれから拡張)
+- **run_ops**(描画データ駆動 `ops.c`): 艦/敵/背景を op配列で描く。現状 OPS_RECT のみ(艦=船体/艦橋/砲の矩形)。
+  将来 op を増やし(ライン/三角/艦橋段積み/パターン転送)、データは bank へ。
+- **run_fire**(発砲スクリプト `fire.c`): `FireDesc{interval, [op,a,kind,spd].., 0}`。現状 FIXED/RING。
+  将来 AIMED/予告/レイジ/ゼロ距離抑え込み/固定弾安置を**データで**追加。仕様の原典: 前作 `docs/fire-script-spec.md`。
+- **emit**(弾生成プリミティブ `fire.c`): `emit(x,y,dir,kind,spd)`。16分割方向×弾速で ET_BULLET を1発生成。全発砲を共通化。
 - **エンティティ・プール**(実装済み骨格 `entity.c`): 自機/敵機/弾/砲/エフェクトを固定長プール＋
   behavior(type別 update)の関数ポインタ表で回す。空戦の敵機も戦艦の砲も同じ枠。
   描画は**ハードウェアスプライト(mode2, 16x16)**。active を先頭スロットへ詰めて属性/色を書き、
@@ -122,7 +123,9 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/bank.c` | バンク切替 / `g_bank` / bcall glue |
 | 常駐 | `src/core/input.c` | カーソル/トリガ入力(row8直読み) |
 | 常駐 | `src/core/sound.c` | PSG効果音＋H.TIMI 60Hz割込みISR(BGMは#2後) |
-| 常駐 | `src/core/entity.c` | 汎用エンティティプール＋type別behavior＋2パス描画 |
+| 常駐 | `src/core/entity.c` | 汎用エンティティプール＋type別behavior＋スプライト描画 |
+| 常駐 | `src/core/fire.c` | 発砲プリミティブ emit＋発砲スクリプト run_fire |
+| 常駐 | `src/core/ops.c` | データ駆動描画 run_ops(艦体等) |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
 | バンク | `src/banked/bank_demo.c` | 実バンクコール実証(bank4, 0xA000エントリ, 自己完結) |
 | シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_DEMOへ遷移 |
