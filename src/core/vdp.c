@@ -88,3 +88,59 @@ void vdp_wait_frame(void) {
     u16 t = *j;
     while (*j == t) { }
 }
+
+/* ===== スプライト(mode2, 16x16) =====
+   SCREEN5 の BIOS 既定テーブル配置を使う(C-BIOS/実機共通): 属性0x7600/色0x7400/パターン0x7800。
+   R#5/6/11 は CHGMOD(5) が既定値に設定済みなので触らない(相対再配置は環境差で不確実)。 */
+#define SPR_ATTR  0x7600   /* 属性表(4B/枚: Y,X,pattern,予約) */
+#define SPR_COLOR 0x7400   /* 色表(16B/枚: 行ごとの色)         */
+#define SPR_PAT   0x7800   /* パターン生成表(8B単位)           */
+
+/* R#1 の size ビットを立て 16x16 に(mag=0)。RG1SAV(0xF3E0)経由で他ビット保持。 */
+static void set_sprite16(void) {
+    __asm
+        di
+        ld   a, (0xF3E0)
+        or   #0x02          ; size=16x16
+        and  #0xFE          ; mag=0
+        ld   (0xF3E0), a
+        out  (0x99), a
+        ld   a, #0x81       ; R#1
+        out  (0x99), a
+        ei
+    __endasm;
+}
+
+void vdp_sprite_init(void) {
+    u8 i;
+    set_sprite16();
+    for (i = 0; i < 32; i++) {             /* 全スプライトを画面外へ */
+        vdp_write_addr(SPR_ATTR + i * 4);
+        VDP_DAT = 216;                     /* Y=216(画面下=不可視) */
+    }
+}
+
+void vdp_sprite_pattern(u8 patnum, const u8 *d32) {
+    u8 i;
+    vdp_write_addr(SPR_PAT + (u16)patnum * 8);
+    for (i = 0; i < 32; i++) VDP_DAT = d32[i];
+}
+
+void vdp_sprite_color(u8 slot, u8 color) {
+    u8 i;
+    vdp_write_addr(SPR_COLOR + (u16)slot * 16);
+    for (i = 0; i < 16; i++) VDP_DAT = color;
+}
+
+void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum) {
+    vdp_write_addr(SPR_ATTR + (u16)slot * 4);
+    VDP_DAT = (u8)(y - 1);   /* 表示Y=属性Y+1 のため -1 */
+    VDP_DAT = x;
+    VDP_DAT = patnum;
+    VDP_DAT = 0;
+}
+
+void vdp_sprite_hide_from(u8 slot) {
+    vdp_write_addr(SPR_ATTR + (u16)slot * 4);
+    VDP_DAT = 208;           /* Y=208 = 以降のスプライト処理を停止 */
+}

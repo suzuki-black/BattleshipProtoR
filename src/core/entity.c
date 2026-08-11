@@ -4,9 +4,8 @@
 #include "entity.h"
 #include "vdp.h"
 
-#define SCR_W    256
-#define SCR_H    212
-#define BG_COLOR 4     /* 背景(海青)。消去色 */
+#define SCR_W 256
+#define SCR_H 212
 
 static Entity pool[ENT_MAX];
 
@@ -38,8 +37,7 @@ Entity *ent_spawn(u8 type) {
             Entity *e = &pool[i];
             e->active = 1; e->type = type;
             e->x = 0; e->y = 0; e->vx = 0; e->vy = 0;
-            e->w = 8; e->h = 8; e->color = 15;
-            e->drawn = 0;
+            e->w = 16; e->h = 16; e->color = 15; e->pat = 0;
             return e;
         }
     }
@@ -54,20 +52,19 @@ void ent_update_all(void) {
     }
 }
 
-/* 2パス: (1)全 active の前位置を背景で消去 → (2)現位置へ描画。
-   1パスで消去+描画を混ぜると、後続実体の消去が先行実体の描画を消すため分離する。 */
+/* スプライト描画: active な実体を先頭スロットから詰めて属性/色を書き、
+   残りは停止マーカで隠す。ハードウェア合成なので消去は不要。
+   ※同一走査線に5枚以上でスプライト欠けが起きる(mode2)点は本番でレイアウトに注意。 */
 void ent_draw_all(void) {
-    u8 i;
+    u8 i, slot = 0;
     Entity *e;
     for (i = 0; i < ENT_MAX; i++) {
         e = &pool[i];
-        if (e->active && e->drawn) vdp_fill((u16)e->px, (u16)e->py, e->w, e->h, BG_COLOR);
-    }
-    for (i = 0; i < ENT_MAX; i++) {
-        e = &pool[i];
         if (e->active) {
-            vdp_fill((u16)e->x, (u16)e->y, e->w, e->h, e->color);
-            e->px = e->x; e->py = e->y; e->drawn = 1;
+            vdp_sprite_color(slot, e->color);
+            vdp_sprite_pos(slot, (u8)e->x, (u8)e->y, e->pat);
+            slot++;
         }
     }
+    vdp_sprite_hide_from(slot);
 }

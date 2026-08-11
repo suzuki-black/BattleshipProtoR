@@ -31,4 +31,13 @@ void vdp_fill(u16 dx, u16 dy, u16 nx, u16 ny, u8 color);
 /* 表示同期: VBLANK(JIFFY 更新)を1回待つ。 */
 void vdp_wait_frame(void);
 
+/* ===== スプライト(V9938 mode2, 16x16) =====
+   SCREEN5 の高位VRAMにテーブルを置く: 属性0xF780 / 色0xF580 / パターン0xF800。
+   色はmode2では行ごと(色表16B/枚)。単色運用は vdp_sprite_color で全16行を塗る。 */
+void vdp_sprite_init(void);                          /* 16x16化＋テーブル基底設定＋全消し */
+void vdp_sprite_pattern(u8 patnum, const u8 *d32);   /* 16x16=32B をパターン patnum へ(patnumは4の倍数) */
+void vdp_sprite_color(u8 slot, u8 color);            /* slot の色表16行を単色 color に */
+void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum); /* slot の属性(Y=y-1,X,pattern)を更新 */
+void vdp_sprite_hide_from(u8 slot);                  /* slot に停止マーカ(Y=208)=以降非表示 */
+
 #endif /* VDP_H */

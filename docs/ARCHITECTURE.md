@@ -71,7 +71,8 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - **emit**(弾生成プリミティブ): `emit(px,py,dir,kind,spd)`。全発砲サイトを共通化。
 - **エンティティ・プール**(実装済み骨格 `entity.c`): 自機/敵機/弾/砲/エフェクトを固定長プール＋
   behavior(type別 update)の関数ポインタ表で回す。空戦の敵機も戦艦の砲も同じ枠。
-  現状の描画は LMMV 矩形(消去→描画の2パス)で代用し、本番でスプライト/run_ops に差し替える(API据置)。
+  描画は**ハードウェアスプライト(mode2, 16x16)**。active を先頭スロットへ詰めて属性/色を書き、
+  残りは停止マーカ(Y=208)で隠す(ハード合成なので消去不要)。大きな艦体は run_ops(将来)で描く。
 
 ---
 
@@ -105,6 +106,8 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - 途中で踏んだ罠を土台に記録済み:
   - **塗りは LMMV(0x80, ピクセル単位)**。HMMV(0xC0)はバイト単位で G4 では縞になる。
   - **`vdp_cmd_wait` は di 保護必須**。S#2選択中に割込が入ると ISR が割込フラグを消せずハングする。
+  - **スプライトテーブルは SCREEN5 の BIOS 既定(属性0x7600/色0x7400/パターン0x7800)を使う**。
+    高位VRAMへの相対再配置(R#5/6/11で0xF780等)は本環境(C-BIOS/openMSX)で描画に反映されなかった。
 
 ---
 
@@ -115,7 +118,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 起動 | `src/crt0rom.s` | "AB"ヘッダ / page2有効化 / ASCII8窓初期化 / `_bcall` |
 | 常駐 | `src/core/main.c` | エントリ(初期化→FSM委譲のみ) |
 | 常駐 | `src/core/sys.c` | R800ブースト等の起動初期化 |
-| 常駐 | `src/core/vdp.c` | VDPレジスタ/パレット/VRAM/コマンド(LMMV)/フレーム待ち |
+| 常駐 | `src/core/vdp.c` | VDPレジスタ/パレット/VRAM/コマンド(LMMV)/フレーム待ち/スプライト(mode2) |
 | 常駐 | `src/core/bank.c` | バンク切替 / `g_bank` / bcall glue |
 | 常駐 | `src/core/input.c` | カーソル/トリガ入力(row8直読み) |
 | 常駐 | `src/core/sound.c` | PSG効果音＋H.TIMI 60Hz割込みISR(BGMは#2後) |
@@ -125,4 +128,4 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_DEMOへ遷移 |
 | シーン | `src/scenes/scene_demo.c` | 骨格デモ(bouncer×4＋ISR/音/bcallのHUD) |
 | ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
-| ツール | `tools/test_boot.tcl` / `test_motion.tcl` / `test_sound.tcl` | openMSX headless 起動/運動スクショ・音ドライバのRAM/PSG検証 |
+| ツール | `tools/test_{boot,sound,bank,spr}.tcl` | openMSX headless 検証(起動/音RAM・PSG/バンクRAM/スプライトVRAM・運動) |

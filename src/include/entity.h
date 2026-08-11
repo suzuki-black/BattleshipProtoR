@@ -18,12 +18,11 @@ enum {
 typedef struct Entity {
     u8  active;
     u8  type;
-    s16 x, y;     /* 位置(px) */
+    s16 x, y;     /* 位置(px, 左上) */
     s16 vx, vy;   /* 速度(px/frame) */
-    u8  w, h;     /* 描画矩形サイズ */
-    u8  color;    /* 描画色(0-15) */
-    s16 px, py;   /* 前フレーム描画位置(消去用) */
-    u8  drawn;    /* 一度でも描いたか(初回は消去しない) */
+    u8  w, h;     /* 当たり/反射に使うサイズ(スプライトは16x16固定) */
+    u8  color;    /* スプライト色(0-15) */
+    u8  pat;      /* スプライトパターン番号(4の倍数) */
 } Entity;
 
 void    ent_reset(void);        /* プール全消去 */
