@@ -105,6 +105,11 @@ void vdp_set_hscroll(u8 coarse, u8 fine) {
     vdp_wreg(27, fine & 0x07);     /* 0-7 の微スクロール    */
 }
 
+/* SCREEN5 表示ページ。R#2 = 0x1F | (page<<5)。page0=0x1F(base 0x0000)/page1=0x3F(base 0x8000)。 */
+void vdp_set_display_page(u8 page) {
+    vdp_wreg(2, (u8)(0x1F | ((page & 3) << 5)));
+}
+
 /* ===== スプライト(mode2, 16x16) =====
    SCREEN5 の BIOS 既定テーブル配置を使う(C-BIOS/実機共通): 属性0x7600/色0x7400/パターン0x7800。
    R#5/6/11 は CHGMOD(5) が既定値に設定済みなので触らない(相対再配置は環境差で不確実)。 */

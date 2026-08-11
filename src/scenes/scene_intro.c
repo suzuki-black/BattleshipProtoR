@@ -13,11 +13,13 @@ static u16 rng;
 
 static u8 rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }
 
-/* 海: VRAM全体(256行)を青で埋め、16px毎に波線 → 縦スクロールで seamless に流れる。 */
+/* 海を page1(VRAM 0x8000+, DY=256+)へ描く。全256行を青＋16px毎に波線 → 縦スクロールで seamless。
+   スプライトテーブルは page0 末尾に居るため、page1 表示中はスクロールしても可視域に出ない(ゴミ防止)。 */
+#define P1 256   /* page1 の DY オフセット */
 static void draw_sea(void) {
-    u8 y = 0;
-    vdp_fill(0, 0, 256, 256, 4);
-    for (;;) { vdp_fill(0, y, 256, 2, 5); if (y >= 240) break; y += 16; }
+    u16 y = 0;
+    vdp_fill(0, P1, 256, 256, 4);
+    for (;;) { vdp_fill(0, P1 + y, 256, 2, 5); if (y >= 240) break; y += 16; }
 }
 
 static u8 last_kills;
@@ -25,6 +27,7 @@ static u8 last_kills;
 void intro_init(void) {
     Entity *e;
     draw_sea();
+    vdp_set_display_page(1);   /* page1(海)を表示 */
     vdp_sprite_init();
     sprites_load();
     ent_reset();

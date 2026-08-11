@@ -28,6 +28,7 @@ void boss_init(void) {
     Entity *e;
     vdp_set_vscroll(0);          /* 縦スクロール停止(スプライト補正も解除) */
     vdp_set_hscroll(0, 0);
+    vdp_set_display_page(0);     /* 蛇行は横スクロールのみ=page0 で描画/表示 */
     vdp_fill(0, 0, 256, 212, 4); /* 海青 */
     run_ops(96, 26, ship_boss);  /* 艦体を中央へ描画 */
     vdp_sprite_init();

@@ -38,6 +38,11 @@ void vdp_wait_frame(void);
 void vdp_set_vscroll(u8 v);                 /* R#23 = v(縦スクロール)。0で無効化。 */
 void vdp_set_hscroll(u8 coarse, u8 fine);   /* R#26=coarse(8px単位)/R#27=fine(0-7)。蛇行はスプライト非影響。 */
 
+/* 表示ページ(SCREEN5: 0/1)。R#2。スプライトテーブルは page0末尾に居るので、縦スクロールする
+   背景は page1 に描いて page1 を表示 → スクロールでスプライトテーブルが可視域に出るゴミを防ぐ。
+   VDPコマンドで page1 を描くには Y に +256 する(DYは10bit)。 */
+void vdp_set_display_page(u8 page);
+
 /* ===== スプライト(V9938 mode2, 16x16) =====
    SCREEN5 の BIOS 既定テーブルを使用: 属性0x7600 / 色0x7400 / パターン0x7800(vdp.c参照)。
    色はmode2では行ごと(色表16B/枚)。単色運用は vdp_sprite_color で全16行を塗る。 */
