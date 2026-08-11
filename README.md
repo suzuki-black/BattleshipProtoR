@@ -10,9 +10,11 @@ turboR専用の縦スクロールSTGエンジン(「1943を凌駕する」本命
 
 ## 状態
 - **Phase 0(TODO-1)完了**: ビルド土台 + モジュール分割スケルトン + シーンFSM + Hello VDP。
-- **§7-2 一部**: 汎用エンティティプール＋behavior骨格。scene_boot→scene_demo で bouncer×4 を
-  毎フレーム更新/描画。openMSX で起動・遷移・運動を確認済み。
-  常駐コード 2083B / 24KB(残り22.0KB)、bank4-15 全空き(96KB)。
+- **§7-2 進行中**:
+  - 汎用エンティティプール＋behavior骨格(scene_boot→scene_demo で bouncer×4)。
+  - **H.TIMI 60Hz割込みPSG音ドライバ**。openMSXのRAM/PSGレジスタ直読で「割込み発火(ticks)＋
+    エンベロープ実出力(PSG音量の減衰)」を確認済み。
+  - 常駐コード 2849B / 24KB(残り21.2KB)、bank4-15 全空き(96KB)。
 
 ## ビルド & 起動
 ```bash

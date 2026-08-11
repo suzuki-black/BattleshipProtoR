@@ -23,6 +23,7 @@ RESIDENT_RELS = \
   $(BUILD)/vdp.rel \
   $(BUILD)/bank.rel \
   $(BUILD)/input.rel \
+  $(BUILD)/sound.rel \
   $(BUILD)/entity.rel \
   $(BUILD)/scene.rel \
   $(BUILD)/scene_boot.rel \

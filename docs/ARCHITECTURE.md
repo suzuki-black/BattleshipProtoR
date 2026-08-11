@@ -36,8 +36,8 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - crt0 + `_bcall` トランポリン(`src/crt0rom.s`)
 - VDP アクセス(`vdp.c`) / バンク切替(`bank.c`) / 入力(`input.c`)
 - シーンFSM ディスパッチャ(`scene.c`) / 起動初期化(`sys.c`) / エントリ(`main.c`)
-- (将来) H.TIMI 60Hz 割込み音ドライバ ISR / エンティティプールの update・draw ホットループ /
-  run_ops(描画IF) と run_fire(発砲IF) の**インタプリタ本体**
+- H.TIMI 60Hz 割込み音ドライバ ISR(実装済 `sound.c`) / エンティティプールの update・draw(実装済 `entity.c`)
+- (将来) run_ops(描画IF) と run_fire(発砲IF) の**インタプリタ本体**
 
 ### バンク(bank4+)へ回すもの＝“冷たい/一度きり/データ”
 - 各シーンの重い init/draw(title, 空戦イントロ setup, 撃破演出, ending, gameover, 設定メニュー)
@@ -116,9 +116,10 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/vdp.c` | VDPレジスタ/パレット/VRAM/コマンド(LMMV)/フレーム待ち |
 | 常駐 | `src/core/bank.c` | バンク切替 / `g_bank` / bcall glue |
 | 常駐 | `src/core/input.c` | カーソル/トリガ入力(row8直読み) |
+| 常駐 | `src/core/sound.c` | PSG効果音＋H.TIMI 60Hz割込みISR(BGMは#2後) |
 | 常駐 | `src/core/entity.c` | 汎用エンティティプール＋type別behavior＋2パス描画 |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
 | シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_DEMOへ遷移 |
 | シーン | `src/scenes/scene_demo.c` | エンティティ骨格デモ(bouncer×4) |
 | ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
-| ツール | `tools/test_boot.tcl` / `test_motion.tcl` | openMSX headless 起動/運動スクショ |
+| ツール | `tools/test_boot.tcl` / `test_motion.tcl` / `test_sound.tcl` | openMSX headless 起動/運動スクショ・音ドライバのRAM/PSG検証 |
