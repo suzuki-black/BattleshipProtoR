@@ -15,6 +15,7 @@
 /* シーンID(登録順)。追加時はここと scene.c の registry を対で更新。 */
 enum {
   SC_BOOT = 0,
+  SC_DEMO,
   SC_COUNT
 };
 

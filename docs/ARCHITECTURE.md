@@ -67,8 +67,9 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - **run_fire**(発砲スクリプト): `FireDesc[interval,rage,telegraph,suppress, emit-ops..., 0]`。
   難易度メカ(予告/レイジ/ゼロ距離抑え込み/固定弾安置)を**全部データ**に。仕様: `docs/fire-script-spec.md`(前作から移植予定)。
 - **emit**(弾生成プリミティブ): `emit(px,py,dir,kind,spd)`。全発砲サイトを共通化。
-- **エンティティ・プール**: 自機/敵機/弾/砲/エフェクトを汎用プール＋behavior(type別 update/draw)。
-  空戦の敵機も戦艦の砲も同じ枠で扱う。
+- **エンティティ・プール**(実装済み骨格 `entity.c`): 自機/敵機/弾/砲/エフェクトを固定長プール＋
+  behavior(type別 update)の関数ポインタ表で回す。空戦の敵機も戦艦の砲も同じ枠。
+  現状の描画は LMMV 矩形(消去→描画の2パス)で代用し、本番でスプライト/run_ops に差し替える(API据置)。
 
 ---
 
@@ -115,7 +116,9 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/vdp.c` | VDPレジスタ/パレット/VRAM/コマンド(LMMV)/フレーム待ち |
 | 常駐 | `src/core/bank.c` | バンク切替 / `g_bank` / bcall glue |
 | 常駐 | `src/core/input.c` | カーソル/トリガ入力(row8直読み) |
+| 常駐 | `src/core/entity.c` | 汎用エンティティプール＋type別behavior＋2パス描画 |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
-| シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認。将来 title へ差替) |
+| シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_DEMOへ遷移 |
+| シーン | `src/scenes/scene_demo.c` | エンティティ骨格デモ(bouncer×4) |
 | ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
-| ツール | `tools/test_boot.tcl` | openMSX headless 起動スクショ |
+| ツール | `tools/test_boot.tcl` / `test_motion.tcl` | openMSX headless 起動/運動スクショ |
