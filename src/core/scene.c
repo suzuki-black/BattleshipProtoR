@@ -19,14 +19,18 @@ static const Scene registry[SC_COUNT] = {
     /* SC_BOSS  */ { boss_init,  boss_update,  0 },
 };
 
+u8 g_scene;   /* 現在のシーンID(デバッグ/HUD/検証用に公開) */
+
 void scene_run(u8 cur) {
     u8 next;
+    g_scene = cur;
     registry[cur].init();
     for (;;) {
         input_poll();
         next = registry[cur].update();
         if (next != SCENE_NONE && next != cur) {
             cur = next;
+            g_scene = cur;
             registry[cur].init();
         }
         vdp_wait_frame();

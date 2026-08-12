@@ -104,7 +104,7 @@ Entity *ent_spawn(u8 type) {
             e->active = 1; e->type = type;
             e->x = 0; e->y = 0; e->vx = 0; e->vy = 0;
             e->w = 16; e->h = 16; e->color = 15; e->pat = 0;
-            e->team = TEAM_ENEMY;
+            e->hidden = 0; e->team = TEAM_ENEMY;
             e->fire = (const u8 *)0; e->ftimer = 0;
             return e;
         }
@@ -128,7 +128,7 @@ void ent_draw_all(void) {
     Entity *e;
     for (i = 0; i < ENT_MAX; i++) {
         e = &pool[i];
-        if (e->active) {
+        if (e->active && !e->hidden) {
             vdp_sprite_color(slot, e->color);
             vdp_sprite_pos(slot, (u8)e->x, (u8)e->y, e->pat);
             slot++;

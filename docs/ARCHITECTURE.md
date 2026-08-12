@@ -69,9 +69,12 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 ### 3.3 データ駆動(骨格実装済み。難易度メカ等はこれから拡張)
 - **run_ops**(描画データ駆動 `ops.c`): 艦/敵/背景を op配列で描く。現状 OPS_RECT のみ(艦=船体/艦橋/砲の矩形)。
   将来 op を増やし(ライン/三角/艦橋段積み/パターン転送)、データは bank へ。
-- **run_fire**(発砲スクリプト `fire.c`): `FireDesc{interval, [op,a,kind,spd].., 0}`。現状 FIXED/RING。
-  将来 AIMED/予告/レイジ/ゼロ距離抑え込み/固定弾安置を**データで**追加。仕様の原典: 前作 `docs/fire-script-spec.md`。
-- **emit**(弾生成プリミティブ `fire.c`): `emit(x,y,dir,kind,spd)`。16分割方向×弾速で ET_BULLET を1発生成。全発砲を共通化。
+- **run_fire**(発砲スクリプト `fire.c`): `FireDesc{interval, [op,a,kind,spd].., 0}`。op: FIXED/RING/**AIMED/AIMFAN**。
+  方向は**32分割**(11.25°)。将来 予告/レイジ/ゼロ距離抑え込み/固定弾安置を**データで**追加。原典: 前作 `docs/fire-script-spec.md`。
+  - **AIMED**(自機狙い＋散らし): 狙い方向に**一様乱数±a ステップの円錐**を足す(「不正確さの円錐」)。a=0で厳密狙い。
+  - **AIMFAN**(自機狙い n-way): 自機中心に a発を2ステップ間隔で扇状＋扇全体を乱数微回転。**偶数aは自機直線上に隙間**。
+  - 設計意図: 前作「狙いすぎ」反省 → 狙い弾に**ブレ/スプレッド**を混ぜ公平化。出典: dev.to "Simple Bullet Spread for AI"(aim+uniform offset)、Sparen's Danmaku Design(aimed patternの inconsistency)。難易度で散らし量を可変にできる(将来)。
+- **emit**(弾生成プリミティブ `fire.c`): `emit(x,y,dir,kind,spd)`。32分割方向×弾速で ET_BULLET を1発生成。`aim_dir()` で自機への最近傍方向。
 
 ### 3.4 スクロール (`vdp.c`)
 - **縦スクロール R#23**(空戦イントロの海): VRAM全体を縦シフト=**スプライトにも効く**。`vdp_set_vscroll` が量を保持し
@@ -145,7 +148,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/sound.c` | PSG効果音＋H.TIMI 60Hz割込みISR(BGMは#2後) |
 | 常駐 | `src/core/entity.c` | 汎用エンティティプール＋behavior＋スプライト描画＋当たり判定(team) |
 | 常駐 | `src/core/player.c` | 自機(ET_PLAYER): 入力で移動＋発砲、位置を公開(AIMED/UI用) |
-| 常駐 | `src/core/fire.c` | 発砲プリミティブ emit＋発砲スクリプト run_fire |
+| 常駐 | `src/core/fire.c` | emit＋run_fire(FIXED/RING/AIMED/AIMFAN, 32分割, 狙い散らし) |
 | 常駐 | `src/core/ops.c` | データ駆動描画 run_ops(艦体等) |
 | 常駐 | `src/core/sprites.c` | スプライトパターン定義＋一括投入(sprites_load) |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |

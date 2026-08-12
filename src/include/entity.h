@@ -31,6 +31,7 @@ typedef struct Entity {
     u8  w, h;           /* 当たり/反射サイズ(スプライトは16x16固定) */
     u8  color;          /* スプライト色(0-15) */
     u8  pat;            /* スプライトパターン番号(4の倍数) */
+    u8  hidden;         /* 1=スプライト描画しない(不可視の発砲点=砲塔等) */
     u8  team;           /* TEAM_ENEMY / TEAM_PLAYER(弾の帰属) */
     const u8 *fire;     /* fire スクリプト(ET_SHOOTER/一部FIGHTER)。無ければ NULL */
     u8  ftimer;         /* 次発火/クールダウンの残りフレーム */

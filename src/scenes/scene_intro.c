@@ -6,6 +6,10 @@
 #include "entity.h"
 #include "sound.h"
 #include "sprites.h"
+#include "fire.h"
+
+/* 敵戦闘機の発砲: 45f毎に自機狙い＋散らし円錐(±3ステップ≒±34°)。狙いすぎない。 */
+static const u8 fd_faim[] = { 45, FIRE_AIMED, 3, 1, 2, FIRE_END };
 
 static u16 intro_t;
 static u8  scroll;
@@ -57,6 +61,8 @@ u8 intro_update(void) {
             e->vx = (rnd() & 1) ? 1 : -1;
             e->vy = 2 + (rnd() % 2);
             e->color = 8; e->pat = SPR_FIGHTER;
+            /* 約半数は自機狙い(散らし付き)で撃ってくる */
+            if (rnd() & 1) { e->fire = fd_faim; e->ftimer = 20 + (rnd() % 30); }
         }
         sfx(1, SFX_HIT);
     }

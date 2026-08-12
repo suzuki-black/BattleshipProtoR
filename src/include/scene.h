@@ -28,5 +28,6 @@ typedef struct {
 
 /* start シーンから開始し、以後メインループを回す(ROM: 戻らない)。 */
 void scene_run(u8 start);
+extern u8 g_scene;   /* 現在のシーンID(SC_*)。デバッグ/HUD/検証用 */
 
 #endif /* SCENE_H */
