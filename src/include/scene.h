@@ -15,19 +15,22 @@
 /* シーンID(登録順)。追加時はここと scene.c の registry を対で更新。 */
 enum {
   SC_BOOT = 0,
+  SC_TITLE,   /* タイトル(冷たいシーン=バンク) */
   SC_INTRO,   /* 空戦イントロ(縦スクロールのみ) */
   SC_BOSS,    /* 戦艦ボス(蛇行スクロール)       */
   SC_COUNT
 };
 
 typedef struct {
-  void (*init)(void);     /* 遷移してきた時に1回          */
-  u8   (*update)(void);   /* 毎フレーム。次のシーンID or SCENE_NONE */
-  u8   bank;              /* 0=常駐 / 非0=当該バンクで bcall(将来) */
+  void (*init)(void);     /* 常駐シーン: 遷移時に1回(バンクシーンは0)      */
+  u8   (*update)(void);   /* 常駐シーン: 毎フレーム→次ID(バンクシーンは0)  */
+  u8   bank;              /* 0=常駐 / 非0=当該バンクで bcall(冷たいシーン)  */
 } Scene;
 
 /* start シーンから開始し、以後メインループを回す(ROM: 戻らない)。 */
 void scene_run(u8 start);
-extern u8 g_scene;   /* 現在のシーンID(SC_*)。デバッグ/HUD/検証用 */
+extern u8 g_scene;         /* 現在のシーンID(SC_*)。デバッグ/HUD/検証用     */
+extern u8 g_scene_phase;   /* バンクシーンへの指示: 0=init / 1=update       */
+extern u8 g_scene_ret;     /* update の戻り値(次シーンID)。バンクシーンが書く */
 
 #endif /* SCENE_H */

@@ -38,7 +38,7 @@ RESIDENT_RELS = \
 # ── 追加バンク(冷たいコード/データ)。--bank N file の形で rompack へ渡す。
 #    冷たいコードは「単独コンパイル → --code-loc 0xA000 でリンク → rompack が当該バンクへ格納」。
 #    被呼コードは 0xA000 が単一エントリで自己完結(ARCHITECTURE §2)。
-ROMPACK_BANKS = --bank 4 $(BUILD)/bank_demo.ihx
+ROMPACK_BANKS = --bank 4 $(BUILD)/bank_demo.ihx --bank 5 $(BUILD)/scene_title.ihx
 
 .PHONY: all rom clean run
 all: rom
@@ -61,12 +61,26 @@ $(BUILD)/bank_demo.ihx: $(SRC)/banked/bank_demo.c | $(BUILD)
 	sdcc -m$(TARGET) -c $(OPT) $(INC) $< -o $(BUILD)/bank_demo.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE900 $(BUILD)/bank_demo.rel -o $@
 
-# 常駐イメージのリンク(crt0 が先頭 = _HEADER/_CODE 起点)
+# 常駐イメージのリンク(crt0 が先頭 = _HEADER/_CODE 起点)。rom.noi に常駐シンボル番地が出る。
 $(BUILD)/rom.ihx: $(BUILD)/crt0rom.rel $(RESIDENT_RELS)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc $(CODELOC) --data-loc $(DATALOC) \
 	     $(BUILD)/crt0rom.rel $(RESIDENT_RELS) -o $@
 
-GAME.ROM: $(BUILD)/rom.ihx $(BUILD)/bank_demo.ihx
+# ── バンクシーン(冷たいシーン)ビルド(2パス) ──
+# 1) 常駐 rom.ihx → rom.noi から常駐シンボル絶対番地を .s に落とす(バンク側が常駐関数を呼ぶため)
+$(BUILD)/resident_syms.rel: $(BUILD)/rom.ihx tools/gen_symdefs.mjs
+	node tools/gen_symdefs.mjs $(BUILD)/rom.noi $(BUILD)/resident_syms.s
+	sdasz80 -o $@ $(BUILD)/resident_syms.s
+# バンク先頭スタブ(0xA000 に jp _banked_entry を確定)
+$(BUILD)/bankhead.rel: $(SRC)/banked/bankhead.s | $(BUILD)
+	sdasz80 -o $@ $<
+# 2) タイトル(bank5): bankhead + scene_title + resident_syms を 0xA000 リンク
+$(BUILD)/scene_title.ihx: $(SCENES)/scene_title.c $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SCENES)/scene_title.c -o $(BUILD)/scene_title.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
+	     $(BUILD)/bankhead.rel $(BUILD)/scene_title.rel $(BUILD)/resident_syms.rel -o $@
+
+GAME.ROM: $(BUILD)/rom.ihx $(BUILD)/bank_demo.ihx $(BUILD)/scene_title.ihx
 	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS)
 
 # openMSX で起動 → 数秒後にスクショ → 終了(headless 検証)

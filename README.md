@@ -30,7 +30,11 @@ turboR専用の縦スクロールSTGエンジン(「1943を凌駕する」本命
   AIMFAN(自機狙いn-way散弾, 偶数は自機直線上に隙間)。前作の「狙いすぎ」反省を、狙い弾へブレを混ぜて公平化
   (出典: dev.to "Simple Bullet Spread for AI", Sparen's Danmaku Design)。ボス主砲=不可視発砲点のAIMFAN、
   空戦の戦闘機半数=AIMED。openMSXで自機左右移動に弾の狙いが追従・被弾(hit 0→5)を確認。
-  - 常駐コード 5808B / 24KB(残り18.3KB)、bank4使用(6B)、残り 11 バンク空き(88KB)。
+- **冷たいシーンのバンク化(実運用)**: タイトル(SC_TITLE)を bank5 に置き bcall で実行。バンクコードが
+  常駐関数(vdp_fill/run_ops等)を「常駐シンボル番地の注入(rom.noi→gen_symdefs)」で呼ぶ2パスビルドを確立。
+  フロー boot→title(バンク)→intro→boss。openMSXでタイトル描画(バンク実行)＋トリガ遷移を確認。
+  **タイトルのコードは常駐24KBを消費しない**(bank5=126B)。
+  - 常駐コード 5857B / 24KB(残り18.3KB)、bank4/5使用、残り 10 バンク空き(80KB)。
 
 ## ビルド & 起動
 ```bash

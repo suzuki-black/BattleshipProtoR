@@ -56,10 +56,12 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 ### 3.1 シーンFSM (`scene.h` / `scene.c`)
 `Scene { init(); update()->次ID; bank }` の表 `registry[]` を1か所に集約。
 `scene_run()` が「入場時 init 1回 → 毎フレーム update → 戻り値で遷移」を回す。**巨大 main() を作らない**。
-- **現在のフロー**: `SC_BOOT`(疎通) → `SC_INTRO`(★空戦イントロ=縦スクロールのみ) → `SC_BOSS`(★戦艦ボス=蛇行)。
+- **現在のフロー**: `SC_BOOT`(疎通) → `SC_TITLE`(★バンク5=冷たいシーン) → `SC_INTRO`(★空戦イントロ) → `SC_BOSS`(★戦艦ボス=蛇行)。
   ★新ルール「各面=空戦イントロ→戦艦ボスの2段」を1面ぶんプロト実装(HANDOFF §2/§7-3)。
-- 冷たいシーンは将来 `bank != 0` にして、ディスパッチャが `g_bank=bank; bcall()` で当該バンクの
-  0xA000 エントリを呼ぶ(そのエントリが `g_scene_phase` で init/update を分岐)。今は常駐シーンのみ実装。
+- **冷たいシーンのバンク化(実装済み)**: `registry` の `bank != 0` のシーンは、`call_scene()` が
+  `g_scene_phase`(0=init/1=update)をセットして `bcall_to(bank)` で当該バンクの 0xA000 エントリを実行。
+  バンク側 `banked_entry` が phase を見て init/update を分岐し、update の戻り(次ID)を `g_scene_ret` に書く。
+  **常駐窓(24KB)を消費せず**に冷たい画面を ROM バンクへ。ビルド機構(常駐シンボル注入)は §4.1。
 
 ### 3.2 バンクコール (`bank.h` / `crt0rom.s`) ← 新ビルドでE2E実証済み
 `bcall_to(<bank>)`(= `g_bank=<bank>; bcall();`)で任意バンクの 0xA000 エントリを実行(トランポリンは常駐)。
@@ -106,6 +108,19 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
   → SDCC のレジスタ割当破綻/ビルド遅延の温床(巨大単一TU)を避ける。追加は1行。
 - 冷たいコード: 単独コンパイル(`--code-loc 0xA000`)→ `--bank N build/xxx.ihx` で rompack がバンクへ格納。
 - データ: `--bank N file.bin` で任意バンクへ。
+
+### 4.1 バンクシーンのビルド(冷たいシーンを bank へ・常駐関数を呼べる)
+自己完結の `bank_demo` と違い、**シーンは常駐関数(vdp/ent/ops…)を呼びたい**。SDCCの別コンパイルでは
+常駐シンボルの番地が不明なので、**常駐を先にリンク→番地を注入する2パス**にする:
+1. 常駐 `rom.ihx` をリンク(副産物 `rom.noi` に全globalの番地 `DEF _sym 0xADDR`)。
+2. `tools/gen_symdefs.mjs` が `rom.noi` から**スワップ窓(0xA000-0xBFFF)以外**の番地を `resident_syms.s`(絶対EQU)へ。
+3. バンクシーンを `bankhead.rel + scene_xxx.rel + resident_syms.rel` で `--code-loc 0xA000` リンク。
+   - `bankhead.s` = 先頭 `jp _banked_entry`(0xA000 に単一エントリを確定。SDCCの配置順に非依存)。
+   - シーンは `#include "vdp.h"` 等で普通に常駐APIを呼べる(番地は resident_syms が解決)。
+   - シーン自前の `const`(絵/文字列)は自バンク(0xA000+)に載り、実行中は窓が自分なので読める。
+   - 禁止: `bank_data`(データ窓切替=自分を窓から追い出す)。RAM globalは data-loc(例 0xE000)。gsinit無しなので
+     初期化付き変数は避け、`init` で実行時に書く。
+実例: `scene_title.c`(bank5)。効果: **タイトル画のコードは常駐24KBを1バイトも食わない**。
 - `rompack` 出力例(空き容量の可視化):
   ```
   常駐コード(bank0-2): 686B / 24576B  残り 23890B (23.3KB)
@@ -153,7 +168,10 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/sprites.c` | スプライトパターン定義＋一括投入(sprites_load) |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
 | バンク | `src/banked/bank_demo.c` | 実バンクコール実証(bank4, 0xA000エントリ, 自己完結) |
-| シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_INTROへ遷移 |
+| バンク | `src/banked/bankhead.s` | バンク先頭スタブ(0xA000 に jp _banked_entry) |
+| シーン(bank) | `src/scenes/scene_title.c` | ★冷たいシーンのバンク化実例(bank5)。常駐APIを注入番地で呼ぶ |
+| ツール | `tools/gen_symdefs.mjs` | rom.noi→常駐シンボル絶対番地(.s)。バンクシーンのリンク用 |
+| シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_TITLEへ遷移 |
 | シーン | `src/scenes/scene_intro.c` | ★空戦イントロ(縦スクロール海＋降下戦闘機＋自機固定)→SC_BOSS |
 | シーン | `src/scenes/scene_boss.c` | ★戦艦ボス(run_ops艦体＋蛇行横スクロール＋主砲散弾) |
 | ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
