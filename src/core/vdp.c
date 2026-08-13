@@ -89,6 +89,25 @@ void vdp_wait_frame(void) {
     while (*j == t) { }
 }
 
+/* 文字列描画。CGTABL(0x0004)が指す BIOS ROM の 8x8 フォント(8B/char)を SCREEN5(page0)へ。
+   1文字=8行、各行8px=4byte(2px/byte)を直接 VRAM へ。px 偶数前提。fg/bg で地色も塗る。 */
+void vdp_text(u8 px, u8 py, u8 fg, u8 bg, const char *s) {
+    const u8 *font = (const u8 *)(*(volatile u16 *)0x0004);
+    u8 c, r;
+    vdp_cmd_wait();   /* 直前のLMMV(塗り)完了を待つ。走行中に直接VRAM書込すると衝突し文字が欠ける。 */
+    while ((c = (u8)*s++) != 0) {
+        for (r = 0; r < 8; r++) {
+            u8 fb = font[(u16)c * 8 + r];
+            vdp_write_addr((u16)((u16)(py + r) * 128 + (px >> 1)));
+            VDP_DAT = (u8)(((fb & 0x80) ? fg : bg) << 4 | ((fb & 0x40) ? fg : bg));
+            VDP_DAT = (u8)(((fb & 0x20) ? fg : bg) << 4 | ((fb & 0x10) ? fg : bg));
+            VDP_DAT = (u8)(((fb & 0x08) ? fg : bg) << 4 | ((fb & 0x04) ? fg : bg));
+            VDP_DAT = (u8)(((fb & 0x02) ? fg : bg) << 4 | ((fb & 0x01) ? fg : bg));
+        }
+        px += 8;
+    }
+}
+
 /* ===== スクロール =====
    R#23 縦スクロールは VRAM 全体(スプライト含む)を縦シフトする。g_vscroll に量を保持し、
    vdp_sprite_pos が Y へ加算 → 縦スクロール中もスプライトを画面固定に見せる。

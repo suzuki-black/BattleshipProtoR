@@ -70,5 +70,7 @@ u8 boss_update(void) {
     ent_update_all();
     ent_resolve_collisions();
     ent_draw_all();
-    return SCENE_NONE;   /* プロト: ボス面に留まる */
+    /* プロト: 撃破判定(ボスHP)未実装のため、一定時間で「撃破」とみなしエンディングへ。 */
+    if (boss_t > 900) return SC_ENDING;
+    return SCENE_NONE;
 }

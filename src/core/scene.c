@@ -17,10 +17,12 @@ extern u8   boss_update(void);
 
 /* シーンID順に登録。SC_COUNT と個数を一致させること。 */
 static const Scene registry[SC_COUNT] = {
-    /* SC_BOOT  */ { boot_init,  boot_update,  0 },
-    /* SC_TITLE */ { 0,          0,            5 },   /* 冷たいシーン: bank5(bcall) */
-    /* SC_INTRO */ { intro_init, intro_update, 0 },
-    /* SC_BOSS  */ { boss_init,  boss_update,  0 },
+    /* SC_BOOT   */ { boot_init,  boot_update,  0 },
+    /* SC_TITLE  */ { 0,          0,            5 },   /* 冷たいシーン: bank5(bcall) */
+    /* SC_CONFIG */ { 0,          0,            6 },   /* 冷たいシーン: bank6        */
+    /* SC_INTRO  */ { intro_init, intro_update, 0 },
+    /* SC_BOSS   */ { boss_init,  boss_update,  0 },
+    /* SC_ENDING */ { 0,          0,            7 },   /* 冷たいシーン: bank7        */
 };
 
 u8 g_scene;         /* 現在のシーンID(デバッグ/HUD/検証用に公開)   */

@@ -56,7 +56,8 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 ### 3.1 シーンFSM (`scene.h` / `scene.c`)
 `Scene { init(); update()->次ID; bank }` の表 `registry[]` を1か所に集約。
 `scene_run()` が「入場時 init 1回 → 毎フレーム update → 戻り値で遷移」を回す。**巨大 main() を作らない**。
-- **現在のフロー**: `SC_BOOT`(疎通) → `SC_TITLE`(★バンク5=冷たいシーン) → `SC_INTRO`(★空戦イントロ) → `SC_BOSS`(★戦艦ボス=蛇行)。
+- **現在のフロー**: `SC_BOOT`(疎通) → `SC_TITLE`(bank5) → `SC_CONFIG`(bank6) → `SC_INTRO`(★空戦イントロ) →
+  `SC_BOSS`(★戦艦ボス=蛇行) → `SC_ENDING`(bank7) → `SC_TITLE`。冷たい画面(title/config/ending)は全てバンク。
   ★新ルール「各面=空戦イントロ→戦艦ボスの2段」を1面ぶんプロト実装(HANDOFF §2/§7-3)。
 - **冷たいシーンのバンク化(実装済み)**: `registry` の `bank != 0` のシーンは、`call_scene()` が
   `g_scene_phase`(0=init/1=update)をセットして `bcall_to(bank)` で当該バンクの 0xA000 エントリを実行。
@@ -120,7 +121,10 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
    - シーン自前の `const`(絵/文字列)は自バンク(0xA000+)に載り、実行中は窓が自分なので読める。
    - 禁止: `bank_data`(データ窓切替=自分を窓から追い出す)。RAM globalは data-loc(例 0xE000)。gsinit無しなので
      初期化付き変数は避け、`init` で実行時に書く。
-実例: `scene_title.c`(bank5)。効果: **タイトル画のコードは常駐24KBを1バイトも食わない**。
+実例: `scene_title.c`(bank5)/`scene_config.c`(bank6)/`scene_ending.c`(bank7)。**追加は汎用パターンルール**
+`$(BUILD)/scene_%.ihx` と `ROMPACK_BANKS` に1行。効果: **title/config/ending のコードは常駐24KBを1バイトも食わない**。
+※data-loc(0xE000)は各バンクシーンで共用(同時にアクティブなのは1つ=衝突しない)。gsinit無しなので初期化付き変数は
+避け、RAM変数は `init` で書く。
 - `rompack` 出力例(空き容量の可視化):
   ```
   常駐コード(bank0-2): 686B / 24576B  残り 23890B (23.3KB)
@@ -147,6 +151,9 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
   - **`vdp_cmd_wait` は di 保護必須**。S#2選択中に割込が入ると ISR が割込フラグを消せずハングする。
   - **スプライトテーブルは SCREEN5 の BIOS 既定(属性0x7600/色0x7400/パターン0x7800)を使う**。
     高位VRAMへの相対再配置(R#5/6/11で0xF780等)は本環境(C-BIOS/openMSX)で描画に反映されなかった。
+  - **直接VRAM書込(`vdp_text`)の前に `vdp_cmd_wait` 必須**。LMMV(`vdp_fill`)は非同期実行なので、
+    走行中に直接書込すると上段の文字が塗り潰され欠ける。`vdp_text` は冒頭で完了待ちする。
+  - **文字は BIOS フォント**(`CGTABL`=0x0004 が指す ROM の 8x8 を SCREEN5 page0 へ直接描画)。C-BIOSでも有効。
 
 ---
 
@@ -157,7 +164,8 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 起動 | `src/crt0rom.s` | "AB"ヘッダ / page2有効化 / ASCII8窓初期化 / `_bcall` |
 | 常駐 | `src/core/main.c` | エントリ(初期化→FSM委譲のみ) |
 | 常駐 | `src/core/sys.c` | R800ブースト等の起動初期化 |
-| 常駐 | `src/core/vdp.c` | VDPレジスタ/パレット/VRAM/LMMV/フレーム待ち/スプライト(mode2)/スクロール(R#23,26,27) |
+| 常駐 | `src/core/vdp.c` | VDPレジスタ/パレット/VRAM/LMMV/文字(BIOSフォント)/スプライト/スクロール |
+| 常駐 | `src/core/gamestate.c` | 共有ゲーム状態(g_difficulty/g_lives_idx)。configが設定 |
 | 常駐 | `src/core/bank.c` | バンク切替 / `g_bank` / bcall glue |
 | 常駐 | `src/core/input.c` | カーソル/トリガ入力(row8直読み) |
 | 常駐 | `src/core/sound.c` | PSG効果音＋H.TIMI 60Hz割込みISR(BGMは#2後) |
@@ -169,7 +177,9 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
 | バンク | `src/banked/bank_demo.c` | 実バンクコール実証(bank4, 0xA000エントリ, 自己完結) |
 | バンク | `src/banked/bankhead.s` | バンク先頭スタブ(0xA000 に jp _banked_entry) |
-| シーン(bank) | `src/scenes/scene_title.c` | ★冷たいシーンのバンク化実例(bank5)。常駐APIを注入番地で呼ぶ |
+| シーン(bank) | `src/scenes/scene_title.c` | ★タイトル(bank5)。常駐APIを注入番地で呼ぶ |
+| シーン(bank) | `src/scenes/scene_config.c` | ★設定メニュー(bank6)。難易度/残機。g_difficultyを設定 |
+| シーン(bank) | `src/scenes/scene_ending.c` | ★エンディング(bank7)。英文＋THE END |
 | ツール | `tools/gen_symdefs.mjs` | rom.noi→常駐シンボル絶対番地(.s)。バンクシーンのリンク用 |
 | シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_TITLEへ遷移 |
 | シーン | `src/scenes/scene_intro.c` | ★空戦イントロ(縦スクロール海＋降下戦闘機＋自機固定)→SC_BOSS |

@@ -28,6 +28,9 @@ void vdp_cmd_wait(void);
 /* 矩形塗り(HMMV): (dx,dy) から (nx,ny) を色 color で塗る。 */
 void vdp_fill(u16 dx, u16 dy, u16 nx, u16 ny, u8 color);
 
+/* 文字列描画(BIOS 8x8フォント使用)。px は偶数、page0 のみ。fg=文字色/bg=地色。 */
+void vdp_text(u8 px, u8 py, u8 fg, u8 bg, const char *s);
+
 /* 表示同期: VBLANK(JIFFY 更新)を1回待つ。 */
 void vdp_wait_frame(void);
 

@@ -30,11 +30,14 @@ turboR専用の縦スクロールSTGエンジン(「1943を凌駕する」本命
   AIMFAN(自機狙いn-way散弾, 偶数は自機直線上に隙間)。前作の「狙いすぎ」反省を、狙い弾へブレを混ぜて公平化
   (出典: dev.to "Simple Bullet Spread for AI", Sparen's Danmaku Design)。ボス主砲=不可視発砲点のAIMFAN、
   空戦の戦闘機半数=AIMED。openMSXで自機左右移動に弾の狙いが追従・被弾(hit 0→5)を確認。
-- **冷たいシーンのバンク化(実運用)**: タイトル(SC_TITLE)を bank5 に置き bcall で実行。バンクコードが
-  常駐関数(vdp_fill/run_ops等)を「常駐シンボル番地の注入(rom.noi→gen_symdefs)」で呼ぶ2パスビルドを確立。
-  フロー boot→title(バンク)→intro→boss。openMSXでタイトル描画(バンク実行)＋トリガ遷移を確認。
-  **タイトルのコードは常駐24KBを消費しない**(bank5=126B)。
-  - 常駐コード 5857B / 24KB(残り18.3KB)、bank4/5使用、残り 10 バンク空き(80KB)。
+- **冷たいシーンのバンク化(実運用)**: バンクコードが常駐関数(vdp_fill/run_ops/vdp_text等)を
+  「常駐シンボル番地の注入(rom.noi→gen_symdefs)」で呼ぶ2パスビルドを確立。title(bank5)/config(bank6)/
+  ending(bank7)を bcall で実行。**冷たい画面のコードは常駐24KBを消費しない**。追加は汎用ルール＋1行。
+  - **テキスト表示** `vdp_text`(BIOSフォント)を常駐に追加。config/ending の文字はこれで描画。
+  - **config**: カーソル/難易度・残機変更/START。difficultyを常駐 g_difficulty へ書き gameplay が参照。
+  - フロー boot→title→config→intro→boss→ending→title。openMSXで各バンクシーンの描画・遷移・
+    設定変更(NORMAL→HARD)・START→intro を確認。
+  - 常駐コード 6321B / 24KB(残り17.8KB)、bank4-7使用、残り 8 バンク空き(64KB)。
 
 ## ビルド & 起動
 ```bash

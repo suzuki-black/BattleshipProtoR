@@ -27,12 +27,14 @@ static void title_init(void) {
     vdp_set_display_page(0);
     vdp_fill(0, 0, 256, 212, 1);   /* 黒背景 */
     run_ops(0, 0, title_ops);
+    vdp_text(72, 16, 15, 1, "BATTLESHIP PROTO R");
+    vdp_text(88, 196, 14, 1, "PUSH SPACE");
     tt = 0;
 }
 
 static u8 title_update(void) {
     tt++;
-    if ((g_input_edge & INP_TRIG) || tt > 600) return SC_INTRO;   /* トリガ or 10秒で開始 */
+    if ((g_input_edge & INP_TRIG) || tt > 600) return SC_CONFIG;   /* トリガ or 10秒で設定へ */
     return SCENE_NONE;
 }
 
