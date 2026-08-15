@@ -28,9 +28,9 @@ enum {
 typedef struct Entity {
     u8  active;
     u8  type;
-    s16 x, y;           /* 位置(px, 左上) */
+    s16 x, y;           /* 位置(px, 左上。画面座標) */
     s16 vx, vy;         /* 速度(px/frame) */
-    s16 ax;             /* アンカーX(ET_TURRET: 蛇行追従の基準x) */
+    s16 ax, ay;         /* 世界アンカー(ET_TURRET: 艦上の世界座標。画面へは x=ax+weave, y=ay-cam) */
     u8  w, h;           /* 当たり/反射サイズ(スプライトは16x16固定) */
     u8  color;          /* スプライト色(0-15) */
     u8  pat;            /* スプライトパターン番号(4の倍数) */

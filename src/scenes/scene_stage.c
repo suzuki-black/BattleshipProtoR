@@ -8,28 +8,39 @@
 #include "sprites.h"
 #include "scroll.h"
 #include "ops.h"
+#include "fire.h"
 
 /* 戦艦の地形(長い=画面より縦416px)。OPS_RECTのyはu8(255まで)なので上下2パスで描く。
    船首(細)=上端(先に見える)、船尾=下端。砲塔は後段でスプライト化。 */
+/* 砲塔は破壊可能スプライト(ET_TURRET)なので艦グラフィックには描かない。 */
 static const u8 ship_top[] = {      /* 世界 y0..255 を SHIPBUF_Y へ */
     OPS_RECT, 26,   0, 12, 16, 14,  /* 船首テーパ(細) */
     OPS_RECT, 22,  16, 20, 16, 14,
     OPS_RECT, 16,  32, 32, 16, 14,
     OPS_RECT,  8,  48, 48, 207, 14, /* 船体前半 y48..255 */
-    OPS_RECT, 22,  60, 20, 16,  8,  /* 主砲(前) */
     OPS_RECT, 14,  92, 36, 40,  7,  /* 艦橋 */
     OPS_RECT, 20, 150, 24, 26,  6,  /* 煙突 */
-    OPS_RECT, 22, 200, 20, 16,  8,  /* 主砲(中) */
     OPS_END
 };
 static const u8 ship_bot[] = {      /* 世界 y256..416 を SHIPBUF_Y+256 へ(local y=worldY-256) */
     OPS_RECT,  8,   0, 48, 116, 14, /* 船体後半 world256..372 */
-    OPS_RECT, 22,  54, 20, 16,  8,  /* 主砲(後) world310 */
     OPS_RECT, 16, 116, 32, 16, 14,  /* 船尾テーパ world372 */
     OPS_RECT, 22, 132, 20, 16, 14,
     OPS_RECT, 26, 148, 12, 12, 14,
     OPS_END
 };
+
+/* 砲塔の発砲: 55f毎に自機狙い4-way散弾(偶数=自機直線上に隙間)。 */
+static const u8 fd_gun[] = { 55, FIRE_AIMFAN, 4, 2, 3, FIRE_END };
+
+/* 砲塔(破壊可能)を艦上の世界座標に配置。船体中央 x=120。世界Y=艦頭(SC_SHIP_R0*16)+艦内y。 */
+static void spawn_turret(u16 shipY, u8 delay) {
+    Entity *e = ent_spawn(ET_TURRET);
+    if (e) {
+        e->ax = 120; e->ay = (s16)(SC_SHIP_R0 * 16 + shipY);
+        e->color = 8; e->pat = SPR_BLOCK; e->hp = 2; e->fire = fd_gun; e->ftimer = delay;
+    }
+}
 
 /* 戦艦をバッファB(page2/3)へ事前描画: 海地＋上下2パスの艦体。 */
 static void prerender_ship(void) {
@@ -68,6 +79,12 @@ void stage_init(void) {
 
     e = ent_spawn(ET_PLAYER);
     if (e) { e->x = 120; e->y = 176; e->color = 15; e->pat = SPR_BLOCK; }
+
+    /* 破壊可能砲塔(艦上の世界座標に配置。海フェーズ中は画面外)。全撃破でクリア。 */
+    g_gun_kills = 0;
+    spawn_turret(60,  30);   /* 主砲(前) */
+    spawn_turret(200, 50);   /* 主砲(中) */
+    spawn_turret(310, 70);   /* 主砲(後) */
 }
 
 u8 stage_update(void) {
@@ -98,5 +115,8 @@ u8 stage_update(void) {
     ent_update_all();
     ent_resolve_collisions();
     ent_draw_all();
+
+    /* 全砲台撃破でクリア → エンディング(戦艦フェーズでのみ0になる) */
+    if (phase == 1 && ent_count(ET_TURRET) == 0) return SC_ENDING;
     return SCENE_NONE;
 }

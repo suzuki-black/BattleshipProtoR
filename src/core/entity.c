@@ -5,6 +5,7 @@
 #include "vdp.h"
 #include "fire.h"
 #include "sprites.h"
+#include "scroll.h"   /* g_cam(砲塔の世界→画面Y変換) */
 
 #define SCR_W 256
 #define SCR_H 212
@@ -33,13 +34,14 @@ static void bh_shooter(Entity *e) {
     run_fire(e);
 }
 
-/* 砲塔: 蛇行の横揺れ(weaveX=g_meander)に追従して x をアンカーから補正し発砲。
-   艦体(VRAM)は横スクロールで weaveX ぶん寄るので、スプライトも ax+weaveX に置いて一致させる。
-   x が揺れる=発射原点も当たり判定も追従(動く的)。縦の往復は scroll 側のY補正で追従。 */
+/* 砲塔: 艦上の世界座標(ax,ay)から画面座標へ。縦=ay-cam(艦と一緒にスクロール)、
+   横=ax+weaveX(蛇行の横揺れに追従)。画面内に居る時だけ発砲(動く的)。 */
 s16 g_meander;
 static void bh_turret(Entity *e) {
     e->x = e->ax + g_meander;
-    run_fire(e);
+    e->y = e->ay - (s16)g_cam;
+    if (e->y > -16 && e->y < 212) run_fire(e);   /* 画面内のみ発砲 */
+    else e->ftimer = 1;                          /* 画面外はチャージ据置(即撃ちさせない) */
 }
 
 /* 敵戦闘機(空戦): 下方向へ進み、左右に浅く蛇行しつつ画面下で消滅。fireを持てば発砲も。 */
@@ -143,7 +145,7 @@ Entity *ent_spawn(u8 type) {
         if (!pool[i].active) {
             Entity *e = &pool[i];
             e->active = 1; e->type = type;
-            e->x = 0; e->y = 0; e->vx = 0; e->vy = 0; e->ax = 0;
+            e->x = 0; e->y = 0; e->vx = 0; e->vy = 0; e->ax = 0; e->ay = 0;
             e->w = 16; e->h = 16; e->color = 15; e->pat = 0;
             e->hidden = 0; e->hp = 1; e->team = TEAM_ENEMY;
             e->fire = (const u8 *)0; e->ftimer = 0;
