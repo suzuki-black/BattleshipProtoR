@@ -101,8 +101,19 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 ### 3.5 自機・当たり判定 (`player.c` / `entity.c`)
 - **自機**(ET_PLAYER, `player.c`): `g_input` で移動＋クランプ、トリガでクールダウン付き上方発砲(TEAM_PLAYER弾)。
   現在位置を `g_player_x/y` に公開(AIMED/UIが参照)。
-- **当たり判定**(`ent_resolve_collisions`): 自機弾×敵戦闘機→両消滅・`g_kills`++、敵弾/戦闘機×自機→`g_playerhit`++。
+- **当たり判定**(`ent_resolve_collisions`): 自機弾×敵戦闘機→両消滅・`g_kills`++・`g_score`+=10、
+  自機弾×砲台→hp減算・0で撃破・`g_gun_kills`++・`g_score`+=50、敵弾/戦闘機×自機→被弾。
   16x16 AABB(甘めマージン)。弾の帰属は `Entity.team`(emit=TEAM_ENEMY / 自機発砲=TEAM_PLAYER)。
+- **残機/無敵**: 自機被弾で `g_pinv`(無敵フレーム)が0の時のみ `g_lives`-- ＋自機爆発、以後 `g_pinv`=90 の間は
+  無敵(自機点滅=`bh_player` が `e->hidden` を明滅)。`g_lives`==0 でゲームオーバー→タイトル。残機初期値は config の
+  `g_lives_idx`(2/3/5)。
+
+### 3.6 スプライトHUD (`hud.c`) — スコア/残機
+- 面表示は **page1(スクロールする環状バッファ)** なので `vdp_text`(page0直書き)は流れて使えない。
+  → スコア/残機を**スプライト**で画面上端に固定表示。スプライトは縦スクロール補正(§3.4)済みなので Y=画面座標でよい。
+- **数字パターン**: BIOS 8x8 フォント('0'..'9', CGTABL 経由)を 16x16 スプライトの左上へ写して生成(`hud_init`)。
+- **スロット確保**: HUD が先頭 `HUD_SLOTS`(=6, スコア5桁+残機1桁)を占有。`ent_draw_all` は `g_spr_base` から詰める。
+  V9938 sprite mode2 は **1走査線8枚**まで表示可なので上端6枚+敵少数でも欠けにくい(MSX1の4枚制限ではない)。
 
 > **[解決済み] スクロール時のスプライトテーブル露出ゴミ**: 縦スクロールで page0末尾(ライン232-255)の
 > スプライトテーブルが可視域に出る問題。→ 海を page1 に描き page1 を表示(§3.4)。イントロで実機(openMSX)確認済み。
@@ -180,7 +191,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/main.c` | エントリ(初期化→FSM委譲のみ) |
 | 常駐 | `src/core/sys.c` | R800ブースト等の起動初期化 |
 | 常駐 | `src/core/vdp.c` | VDPレジスタ/パレット/VRAM/LMMV/文字(BIOSフォント)/スプライト/スクロール |
-| 常駐 | `src/core/gamestate.c` | 共有ゲーム状態(g_difficulty/g_lives_idx)。configが設定 |
+| 常駐 | `src/core/gamestate.c` | 共有ゲーム状態(g_difficulty/g_lives_idx/g_score/g_lives)。configが設定 |
 | 常駐 | `src/core/bank.c` | バンク切替 / `g_bank` / bcall glue |
 | 常駐 | `src/core/input.c` | カーソル/トリガ入力(row8直読み) |
 | 常駐 | `src/core/sound.c` | PSG効果音＋H.TIMI 60Hz割込みISR(BGMは#2後) |
@@ -189,6 +200,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/fire.c` | emit＋run_fire(FIXED/RING/AIMED/AIMFAN, 32分割, 狙い散らし) |
 | 常駐 | `src/core/ops.c` | データ駆動描画 run_ops(艦体等)。OPS_RECTのx/yはu8(255まで) |
 | 常駐 | `src/core/scroll.c` | ★連続縦スクロール地形(page1リング+R#23、艦をBから流し込み) |
+| 常駐 | `src/core/hud.c` | ★スプライトHUD(スコア5桁＋残機)。数字はBIOSフォントを16x16へ写す。slot0-5確保 |
 | シーン | `src/scenes/scene_stage.c` | ★1本の連続面(海直進→戦艦 往復蛇行)。カット無し |
 | 常駐 | `src/core/sprites.c` | スプライトパターン定義＋一括投入(sprites_load) |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
@@ -203,4 +215,4 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | シーン | `src/scenes/scene_intro.c` | ★空戦イントロ(縦スクロール海＋降下戦闘機＋自機固定)→SC_BOSS |
 | シーン | `src/scenes/scene_boss.c` | ★戦艦ボス(run_ops艦体＋蛇行横スクロール＋主砲散弾) |
 | ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
-| ツール | `tools/test_{boot,sound,bank,spr,stage}.tcl` | openMSX headless 検証(起動/音/バンク/スプライト/2段構成) |
+| ツール | `tools/test_{boot,sound,bank,spr,stage,hud}.tcl` | openMSX headless 検証(起動/音/バンク/スプライト/連続面/HUD) |

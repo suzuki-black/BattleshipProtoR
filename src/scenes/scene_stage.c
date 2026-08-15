@@ -10,6 +10,8 @@
 #include "ops.h"
 #include "fire.h"
 #include "sound.h"
+#include "hud.h"
+#include "gamestate.h"
 
 /* 戦艦の地形(長い=画面より縦416px)。OPS_RECTのyはu8(255まで)なので上下2パスで描く。
    船首(細)=上端(先に見える)、船尾=下端。砲塔は後段でスプライト化。 */
@@ -78,6 +80,7 @@ void stage_init(void) {
     scroll_init();
     vdp_sprite_init();
     sprites_load();
+    hud_init();           /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
     ent_reset();
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
@@ -85,6 +88,14 @@ void stage_init(void) {
 
     e = ent_spawn(ET_PLAYER);
     if (e) { e->x = 120; e->y = 176; e->color = 15; e->pat = SPR_BLOCK; }
+
+    /* スコア/残機の初期化(残機は config の g_lives_idx→2/3/5 機) */
+    {
+        static const u8 livestab[3] = { 2, 3, 5 };
+        g_score = 0;
+        g_kills = 0; g_playerhit = 0; g_pinv = 0;
+        g_lives = livestab[(g_lives_idx < 3) ? g_lives_idx : 1];
+    }
 
     /* 破壊可能砲塔(艦上の世界座標に配置。海フェーズ中は画面外)。全撃破でクリア。 */
     g_gun_kills = 0;
@@ -132,7 +143,10 @@ u8 stage_update(void) {
     ent_update_all();
     ent_resolve_collisions();
     ent_draw_all();
+    hud_draw(g_score, g_lives);
 
+    /* 残機尽き = ゲームオーバー → タイトルへ戻す */
+    if (g_lives == 0) return SC_TITLE;
     /* 全砲台撃破でクリア → エンディング(戦艦フェーズでのみ0になる) */
     if (phase == 1 && ent_count(ET_TURRET) == 0) return SC_ENDING;
     return SCENE_NONE;

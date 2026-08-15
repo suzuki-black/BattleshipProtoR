@@ -5,7 +5,10 @@
 #include "vdp.h"
 #include "fire.h"
 #include "sprites.h"
-#include "scroll.h"   /* g_cam(砲塔の世界→画面Y変換) */
+#include "scroll.h"     /* g_cam(砲塔の世界→画面Y変換) */
+#include "gamestate.h"  /* g_score(撃破で加算) */
+
+u8 g_spr_base;          /* エンティティ描画の開始スプライトスロット(先頭はHUDが確保) */
 
 #define SCR_W 256
 #define SCR_H 212
@@ -90,6 +93,7 @@ void ent_spawn_explosion(s16 x, s16 y) {
 u8 g_kills;
 u8 g_gun_kills;
 u8 g_playerhit;
+u8 g_pinv;
 
 /* 16x16 実体の AABB 重なり(やや甘めのマージン14)。 */
 static u8 overlap(const Entity *a, const Entity *b) {
@@ -109,13 +113,13 @@ void ent_resolve_collisions(void) {
             Entity *t = &pool[j];
             if (!t->active) continue;
             if (t->type == ET_FIGHTER && overlap(b, t)) {
-                b->active = 0; t->active = 0; g_kills++;
+                b->active = 0; t->active = 0; g_kills++; g_score += 10;
                 ent_spawn_explosion(t->x, t->y);
                 break;
             }
             if (t->type == ET_TURRET && overlap(b, t)) {
                 b->active = 0;
-                if (--t->hp == 0) { t->active = 0; g_gun_kills++; ent_spawn_explosion(t->x, t->y); }
+                if (--t->hp == 0) { t->active = 0; g_gun_kills++; g_score += 50; ent_spawn_explosion(t->x, t->y); }
                 break;
             }
         }
@@ -128,7 +132,15 @@ void ent_resolve_collisions(void) {
             Entity *e = &pool[j];
             if (!e->active) continue;
             if ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_FIGHTER) {
-                if (overlap(e, p)) { e->active = 0; g_playerhit++; }
+                if (overlap(e, p)) {
+                    e->active = 0;                 /* 敵/敵弾は消す(すり抜け防止) */
+                    if (g_pinv == 0) {             /* 無敵中は残機を減らさない */
+                        g_playerhit++;
+                        if (g_lives) g_lives--;
+                        g_pinv = 90;               /* 約1.5秒の無敵(点滅) */
+                        ent_spawn_explosion(p->x, p->y);
+                    }
+                }
             }
         }
     }
@@ -167,7 +179,7 @@ void ent_update_all(void) {
    残りは停止マーカで隠す。ハードウェア合成なので消去は不要。
    ※同一走査線に5枚以上でスプライト欠けが起きる(mode2)点は本番でレイアウトに注意。 */
 void ent_draw_all(void) {
-    u8 i, slot = 0;
+    u8 i, slot = g_spr_base;   /* 先頭スロットは HUD が確保(g_spr_base) */
     Entity *e;
     for (i = 0; i < ENT_MAX; i++) {
         e = &pool[i];

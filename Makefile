@@ -37,6 +37,7 @@ RESIDENT_RELS = \
   $(BUILD)/fire.rel \
   $(BUILD)/ops.rel \
   $(BUILD)/scroll.rel \
+  $(BUILD)/hud.rel \
   $(BUILD)/scene.rel \
   $(BUILD)/scene_boot.rel \
   $(BUILD)/scene_stage.rel \

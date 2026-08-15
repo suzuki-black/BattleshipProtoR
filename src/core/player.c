@@ -37,6 +37,10 @@ void bh_player(Entity *e) {
         sfx(0, SFX_SHOT);
     }
 
+    /* 被弾直後の無敵: カウントを減らしつつ点滅(4フレーム周期で明滅) */
+    if (g_pinv) { g_pinv--; e->hidden = (g_pinv & 4) ? 1 : 0; }
+    else        e->hidden = 0;
+
     /* 現在位置を公開(AIMED/当たり判定用) */
     g_player_x = (u8)e->x;
     g_player_y = (u8)e->y;
