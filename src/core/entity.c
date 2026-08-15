@@ -28,8 +28,17 @@ static void bh_bullet(Entity *e) {
     if (e->x < -16 || e->x > SCR_W || e->y < -16 || e->y > SCR_H) e->active = 0;
 }
 
-/* 射手: 発砲スクリプトを進める(発射は run_fire→emit)。位置は固定(将来 behavior 合成)。 */
+/* 射手: 発砲スクリプトを進める(発射は run_fire→emit)。位置は固定。 */
 static void bh_shooter(Entity *e) {
+    run_fire(e);
+}
+
+/* 砲塔: 蛇行の横揺れ(weaveX=g_meander)に追従して x をアンカーから補正し発砲。
+   艦体(VRAM)は横スクロールで weaveX ぶん寄るので、スプライトも ax+weaveX に置いて一致させる。
+   x が揺れる=発射原点も当たり判定も追従(動く的)。縦の往復は scroll 側のY補正で追従。 */
+s16 g_meander;
+static void bh_turret(Entity *e) {
+    e->x = e->ax + g_meander;
     run_fire(e);
 }
 
@@ -60,7 +69,7 @@ static const Behavior behaviors[ET_COUNT] = {
     bh_shooter,   /* ET_SHOOTER   */
     bh_fighter,   /* ET_FIGHTER   */
     bh_player,    /* ET_PLAYER    */
-    bh_shooter,   /* ET_TURRET(発砲は射手と同じ。破壊可能なだけ) */
+    bh_turret,    /* ET_TURRET(蛇行追従＋発砲。破壊可能) */
     bh_explosion, /* ET_EXPLOSION */
 };
 
@@ -134,7 +143,7 @@ Entity *ent_spawn(u8 type) {
         if (!pool[i].active) {
             Entity *e = &pool[i];
             e->active = 1; e->type = type;
-            e->x = 0; e->y = 0; e->vx = 0; e->vy = 0;
+            e->x = 0; e->y = 0; e->vx = 0; e->vy = 0; e->ax = 0;
             e->w = 16; e->h = 16; e->color = 15; e->pat = 0;
             e->hidden = 0; e->hp = 1; e->team = TEAM_ENEMY;
             e->fire = (const u8 *)0; e->ftimer = 0;

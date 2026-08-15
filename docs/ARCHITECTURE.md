@@ -79,6 +79,16 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
   - 設計意図: 前作「狙いすぎ」反省 → 狙い弾に**ブレ/スプレッド**を混ぜ公平化。出典: dev.to "Simple Bullet Spread for AI"(aim+uniform offset)、Sparen's Danmaku Design(aimed patternの inconsistency)。難易度で散らし量を可変にできる(将来)。
 - **emit**(弾生成プリミティブ `fire.c`): `emit(x,y,dir,kind,spd)`。32分割方向×弾速で ET_BULLET を1発生成。`aim_dir()` で自機への最近傍方向。
 
+### 3.3.1 連続縦スクロール地形 (`scroll.c`) ★設計の要
+**海と戦艦バトルは地続き(画面カット無し)の1本の縦スクロール**。前作は戦艦のど真ん中から開始→
+本作は手前の海から始めてスクロールで戦艦の船首が入ってくるだけ。前作cportの実証手法を移植:
+- 表示=**page1 を256pxリングバッファ**、`R#23=cam&0xFF` で縦スクロール。スプライト表は page0(非スクロール)。
+- 戦艦は上位VRAM(バッファB=page2/3)へ **run_ops で一度だけ事前描画**。OPS_RECTのyはu8なので
+  255超の艦は `SC_SHIPBUF_Y` と `+256` の**2パス**で描く。
+- 露出した16px世界行だけ `draw_row`=**LMMM 1本**で page1 の該当スロットへ流す(高速)。海行は青+波を直接塗り。
+- **フェーズ**: 海=蛇行なし直進(前進) → 船尾が見えたら地続きに交戦へ → 戦艦=**船首↔船尾の往復**(縦cam往復)
+  ＋**横揺れ weaveX**(R#26/27, `g_meander`で砲塔スプライトも追従)。前作の戦艦戦スクロールと同じ。
+
 ### 3.4 スクロール (`vdp.c`)
 - **縦スクロール R#23**(空戦イントロの海): VRAM全体を縦シフト=**スプライトにも効く**。`vdp_set_vscroll` が量を保持し
   `vdp_sprite_pos` が Y に加算 → 自機/敵を画面固定に見せる。海は256行を波線付きで seamless に。
@@ -177,7 +187,9 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/entity.c` | 汎用エンティティプール＋behavior＋スプライト描画＋当たり判定(team) |
 | 常駐 | `src/core/player.c` | 自機(ET_PLAYER): 入力で移動＋発砲、位置を公開(AIMED/UI用) |
 | 常駐 | `src/core/fire.c` | emit＋run_fire(FIXED/RING/AIMED/AIMFAN, 32分割, 狙い散らし) |
-| 常駐 | `src/core/ops.c` | データ駆動描画 run_ops(艦体等) |
+| 常駐 | `src/core/ops.c` | データ駆動描画 run_ops(艦体等)。OPS_RECTのx/yはu8(255まで) |
+| 常駐 | `src/core/scroll.c` | ★連続縦スクロール地形(page1リング+R#23、艦をBから流し込み) |
+| シーン | `src/scenes/scene_stage.c` | ★1本の連続面(海直進→戦艦 往復蛇行)。カット無し |
 | 常駐 | `src/core/sprites.c` | スプライトパターン定義＋一括投入(sprites_load) |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
 | ボス | `src/scenes/scene_boss.c` | ★破壊可能砲台(ET_TURRET,hp)＋全撃破でクリア→ending |

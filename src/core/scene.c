@@ -14,12 +14,15 @@ extern void intro_init(void);
 extern u8   intro_update(void);
 extern void boss_init(void);
 extern u8   boss_update(void);
+extern void stage_init(void);
+extern u8   stage_update(void);
 
 /* シーンID順に登録。SC_COUNT と個数を一致させること。 */
 static const Scene registry[SC_COUNT] = {
     /* SC_BOOT   */ { boot_init,  boot_update,  0 },
     /* SC_TITLE  */ { 0,          0,            5 },   /* 冷たいシーン: bank5(bcall) */
     /* SC_CONFIG */ { 0,          0,            6 },   /* 冷たいシーン: bank6        */
+    /* SC_STAGE  */ { stage_init, stage_update, 0 },   /* ★連続縦スクロール面        */
     /* SC_INTRO  */ { intro_init, intro_update, 0 },
     /* SC_BOSS   */ { boss_init,  boss_update,  0 },
     /* SC_ENDING */ { 0,          0,            7 },   /* 冷たいシーン: bank7        */

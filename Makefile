@@ -36,8 +36,10 @@ RESIDENT_RELS = \
   $(BUILD)/player.rel \
   $(BUILD)/fire.rel \
   $(BUILD)/ops.rel \
+  $(BUILD)/scroll.rel \
   $(BUILD)/scene.rel \
   $(BUILD)/scene_boot.rel \
+  $(BUILD)/scene_stage.rel \
   $(BUILD)/scene_intro.rel \
   $(BUILD)/scene_boss.rel \
   $(BUILD)/main.rel

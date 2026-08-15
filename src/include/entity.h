@@ -30,6 +30,7 @@ typedef struct Entity {
     u8  type;
     s16 x, y;           /* 位置(px, 左上) */
     s16 vx, vy;         /* 速度(px/frame) */
+    s16 ax;             /* アンカーX(ET_TURRET: 蛇行追従の基準x) */
     u8  w, h;           /* 当たり/反射サイズ(スプライトは16x16固定) */
     u8  color;          /* スプライト色(0-15) */
     u8  pat;            /* スプライトパターン番号(4の倍数) */
@@ -42,6 +43,7 @@ typedef struct Entity {
 
 /* 当たり判定を解決(自機弾×敵戦闘機、敵弾/戦闘機×自機)。撃破/被弾数を計上。 */
 void ent_resolve_collisions(void);
+extern s16 g_meander;    /* 蛇行の横揺れ量(weaveX, ±)。ET_TURRET が x を追従補正 */
 extern u8 g_kills;       /* 撃破した敵戦闘機の累計 */
 extern u8 g_gun_kills;   /* 撃破した砲台の累計(撃破演出/クリア判定用) */
 extern u8 g_playerhit;   /* 自機が被弾した累計(プロト) */

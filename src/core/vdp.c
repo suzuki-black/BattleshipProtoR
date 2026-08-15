@@ -83,6 +83,19 @@ void vdp_fill(u16 dx, u16 dy, u16 nx, u16 ny, u8 color) {
     vdp_wreg(46, 0x80);                                        /* CMD = LMMV(論理IMP) */
 }
 
+/* LMMM: VRAM→VRAM 論理コピー。R#32-45 を設定し R#46=0x90。前コマンド完了を待つ。 */
+void vdp_copy(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny) {
+    vdp_cmd_wait();
+    vdp_wreg(32, sx & 0xFF);  vdp_wreg(33, (sx >> 8) & 0x01);   /* SX (9bit)  */
+    vdp_wreg(34, sy & 0xFF);  vdp_wreg(35, (sy >> 8) & 0x03);   /* SY (10bit) */
+    vdp_wreg(36, dx & 0xFF);  vdp_wreg(37, (dx >> 8) & 0x01);   /* DX (9bit)  */
+    vdp_wreg(38, dy & 0xFF);  vdp_wreg(39, (dy >> 8) & 0x03);   /* DY (10bit) */
+    vdp_wreg(40, nx & 0xFF);  vdp_wreg(41, (nx >> 8) & 0x01);   /* NX (9bit)  */
+    vdp_wreg(42, ny & 0xFF);  vdp_wreg(43, (ny >> 8) & 0x03);   /* NY (10bit) */
+    vdp_wreg(44, 0);          vdp_wreg(45, 0);                   /* CLR/ARG    */
+    vdp_wreg(46, 0x90);                                          /* CMD = LMMM */
+}
+
 void vdp_wait_frame(void) {
     volatile u16 *j = (volatile u16 *)0xFC9E;   /* JIFFY */
     u16 t = *j;

@@ -28,7 +28,7 @@ static u8  last_gun;   /* 撃破音のエッジ検出 */
 /* 破壊可能な砲台(見える的)。hp=2、自機狙い散弾。 */
 static void spawn_turret(s16 x, s16 y, u8 delay) {
     Entity *e = ent_spawn(ET_TURRET);
-    if (e) { e->x = x; e->y = y; e->color = 8; e->pat = SPR_BLOCK; e->hp = 2; e->fire = fd_gun; e->ftimer = delay; }
+    if (e) { e->x = x; e->ax = x; e->y = y; e->color = 8; e->pat = SPR_BLOCK; e->hp = 2; e->fire = fd_gun; e->ftimer = delay; }
 }
 
 void boss_init(void) {
@@ -62,6 +62,7 @@ u8 boss_update(void) {
     ph = mtimer & 63;
     o = (ph < 32) ? (u8)(ph >> 1) : (u8)((63 - ph) >> 1);
     vdp_set_hscroll(o >> 3, o & 7);
+    g_meander = o;   /* 砲塔スプライトが同量ぶん追従(bh_turret) */
 
     boss_t++;
     if ((boss_t % 70) == 0) sfx(1, SFX_HIT);          /* 発砲音(周期一致) */

@@ -43,7 +43,7 @@ static u8 config_update(void) {
         if ((e & INP_RIGHT) && g_lives_idx < 2) g_lives_idx++;
         if ((e & INP_LEFT)  && g_lives_idx > 0) g_lives_idx--;
     }
-    if ((e & INP_TRIG) && cur == 2) return SC_INTRO;   /* START でゲーム開始 */
+    if ((e & INP_TRIG) && cur == 2) return SC_STAGE;   /* START でステージ開始 */
     if (e) draw();                                     /* 入力があった時だけ再描画 */
     return SCENE_NONE;
 }
