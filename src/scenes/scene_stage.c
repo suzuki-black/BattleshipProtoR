@@ -9,6 +9,7 @@
 #include "scroll.h"
 #include "ops.h"
 #include "fire.h"
+#include "sound.h"
 
 /* 戦艦の地形(長い=画面より縦416px)。OPS_RECTのyはu8(255まで)なので上下2パスで描く。
    船首(細)=上端(先に見える)、船尾=下端。砲塔は後段でスプライト化。 */
@@ -32,6 +33,11 @@ static const u8 ship_bot[] = {      /* 世界 y256..416 を SHIPBUF_Y+256 へ(lo
 
 /* 砲塔の発砲: 55f毎に自機狙い4-way散弾(偶数=自機直線上に隙間)。 */
 static const u8 fd_gun[] = { 55, FIRE_AIMFAN, 4, 2, 3, FIRE_END };
+/* 戦闘機の発砲: 45f毎に自機狙い＋散らし円錐(±3ステップ)。 */
+static const u8 fd_faim[] = { 45, FIRE_AIMED, 3, 1, 2, FIRE_END };
+
+static u16 rng;
+static u8  rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }
 
 /* 砲塔(破壊可能)を艦上の世界座標に配置。船体中央 x=120。世界Y=艦頭(SC_SHIP_R0*16)+艦内y。 */
 static void spawn_turret(u16 shipY, u8 delay) {
@@ -53,7 +59,7 @@ static void prerender_ship(void) {
 
 static u16 cam;
 static u8  phase;     /* 0=海(直進) / 1=戦艦(往復蛇行) */
-static u8  sdiv, wtimer;
+static u8  sdiv, wtimer, ftick;
 static s8  camdir;    /* 往復方向: -1=船首へ / +1=船尾へ */
 static s16 weaveX;
 static s8  wdir;
@@ -73,8 +79,8 @@ void stage_init(void) {
     vdp_sprite_init();
     sprites_load();
     ent_reset();
-    cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0;
-    weaveX = 0; wdir = 1; camdir = -1; g_meander = 0;
+    cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
+    weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
     vdp_set_hscroll(0, 0);
 
     e = ent_spawn(ET_PLAYER);
@@ -92,6 +98,17 @@ u8 stage_update(void) {
         /* 海: 蛇行なしの直進。船尾が見えたら(=cam<=STERN)交戦フェーズへ地続きに移行 */
         if (++sdiv >= 2) { sdiv = 0; if (cam > SC_CAM_STERN) cam--; }
         scroll_to(cam);
+        /* 空戦: 敵戦闘機が上から降下(約半数は自機狙い) */
+        if ((++ftick % 40) == 0) {
+            Entity *f = ent_spawn(ET_FIGHTER);
+            if (f) {
+                f->x = 24 + (rnd() % 200); f->y = -16;
+                f->vx = (rnd() & 1) ? 1 : -1; f->vy = 2 + (rnd() % 2);
+                f->color = 8; f->pat = SPR_FIGHTER;
+                if (rnd() & 1) { f->fire = fd_faim; f->ftimer = 20 + (rnd() % 30); }
+            }
+            sfx(1, SFX_HIT);
+        }
         if (cam <= SC_CAM_STERN) { phase = 1; camdir = -1; }
     } else {
         /* 戦艦: 船首↔船尾の往復(縦) */
