@@ -16,6 +16,12 @@ CORE   = $(SRC)/core
 SCENES = $(SRC)/scenes
 INC    = -I$(SRC)/include
 
+# ── ヘッダ依存(重要): 共有ヘッダ(特に構造体を
+#    定義する entity.h 等)を変更したら全 .c を必ず再コンパイルする。これを怠ると
+#    「新旧で構造体レイアウトが食い違うオブジェクトが混在→メモリ破損」という
+#    stale-object バグを踏む(実際に踏んだ)。小規模なので全再コンパイルで十分。
+HDRS := $(wildcard $(SRC)/include/*.h) config.mk
+
 # ── 常駐(bank0-2, <=24KB)にリンクするソース。crt0 は先頭に別途リンク。
 #    ここへ足すたびに常駐サイズが増える。冷たいものは足さず bcall バンクへ回すこと。
 RESIDENT_RELS = \
@@ -54,14 +60,14 @@ $(BUILD):
 # C ソースは core/ と scenes/ から探す(basename は一意に保つ)
 vpath %.c $(CORE) $(SCENES)
 
-$(BUILD)/%.rel: %.c | $(BUILD)
+$(BUILD)/%.rel: %.c $(HDRS) | $(BUILD)
 	sdcc -m$(TARGET) -c $(OPT) $(INC) $< -o $@
 
 $(BUILD)/crt0rom.rel: $(SRC)/crt0rom.s | $(BUILD)
 	sdasz80 -o $@ $<
 
 # 冷たいコード(バンク)を 0xA000 単独リンク。data-loc はバンク関数用の RAM 退避域(0xE900)。
-$(BUILD)/bank_demo.ihx: $(SRC)/banked/bank_demo.c | $(BUILD)
+$(BUILD)/bank_demo.ihx: $(SRC)/banked/bank_demo.c $(HDRS) | $(BUILD)
 	sdcc -m$(TARGET) -c $(OPT) $(INC) $< -o $(BUILD)/bank_demo.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE900 $(BUILD)/bank_demo.rel -o $@
 
@@ -80,7 +86,7 @@ $(BUILD)/bankhead.rel: $(SRC)/banked/bankhead.s | $(BUILD)
 	sdasz80 -o $@ $<
 # 2) バンクシーン汎用ルール(scene_<name>.c → bank .ihx)。追加は ROMPACK_BANKS に1行。
 #    bankhead + scene_<name> + resident_syms を 0xA000 リンク。data-loc は各シーン共用の退避域。
-$(BUILD)/scene_%.ihx: $(SCENES)/scene_%.c $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
+$(BUILD)/scene_%.ihx: $(SCENES)/scene_%.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(INC) $< -o $(BUILD)/scene_$*.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/scene_$*.rel $(BUILD)/resident_syms.rel -o $@

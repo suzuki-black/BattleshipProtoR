@@ -107,6 +107,11 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 
 - 各常駐モジュールは**個別 .c → 個別 .rel**。`Makefile` の `RESIDENT_RELS` に列挙してリンク。
   → SDCC のレジスタ割当破綻/ビルド遅延の温床(巨大単一TU)を避ける。追加は1行。
+- **[重要な罠] ヘッダ依存**: 各 `.rel` は `$(HDRS)`(全 include ヘッダ)に依存させている。
+  これを怠ると、共有ヘッダ(特に `Entity` 等の**構造体**)を変更しても一部モジュールが再コンパイルされず、
+  **新旧で構造体レイアウト(フィールドのオフセット)が食い違うオブジェクトが混在**→フィールド書込が
+  隣接データを破壊(メモリ破損)→ゴミ関数ポインタへジャンプ→ハング、という stale-object バグを踏む。
+  構造体を変えたら必ず全再コンパイル(小規模なので `$(HDRS)` 依存で十分)。実際に踏んで丸1回分溶かした。
 - 冷たいコード: 単独コンパイル(`--code-loc 0xA000`)→ `--bank N build/xxx.ihx` で rompack がバンクへ格納。
 - データ: `--bank N file.bin` で任意バンクへ。
 
@@ -175,6 +180,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/ops.c` | データ駆動描画 run_ops(艦体等) |
 | 常駐 | `src/core/sprites.c` | スプライトパターン定義＋一括投入(sprites_load) |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
+| ボス | `src/scenes/scene_boss.c` | ★破壊可能砲台(ET_TURRET,hp)＋全撃破でクリア→ending |
 | バンク | `src/banked/bank_demo.c` | 実バンクコール実証(bank4, 0xA000エントリ, 自己完結) |
 | バンク | `src/banked/bankhead.s` | バンク先頭スタブ(0xA000 に jp _banked_entry) |
 | シーン(bank) | `src/scenes/scene_title.c` | ★タイトル(bank5)。常駐APIを注入番地で呼ぶ |

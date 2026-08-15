@@ -16,6 +16,8 @@ enum {
     ET_SHOOTER,   /* 射手: fire スクリプトで弾を撒く(位置固定) */
     ET_FIGHTER,   /* 空戦の敵戦闘機: 上から侵入し下へ抜ける */
     ET_PLAYER,    /* 自機: 入力で移動＋発砲 */
+    ET_TURRET,    /* 戦艦の砲台: 破壊可能(hp)＋fireで発砲。全撃破でクリア */
+    ET_EXPLOSION, /* 撃破エフェクト: 数フレーム色を変えて消滅 */
     ET_COUNT
 };
 
@@ -31,7 +33,8 @@ typedef struct Entity {
     u8  w, h;           /* 当たり/反射サイズ(スプライトは16x16固定) */
     u8  color;          /* スプライト色(0-15) */
     u8  pat;            /* スプライトパターン番号(4の倍数) */
-    u8  hidden;         /* 1=スプライト描画しない(不可視の発砲点=砲塔等) */
+    u8  hidden;         /* 1=スプライト描画しない(不可視の発砲点等) */
+    u8  hp;             /* 耐久(ET_TURRET等)。0で撃破。既定1 */
     u8  team;           /* TEAM_ENEMY / TEAM_PLAYER(弾の帰属) */
     const u8 *fire;     /* fire スクリプト(ET_SHOOTER/一部FIGHTER)。無ければ NULL */
     u8  ftimer;         /* 次発火/クールダウンの残りフレーム */
@@ -39,12 +42,15 @@ typedef struct Entity {
 
 /* 当たり判定を解決(自機弾×敵戦闘機、敵弾/戦闘機×自機)。撃破/被弾数を計上。 */
 void ent_resolve_collisions(void);
-extern u8 g_kills;      /* 撃破した敵戦闘機の累計 */
-extern u8 g_playerhit;  /* 自機が被弾した累計(プロト) */
+extern u8 g_kills;       /* 撃破した敵戦闘機の累計 */
+extern u8 g_gun_kills;   /* 撃破した砲台の累計(撃破演出/クリア判定用) */
+extern u8 g_playerhit;   /* 自機が被弾した累計(プロト) */
 
-void    ent_reset(void);        /* プール全消去 */
-Entity *ent_spawn(u8 type);     /* 空きを1つ確保(既定値で初期化)。無ければ NULL */
-void    ent_update_all(void);   /* 全 active の behavior update を回す */
-void    ent_draw_all(void);     /* 消去→描画の2パス(相互消去を防ぐ) */
+void    ent_reset(void);            /* プール全消去 */
+Entity *ent_spawn(u8 type);         /* 空きを1つ確保(既定値で初期化)。無ければ NULL */
+void    ent_update_all(void);       /* 全 active の behavior update を回す */
+void    ent_draw_all(void);         /* active をスプライトへ(hidden除く) */
+u8      ent_count(u8 type);         /* active な type の数(撃破判定用) */
+void    ent_spawn_explosion(s16 x, s16 y);  /* 撃破エフェクトを1つ */
 
 #endif /* ENTITY_H */

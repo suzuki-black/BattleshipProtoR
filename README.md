@@ -38,6 +38,12 @@ turboR専用の縦スクロールSTGエンジン(「1943を凌駕する」本命
   - フロー boot→title→config→intro→boss→ending→title。openMSXで各バンクシーンの描画・遷移・
     設定変更(NORMAL→HARD)・START→intro を確認。
   - 常駐コード 6321B / 24KB(残り17.8KB)、bank4-7使用、残り 8 バンク空き(64KB)。
+- **ボスHP＋撃破判定(§7-4 #1)**: 破壊可能な砲台(ET_TURRET, hp)＋撃破エフェクト(ET_EXPLOSION)。
+  自機弾で砲台のhpを削り、全砲台撃破でクリア→ending(HANDOFF §1 の「全砲台撃破=クリア」)。
+  openMSXで砲台3基を全撃破→gun_kills 0→3→クリア遷移を確認。
+  - **[修正] Makefileヘッダ依存**: 構造体変更後に一部モジュールが再コンパイルされず、新旧の
+    構造体レイアウト混在でメモリ破損→ハングする stale-object バグを踏んだ。`$(HDRS)` 依存で恒久修正。
+  - 常駐コード 6668B / 24KB(残り17.5KB)。
 
 ## ビルド & 起動
 ```bash

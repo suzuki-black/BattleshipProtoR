@@ -4,6 +4,7 @@
 #include "entity.h"
 #include "vdp.h"
 #include "fire.h"
+#include "sprites.h"
 
 #define SCR_W 256
 #define SCR_H 212
@@ -41,20 +42,42 @@ static void bh_fighter(Entity *e) {
     if (e->y > SCR_H + 8) e->active = 0;                          /* 下へ抜けたら消滅 */
 }
 
+/* 撃破エフェクト: 寿命を ftimer で数え、色を変えながら消滅。 */
+static const u8 exp_col[6] = { 15, 11, 10, 8, 6, 4 };
+static void bh_explosion(Entity *e) {
+    if (e->ftimer == 0) { e->active = 0; return; }
+    e->ftimer--;
+    e->color = exp_col[(e->ftimer >> 1) % 6];
+}
+
 extern void bh_player(Entity *e);   /* player.c(入力/発砲を持つのでゲーム側モジュールへ) */
 
 typedef void (*Behavior)(Entity *);
 static const Behavior behaviors[ET_COUNT] = {
-    0,           /* ET_NONE    */
-    bh_bouncer,  /* ET_BOUNCER */
-    bh_bullet,   /* ET_BULLET  */
-    bh_shooter,  /* ET_SHOOTER */
-    bh_fighter,  /* ET_FIGHTER */
-    bh_player,   /* ET_PLAYER  */
+    0,            /* ET_NONE      */
+    bh_bouncer,   /* ET_BOUNCER   */
+    bh_bullet,    /* ET_BULLET    */
+    bh_shooter,   /* ET_SHOOTER   */
+    bh_fighter,   /* ET_FIGHTER   */
+    bh_player,    /* ET_PLAYER    */
+    bh_shooter,   /* ET_TURRET(発砲は射手と同じ。破壊可能なだけ) */
+    bh_explosion, /* ET_EXPLOSION */
 };
+
+u8 ent_count(u8 type) {
+    u8 i, n = 0;
+    for (i = 0; i < ENT_MAX; i++) if (pool[i].active && pool[i].type == type) n++;
+    return n;
+}
+
+void ent_spawn_explosion(s16 x, s16 y) {
+    Entity *e = ent_spawn(ET_EXPLOSION);
+    if (e) { e->x = x; e->y = y; e->pat = SPR_BLOCK; e->color = 15; e->ftimer = 14; }
+}
 
 /* ---- 当たり判定 ---- */
 u8 g_kills;
+u8 g_gun_kills;
 u8 g_playerhit;
 
 /* 16x16 実体の AABB 重なり(やや甘めのマージン14)。 */
@@ -67,14 +90,23 @@ static u8 overlap(const Entity *a, const Entity *b) {
 
 void ent_resolve_collisions(void) {
     u8 i, j;
-    /* 自機弾(TEAM_PLAYER) × 敵戦闘機 → 相打ちで両消滅、撃破+1 */
+    /* 自機弾(TEAM_PLAYER) × 敵戦闘機/砲台 → 弾消滅、戦闘機は即撃破、砲台は hp 減算 */
     for (i = 0; i < ENT_MAX; i++) {
         Entity *b = &pool[i];
         if (!b->active || b->type != ET_BULLET || b->team != TEAM_PLAYER) continue;
         for (j = 0; j < ENT_MAX; j++) {
-            Entity *f = &pool[j];
-            if (!f->active || f->type != ET_FIGHTER) continue;
-            if (overlap(b, f)) { b->active = 0; f->active = 0; g_kills++; break; }
+            Entity *t = &pool[j];
+            if (!t->active) continue;
+            if (t->type == ET_FIGHTER && overlap(b, t)) {
+                b->active = 0; t->active = 0; g_kills++;
+                ent_spawn_explosion(t->x, t->y);
+                break;
+            }
+            if (t->type == ET_TURRET && overlap(b, t)) {
+                b->active = 0;
+                if (--t->hp == 0) { t->active = 0; g_gun_kills++; ent_spawn_explosion(t->x, t->y); }
+                break;
+            }
         }
     }
     /* 敵弾(TEAM_ENEMY)/敵戦闘機 × 自機 → 敵を消し被弾+1 */
@@ -104,7 +136,7 @@ Entity *ent_spawn(u8 type) {
             e->active = 1; e->type = type;
             e->x = 0; e->y = 0; e->vx = 0; e->vy = 0;
             e->w = 16; e->h = 16; e->color = 15; e->pat = 0;
-            e->hidden = 0; e->team = TEAM_ENEMY;
+            e->hidden = 0; e->hp = 1; e->team = TEAM_ENEMY;
             e->fire = (const u8 *)0; e->ftimer = 0;
             return e;
         }
