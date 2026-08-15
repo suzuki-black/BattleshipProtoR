@@ -14,13 +14,13 @@ BUILD  = build
 SRC    = src
 CORE   = $(SRC)/core
 SCENES = $(SRC)/scenes
-INC    = -I$(SRC)/include
+INC    = -I$(SRC)/include -I$(BUILD)
 
 # ── ヘッダ依存(重要): 共有ヘッダ(特に構造体を
 #    定義する entity.h 等)を変更したら全 .c を必ず再コンパイルする。これを怠ると
 #    「新旧で構造体レイアウトが食い違うオブジェクトが混在→メモリ破損」という
 #    stale-object バグを踏む(実際に踏んだ)。小規模なので全再コンパイルで十分。
-HDRS := $(wildcard $(SRC)/include/*.h) config.mk
+HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/bgm_data.h
 
 # ── 常駐(bank0-2, <=24KB)にリンクするソース。crt0 は先頭に別途リンク。
 #    ここへ足すたびに常駐サイズが増える。冷たいものは足さず bcall バンクへ回すこと。
@@ -49,7 +49,8 @@ RESIDENT_RELS = \
 ROMPACK_BANKS = --bank 4 $(BUILD)/bank_demo.ihx \
                 --bank 5 $(BUILD)/scene_title.ihx \
                 --bank 6 $(BUILD)/scene_config.ihx \
-                --bank 7 $(BUILD)/scene_ending.ihx
+                --bank 7 $(BUILD)/scene_ending.ihx \
+                --bank 8 $(BUILD)/assets.bin
 
 .PHONY: all rom clean run
 all: rom
@@ -57,6 +58,13 @@ rom: GAME.ROM
 
 $(BUILD):
 	mkdir -p $(BUILD)
+
+# データアセット(BGM曲データ)を bin＋常駐用ヘッダへパック(gen_assets.mjs)。
+# bgm_data.h を先に作れば assets.bin も同時に出る(1回の実行で両方生成)。
+$(BUILD)/bgm_data.h: tools/gen_assets.mjs | $(BUILD)
+	node tools/gen_assets.mjs 8 $(BUILD)/assets.bin $(BUILD)/bgm_data.h
+$(BUILD)/assets.bin: $(BUILD)/bgm_data.h
+	@true
 
 # C ソースは core/ と scenes/ から探す(basename は一意に保つ)
 vpath %.c $(CORE) $(SCENES)
@@ -95,7 +103,7 @@ $(BUILD)/scene_%.ihx: $(SCENES)/scene_%.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)
 BANK_IHX = $(BUILD)/bank_demo.ihx $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx
 
-GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX)
+GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin
 	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS)
 
 # openMSX で起動 → 数秒後にスクショ → 終了(headless 検証)

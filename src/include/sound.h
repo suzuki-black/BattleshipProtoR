@@ -2,7 +2,9 @@
    ゲーム負荷に依らずテンポ/エンベロープ一定(フレームレート非依存)。
    ※効果音のトリガ(sfx)は type/timer を立てるだけ。実際の PSG 書込・減衰は ISR 側で行う
      (PSG は VDP と独立ポートなので ISR とメインの競合は type/timer の di/ei 原子化のみで足りる)。
-   BGM(音符データ=ROMバンク)は実バンクコール(#2)導入後に追加する。 */
+   BGM(音符データ=ROMバンク)も同じ ISR で回す(sfx_update の後に bgm_update)。曲データは
+   データバンク(bank8)に置き、bgm_play が現曲だけ RAM へコピー(data_read)。ISR は RAM のみ読む。
+   PSG割当: melody=tone A(SFX SHOTと共有), bass=tone B, (drum=noise C:将来)。SFX が使う ch は BGM が譲る。 */
 #ifndef SOUND_H
 #define SOUND_H
 
@@ -22,6 +24,10 @@ enum {
 
 void sound_init(void);        /* PSG初期化 + H.TIMI ISR 設置。boot時1回 */
 void sfx(u8 ch, u8 type);     /* ch(0..2) に効果音 type をトリガ(同chは後勝ち。破壊音は保護) */
+
+/* ---- BGM(データバンクの曲データを ISR で再生) ---- */
+void bgm_play(u8 track);      /* track(0..) をバンクから RAM へ読み再生開始。★常駐からのみ呼ぶ */
+void bgm_stop(void);          /* BGM停止＋melody/bass 消音(SFX/noiseは不干渉) */
 
 /* ISR 稼働の観測点(検証・HUD用) */
 extern volatile u16 snd_ticks;   /* ISRが毎フレーム ++(H.TIMI稼働の証跡) */

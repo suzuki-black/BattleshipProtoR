@@ -18,6 +18,10 @@ void bank_data(u8 n);
 /* スワップ窓を既定(bank3)へ戻す。 */
 void bank_restore(void);
 
+/* データバンク bank の off から len バイトを dst(RAM)へ di 保護コピー(窓差替え→復元)。
+   ★常駐からのみ呼ぶ(バンクシーン内から呼ぶと窓復元で自シーンを追い出す)。 */
+void data_read(u8 bank, u16 off, u8 *dst, u16 len);
+
 /* --- 汎用バンクコール ---
    g_bank に呼ぶバンク番号を入れて bcall() を呼ぶ。トランポリンは crt0(_bcall)。
    被呼コードは当該バンクの 0xA000 が単一エントリで自己完結(常駐関数/データ窓に触れない)。 */

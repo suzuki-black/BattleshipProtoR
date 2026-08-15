@@ -36,7 +36,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - crt0 + `_bcall` トランポリン(`src/crt0rom.s`)
 - VDP アクセス(`vdp.c`) / バンク切替(`bank.c`) / 入力(`input.c`)
 - シーンFSM ディスパッチャ(`scene.c`) / 起動初期化(`sys.c`) / エントリ(`main.c`)
-- H.TIMI 60Hz 割込み音ドライバ ISR(実装済 `sound.c`) / エンティティプールの update・draw(実装済 `entity.c`)
+- H.TIMI 60Hz 割込み音ドライバ ISR(SFX＋BGM, 実装済 `sound.c`) / エンティティプールの update・draw(実装済 `entity.c`)
 - run_ops(描画IF `ops.c`) と run_fire(発砲IF `fire.c`)の**インタプリタ本体**(骨格実装済)
 
 ### バンク(bank4+)へ回すもの＝“冷たい/一度きり/データ”
@@ -129,6 +129,21 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
   描画は**ハードウェアスプライト(mode2, 16x16)**。active を先頭スロットへ詰めて属性/色を書き、
   残りは停止マーカ(Y=208)で隠す(ハード合成なので消去不要)。大きな艦体は run_ops(将来)で描く。
 
+### 3.7 サウンド＋BGM (`sound.c`) とデータバンク運用 (`bank.c` / `gen_assets.mjs`)
+- **ISR(H.TIMI 60Hz)**: `snd_isr`(`__naked`, 全レジスタ退避)が毎フレーム `sfx_update`→`bgm_update`。ゲーム負荷非依存。
+- **PSG割当**: melody=tone A(SFX SHOTと共有), bass=tone B, noise C=SFX命中/破壊(将来drum)。**SFX優先**: `sfx_update`が
+  tone A使用中フラグ `sfx_busy_a` を立て、`bgm_update`はその間 melody を譲る(SFXが鳴り終えると即復帰)。
+- **BGM曲データ**: `[nMel,nBas, melNote(nMel), melLen(nMel), basNote(nBas)]`。音符=音階index(0=C2..47=B5)/255=休符、
+  長さ=フレーム数。melodyは可変長、bassは固定ステップ。各パート独立ループ。周期表 `bgm_notetp[48]`。
+- **★データバンク運用(土台)**: 曲データは**データバンク(bank8)**に置く。`bgm_play(track)`が `data_read()` で
+  現曲だけ RAM(`bgm_ram`)へコピー→以後 ISR は **RAM のみ**参照(割込み中にバンク窓を触らない)。
+  `data_read(bank,off,dst,len)`(`bank.c`)= di下で 0xA000窓を bank へ差替え→コピー→既定(bank3)へ復元。
+  **★呼び元は必ず常駐**(バンクシーン内から呼ぶと窓復元で自シーンを追い出す)→ BGM切替は `scene.c` の
+  `scene_bgm[]` 表で**シーン入場時(常駐文脈, bcall前)**に `bgm_play`/`bgm_stop`。
+- **アセットパッカ** `tools/gen_assets.mjs`: 曲を手書き(音名)→ `build/assets.bin`(bank8内容) と
+  `build/bgm_data.h`(常駐用: notetp/曲オフセット/長さ)を生成。Makefileが自動実行し rompack が bank8 へ配置。
+  ※旧版 `bgm_tracks.h` の実曲(タイトル等)移植はこのパイプラインに曲データを足すだけ。
+
 ---
 
 ## 4. ビルド系(`Makefile` / `config.mk` / `tools/rompack.mjs`)
@@ -199,9 +214,9 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/sys.c` | R800ブースト等の起動初期化 |
 | 常駐 | `src/core/vdp.c` | VDPレジスタ/パレット/VRAM/LMMV/文字(BIOSフォント)/スプライト/スクロール |
 | 常駐 | `src/core/gamestate.c` | 共有ゲーム状態(g_difficulty/g_lives_idx/g_score/g_lives)。configが設定 |
-| 常駐 | `src/core/bank.c` | バンク切替 / `g_bank` / bcall glue |
+| 常駐 | `src/core/bank.c` | バンク切替 / `g_bank` / bcall glue / `data_read`(バンク→RAM先読み) |
 | 常駐 | `src/core/input.c` | カーソル/トリガ入力(row8直読み) |
-| 常駐 | `src/core/sound.c` | PSG効果音＋H.TIMI 60Hz割込みISR(BGMは#2後) |
+| 常駐 | `src/core/sound.c` | PSG効果音＋★BGM再生＋H.TIMI 60Hz割込みISR。BGMはbank8→RAMコピーで再生 |
 | 常駐 | `src/core/entity.c` | 汎用エンティティプール＋behavior＋スプライト描画＋当たり判定(team) |
 | 常駐 | `src/core/player.c` | 自機(ET_PLAYER): 入力で移動＋発砲、位置を公開(AIMED/UI用) |
 | 常駐 | `src/core/fire.c` | emit＋run_fire(FIXED/RING/AIMED/AIMFAN, 32分割, 狙い散らし, ★ゼロ距離抑え込み) |
@@ -219,4 +234,5 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | ツール | `tools/gen_symdefs.mjs` | rom.noi→常駐シンボル絶対番地(.s)。バンクシーンのリンク用 |
 | シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_TITLEへ遷移 |
 | ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
+| ツール | `tools/gen_assets.mjs` | BGM曲(音名手書き)→ `build/assets.bin`(bank8)＋`build/bgm_data.h`(notetp/offset/len) |
 | ツール | `tools/test_{boot,sound,bank,spr,stage,hud}.tcl` | openMSX headless 検証(起動/音/バンク/スプライト/連続面/HUD) |
