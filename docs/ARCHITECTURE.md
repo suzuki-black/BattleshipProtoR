@@ -56,9 +56,10 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 ### 3.1 シーンFSM (`scene.h` / `scene.c`)
 `Scene { init(); update()->次ID; bank }` の表 `registry[]` を1か所に集約。
 `scene_run()` が「入場時 init 1回 → 毎フレーム update → 戻り値で遷移」を回す。**巨大 main() を作らない**。
-- **現在のフロー**: `SC_BOOT`(疎通) → `SC_TITLE`(bank5) → `SC_CONFIG`(bank6) → `SC_INTRO`(★空戦イントロ) →
-  `SC_BOSS`(★戦艦ボス=蛇行) → `SC_ENDING`(bank7) → `SC_TITLE`。冷たい画面(title/config/ending)は全てバンク。
-  ★新ルール「各面=空戦イントロ→戦艦ボスの2段」を1面ぶんプロト実装(HANDOFF §2/§7-3)。
+- **現在のフロー**: `SC_BOOT`(疎通) → `SC_TITLE`(bank5) → `SC_CONFIG`(bank6) → `SC_STAGE`(★連続面: 海→戦艦 地続き) →
+  `SC_ENDING`(bank7) → `SC_TITLE`。残機尽きは `SC_STAGE`→`SC_TITLE`(ゲームオーバー)。冷たい画面(title/config/ending)は全てバンク。
+  ★新ルール「各面=空戦→戦艦」を**画面カット無しの1本スクロール**(SC_STAGE)で実装(HANDOFF §2)。
+  ※旧 `SC_INTRO`/`SC_BOSS`(2シーンのハードカット試作)は SC_STAGE に統合し削除済み。
 - **冷たいシーンのバンク化(実装済み)**: `registry` の `bank != 0` のシーンは、`call_scene()` が
   `g_scene_phase`(0=init/1=update)をセットして `bcall_to(bank)` で当該バンクの 0xA000 エントリを実行。
   バンク側 `banked_entry` が phase を見て init/update を分岐し、update の戻り(次ID)を `g_scene_ret` に書く。
@@ -204,7 +205,6 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | シーン | `src/scenes/scene_stage.c` | ★1本の連続面(海直進→戦艦 往復蛇行)。カット無し |
 | 常駐 | `src/core/sprites.c` | スプライトパターン定義＋一括投入(sprites_load) |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
-| ボス | `src/scenes/scene_boss.c` | ★破壊可能砲台(ET_TURRET,hp)＋全撃破でクリア→ending |
 | バンク | `src/banked/bank_demo.c` | 実バンクコール実証(bank4, 0xA000エントリ, 自己完結) |
 | バンク | `src/banked/bankhead.s` | バンク先頭スタブ(0xA000 に jp _banked_entry) |
 | シーン(bank) | `src/scenes/scene_title.c` | ★タイトル(bank5)。常駐APIを注入番地で呼ぶ |
@@ -212,7 +212,5 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | シーン(bank) | `src/scenes/scene_ending.c` | ★エンディング(bank7)。英文＋THE END |
 | ツール | `tools/gen_symdefs.mjs` | rom.noi→常駐シンボル絶対番地(.s)。バンクシーンのリンク用 |
 | シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_TITLEへ遷移 |
-| シーン | `src/scenes/scene_intro.c` | ★空戦イントロ(縦スクロール海＋降下戦闘機＋自機固定)→SC_BOSS |
-| シーン | `src/scenes/scene_boss.c` | ★戦艦ボス(run_ops艦体＋蛇行横スクロール＋主砲散弾) |
 | ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
 | ツール | `tools/test_{boot,sound,bank,spr,stage,hud}.tcl` | openMSX headless 検証(起動/音/バンク/スプライト/連続面/HUD) |

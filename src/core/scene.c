@@ -10,10 +10,6 @@
 /* --- 常駐シーンの実体。バンクシーンは registry の init/update=0 で bank に番号を持つ --- */
 extern void boot_init(void);
 extern u8   boot_update(void);
-extern void intro_init(void);
-extern u8   intro_update(void);
-extern void boss_init(void);
-extern u8   boss_update(void);
 extern void stage_init(void);
 extern u8   stage_update(void);
 
@@ -23,8 +19,6 @@ static const Scene registry[SC_COUNT] = {
     /* SC_TITLE  */ { 0,          0,            5 },   /* 冷たいシーン: bank5(bcall) */
     /* SC_CONFIG */ { 0,          0,            6 },   /* 冷たいシーン: bank6        */
     /* SC_STAGE  */ { stage_init, stage_update, 0 },   /* ★連続縦スクロール面        */
-    /* SC_INTRO  */ { intro_init, intro_update, 0 },
-    /* SC_BOSS   */ { boss_init,  boss_update,  0 },
     /* SC_ENDING */ { 0,          0,            7 },   /* 冷たいシーン: bank7        */
 };
 

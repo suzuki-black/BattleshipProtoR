@@ -1,5 +1,5 @@
 /* scene_config.c — ★設定メニュー(冷たいシーン=bank6)。バンク側から常駐 vdp_text 等を呼ぶ。
-   UP/DOWN でカーソル移動、L/R で値変更、SPACE で START→ゲーム開始(SC_INTRO)。
+   UP/DOWN でカーソル移動、L/R で値変更、SPACE で START→ゲーム開始(SC_STAGE)。
    選択は常駐 g_difficulty/g_lives_idx に書き、gameplay が参照する。 */
 #include "vdp.h"
 #include "input.h"

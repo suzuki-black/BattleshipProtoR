@@ -41,8 +41,6 @@ RESIDENT_RELS = \
   $(BUILD)/scene.rel \
   $(BUILD)/scene_boot.rel \
   $(BUILD)/scene_stage.rel \
-  $(BUILD)/scene_intro.rel \
-  $(BUILD)/scene_boss.rel \
   $(BUILD)/main.rel
 
 # ── 追加バンク(冷たいコード/データ)。--bank N file の形で rompack へ渡す。
