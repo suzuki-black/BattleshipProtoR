@@ -9,6 +9,7 @@
 #define SPR_BULLET  4   /* 弾(中央 6x6)                */
 #define SPR_FIGHTER 8   /* 敵戦闘機(下向き△)          */
 #define SPR_DIGIT0  12  /* 数字0のパターン番号。数字d = SPR_DIGIT0 + d*4(HUD用, BIOSフォント) */
+#define SPR_TURRET  52  /* 戦艦の主砲塔(灰の砲塔＋2連装砲身)。数字は12..48を占有→次は52 */
 
 void sprites_load(void);   /* 全パターンを VRAM(0x7800)へ投入 */
 

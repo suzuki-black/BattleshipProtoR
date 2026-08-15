@@ -177,13 +177,15 @@ void ent_update_all(void) {
 
 /* スプライト描画: active な実体を先頭スロットから詰めて属性/色を書き、
    残りは停止マーカで隠す。ハードウェア合成なので消去は不要。
-   ※同一走査線に5枚以上でスプライト欠けが起きる(mode2)点は本番でレイアウトに注意。 */
+   ※画面外(y が縦範囲外)は描画しない: スプライトYは u8 なので世界アンカーの砲塔などが
+     画面上方(負のy)にある間に (u8)y へ折り返して海上に幽霊表示されるのを防ぐ。
+   ※同一走査線に8枚以上でスプライト欠け(V9938 mode2)。上端HUD＋敵密集時はレイアウト注意。 */
 void ent_draw_all(void) {
     u8 i, slot = g_spr_base;   /* 先頭スロットは HUD が確保(g_spr_base) */
     Entity *e;
     for (i = 0; i < ENT_MAX; i++) {
         e = &pool[i];
-        if (e->active && !e->hidden) {
+        if (e->active && !e->hidden && e->y > -16 && e->y < 212) {
             vdp_sprite_color(slot, e->color);
             vdp_sprite_pos(slot, (u8)e->x, (u8)e->y, e->pat);
             slot++;

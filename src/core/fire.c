@@ -2,9 +2,13 @@
    emit が弾 ET_BULLET を spawn し、run_fire が FireDesc を解釈して発砲パターンを撒く。
    狙い弾は「不正確さの円錐/扇」で散らし公平化(fire.h 参照)。 */
 #include "fire.h"
-#include "player.h"   /* g_player_x/y(自機狙い) */
+#include "player.h"      /* g_player_x/y(自機狙い) */
+#include "gamestate.h"   /* g_difficulty(抑え込み半径の難易度補正) */
 
 #define BULLET_PAT 4   /* 弾スプライトのパターン番号(scene 側で投入) */
+
+/* ゼロ距離抑え込み半径の難易度補正(EASY=広くて易/HARD=狭くて難)。実効=base+adj(下限8)。 */
+static const s8 supp_adj[3] = { +12, 0, -8 };
 
 /* 32分割方向の単位速度(半径8, dir0=上, 時計回り 11.25°刻み)。実速度 = tab * spd / 8。 */
 static const s8 dvx[32] = {
@@ -46,15 +50,32 @@ u8 aim_dir(s16 ex, s16 ey, s16 px, s16 py) {
     return bi;
 }
 
+/* ゼロ距離抑え込み判定: 自機中心が砲(e)から実効半径 r 内か。r は小さい(≤~40)ので
+   まず |dx|,|dy|>r で高速棄却→円内は dx²+dy² を u16 で比較(オーバフロー回避)。 */
+static u8 suppressed(const Entity *e, u8 r) {
+    s16 dx = (s16)g_player_x - e->x;
+    s16 dy = (s16)g_player_y - e->y;
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    if (dx > (s16)r || dy > (s16)r) return 0;
+    return (u16)(dx * dx + dy * dy) <= (u16)((u16)r * r);
+}
+
 void run_fire(Entity *e) {
     const u8 *p = e->fire;
-    u8 interval;
+    u8 interval, supp;
     if (!p) return;
     if (e->ftimer) { e->ftimer--; return; }
 
     interval = p[0];
+    supp     = p[1];
     e->ftimer = interval;
-    p++;
+    if (supp) {   /* ★ゼロ距離抑え込み: 実効半径内なら今回の発射をスキップ(次interval後に再判定) */
+        s16 eff = (s16)supp + supp_adj[(g_difficulty < 3) ? g_difficulty : 1];
+        if (eff < 8) eff = 8;
+        if (suppressed(e, (u8)eff)) return;
+    }
+    p += 2;
     while (*p != FIRE_END) {
         u8 op   = *p++;
         u8 a    = *p++;

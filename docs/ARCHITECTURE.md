@@ -73,10 +73,13 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 ### 3.3 データ駆動(骨格実装済み。難易度メカ等はこれから拡張)
 - **run_ops**(描画データ駆動 `ops.c`): 艦/敵/背景を op配列で描く。現状 OPS_RECT のみ(艦=船体/艦橋/砲の矩形)。
   将来 op を増やし(ライン/三角/艦橋段積み/パターン転送)、データは bank へ。
-- **run_fire**(発砲スクリプト `fire.c`): `FireDesc{interval, [op,a,kind,spd].., 0}`。op: FIXED/RING/**AIMED/AIMFAN**。
-  方向は**32分割**(11.25°)。将来 予告/レイジ/ゼロ距離抑え込み/固定弾安置を**データで**追加。原典: 前作 `docs/fire-script-spec.md`。
+- **run_fire**(発砲スクリプト `fire.c`): `FireDesc{interval, suppress, [op,a,kind,spd].., 0}`。op: FIXED/RING/**AIMED/AIMFAN**。
+  方向は**32分割**(11.25°)。将来 予告/レイジ/固定弾安置も**データで**追加(ヘッダに足す)。原典: 前作 `docs/fire-script-spec.md`。
   - **AIMED**(自機狙い＋散らし): 狙い方向に**一様乱数±a ステップの円錐**を足す(「不正確さの円錐」)。a=0で厳密狙い。
   - **AIMFAN**(自機狙い n-way): 自機中心に a発を2ステップ間隔で扇状＋扇全体を乱数微回転。**偶数aは自機直線上に隙間**。
+  - ★**ゼロ距離抑え込み**(`suppress`=半径px, 0=無効): 自機がこの半径内に居ると**その砲は発射スキップ**。
+    危険砲に肉薄すると撃たせず、近距離で安全に連射→**最速撃破**。実効半径は難易度で増減(`supp_adj`: EASY広い/HARD狭い)。
+    高速棄却(|dx|,|dy|>r)→円内のみ dx²+dy² を u16 で比較(オーバフロー回避)。1面ビスマルクが教える中心メカ(HANDOFF §7)。
   - 設計意図: 前作「狙いすぎ」反省 → 狙い弾に**ブレ/スプレッド**を混ぜ公平化。出典: dev.to "Simple Bullet Spread for AI"(aim+uniform offset)、Sparen's Danmaku Design(aimed patternの inconsistency)。難易度で散らし量を可変にできる(将来)。
 - **emit**(弾生成プリミティブ `fire.c`): `emit(x,y,dir,kind,spd)`。32分割方向×弾速で ET_BULLET を1発生成。`aim_dir()` で自機への最近傍方向。
 
@@ -118,6 +121,9 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 
 > **[解決済み] スクロール時のスプライトテーブル露出ゴミ**: 縦スクロールで page0末尾(ライン232-255)の
 > スプライトテーブルが可視域に出る問題。→ 海を page1 に描き page1 を表示(§3.4)。イントロで実機(openMSX)確認済み。
+> **[解決済み] 画面外の世界アンカー砲塔が海上に幽霊表示**: 砲塔は `e->y=ay-cam`(世界アンカー)なので海フェーズ中は
+> 画面上方=負のy。スプライトYは u8 なので `(u8)(-132)=124` と折り返して海の上に砲塔だけ出ていた。→ `ent_draw_all` で
+> **y が縦範囲(-16..212)外なら描画しない**ガードを追加(上から侵入する戦闘機の一瞬の折り返しも同時に解消)。openMSX確認済み。
 - **エンティティ・プール**(実装済み骨格 `entity.c`): 自機/敵機/弾/砲/エフェクトを固定長プール＋
   behavior(type別 update)の関数ポインタ表で回す。空戦の敵機も戦艦の砲も同じ枠。
   描画は**ハードウェアスプライト(mode2, 16x16)**。active を先頭スロットへ詰めて属性/色を書き、
@@ -198,11 +204,11 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/sound.c` | PSG効果音＋H.TIMI 60Hz割込みISR(BGMは#2後) |
 | 常駐 | `src/core/entity.c` | 汎用エンティティプール＋behavior＋スプライト描画＋当たり判定(team) |
 | 常駐 | `src/core/player.c` | 自機(ET_PLAYER): 入力で移動＋発砲、位置を公開(AIMED/UI用) |
-| 常駐 | `src/core/fire.c` | emit＋run_fire(FIXED/RING/AIMED/AIMFAN, 32分割, 狙い散らし) |
+| 常駐 | `src/core/fire.c` | emit＋run_fire(FIXED/RING/AIMED/AIMFAN, 32分割, 狙い散らし, ★ゼロ距離抑え込み) |
 | 常駐 | `src/core/ops.c` | データ駆動描画 run_ops(艦体等)。OPS_RECTのx/yはu8(255まで) |
 | 常駐 | `src/core/scroll.c` | ★連続縦スクロール地形(page1リング+R#23、艦をBから流し込み) |
 | 常駐 | `src/core/hud.c` | ★スプライトHUD(スコア5桁＋残機)。数字はBIOSフォントを16x16へ写す。slot0-5確保 |
-| シーン | `src/scenes/scene_stage.c` | ★1本の連続面(海直進→戦艦 往復蛇行)。カット無し |
+| シーン | `src/scenes/scene_stage.c` | ★1本の連続面(海直進→戦艦 往復蛇行)。ビスマルク艦体(前2/後2砲塔)＋ゼロ距離抑え込み |
 | 常駐 | `src/core/sprites.c` | スプライトパターン定義＋一括投入(sprites_load) |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
 | バンク | `src/banked/bank_demo.c` | 実バンクコール実証(bank4, 0xA000エントリ, 自己完結) |

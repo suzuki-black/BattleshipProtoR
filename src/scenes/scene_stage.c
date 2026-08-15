@@ -13,40 +13,65 @@
 #include "hud.h"
 #include "gamestate.h"
 
-/* 戦艦の地形(長い=画面より縦416px)。OPS_RECTのyはu8(255まで)なので上下2パスで描く。
-   船首(細)=上端(先に見える)、船尾=下端。砲塔は後段でスプライト化。 */
-/* 砲塔は破壊可能スプライト(ET_TURRET)なので艦グラフィックには描かない。 */
-static const u8 ship_top[] = {      /* 世界 y0..255 を SHIPBUF_Y へ */
-    OPS_RECT, 26,   0, 12, 16, 14,  /* 船首テーパ(細) */
-    OPS_RECT, 22,  16, 20, 16, 14,
-    OPS_RECT, 16,  32, 32, 16, 14,
-    OPS_RECT,  8,  48, 48, 207, 14, /* 船体前半 y48..255 */
-    OPS_RECT, 14,  92, 36, 40,  7,  /* 艦橋 */
-    OPS_RECT, 20, 150, 24, 26,  6,  /* 煙突 */
+/* ★1面ビスマルク艦体(上面視, 縦416px)。OPS_RECTのyはu8(255まで)なので上下2パスで描く。
+   艦の中心x=128(=base96 + rectの中心)。船首(細)=上端(先に到達)、船尾=下端。
+   色: 船体/テーパ=灰14 / 木甲板=暗黄10 / 上構(艦橋・煙突・後部)=黒1 / 艦橋頂=白15。
+   主砲塔は破壊可能スプライト(ET_TURRET)。ここでは甲板に砲塔マウント(黒)だけ描き、砲身は sprite。
+   前部=Anton/Bruno(超越射撃), 後部=Caesar/Dora の4基(ビスマルク配置)。 */
+static const u8 ship_top[] = {      /* 世界 y0..255 を SHIPBUF_Y へ(船首側) */
+    /* 船首テーパ(先細り, 中心x=128) */
+    OPS_RECT, 24,   0, 16,  8, 14,
+    OPS_RECT, 18,   8, 28,  8, 14,
+    OPS_RECT, 12,  16, 40, 10, 14,
+    OPS_RECT,  6,  26, 52, 14, 14,
+    /* 主船体(前半) x100..156, y40..255 */
+    OPS_RECT,  4,  40, 56, 215, 14,
+    /* 木甲板ストライプ(内側) */
+    OPS_RECT, 14,  48, 36, 207, 10,
+    /* 前部主砲マウント(Anton y72 / Bruno y108=超越) */
+    OPS_RECT, 22,  72, 20, 16,  1,
+    OPS_RECT, 22, 108, 20, 16,  1,
+    /* 艦橋タワー(前部構造) y126..176 ＋頂部(白) */
+    OPS_RECT, 16, 126, 32, 50,  1,
+    OPS_RECT, 22, 134, 20, 20, 15,
+    /* 煙突 y196..232 ＋キャップ(灰) */
+    OPS_RECT, 20, 196, 24, 36,  1,
+    OPS_RECT, 24, 196, 16,  6, 14,
     OPS_END
 };
-static const u8 ship_bot[] = {      /* 世界 y256..416 を SHIPBUF_Y+256 へ(local y=worldY-256) */
-    OPS_RECT,  8,   0, 48, 116, 14, /* 船体後半 world256..372 */
-    OPS_RECT, 16, 116, 32, 16, 14,  /* 船尾テーパ world372 */
-    OPS_RECT, 22, 132, 20, 16, 14,
-    OPS_RECT, 26, 148, 12, 12, 14,
+static const u8 ship_bot[] = {      /* 世界 y256..416 を SHIPBUF_Y+256 へ(船尾側, local y=worldY-256) */
+    /* 主船体(後半) x100..156, world256..376 */
+    OPS_RECT,  4,   0, 56, 120, 14,
+    OPS_RECT, 14,   0, 36, 116, 10,  /* 木甲板続き */
+    /* 後部構造(メインマスト基部) local12..42 */
+    OPS_RECT, 18,  12, 28, 30,  1,
+    /* 後部主砲マウント(Caesar world300→local44 / Dora world344→local88) */
+    OPS_RECT, 22,  44, 20, 16,  1,
+    OPS_RECT, 22,  88, 20, 16,  1,
+    /* 船尾テーパ local120..160 */
+    OPS_RECT,  6, 120, 52, 12, 14,
+    OPS_RECT, 12, 132, 40, 12, 14,
+    OPS_RECT, 20, 144, 24, 10, 14,
+    OPS_RECT, 26, 154, 12,  6, 14,
     OPS_END
 };
 
-/* 砲塔の発砲: 55f毎に自機狙い4-way散弾(偶数=自機直線上に隙間)。 */
-static const u8 fd_gun[] = { 55, FIRE_AIMFAN, 4, 2, 3, FIRE_END };
-/* 戦闘機の発砲: 45f毎に自機狙い＋散らし円錐(±3ステップ)。 */
-static const u8 fd_faim[] = { 45, FIRE_AIMED, 3, 1, 2, FIRE_END };
+/* 主砲の発砲: 50f毎に自機狙い4-way散弾(偶数=自機直線上に隙間)。
+   ★suppress=24: 半径内(≒ゼロ距離)に自機が居ると発射スキップ=肉薄で撃たせない。難易度で半径増減。 */
+static const u8 fd_gun[]  = { 50, 24, FIRE_AIMFAN, 4, 2, 3, FIRE_END };
+/* 戦闘機の発砲: 45f毎に自機狙い＋散らし円錐(±3)。空中の的なので抑え込みは無し(suppress=0)。 */
+static const u8 fd_faim[] = { 45,  0, FIRE_AIMED, 3, 1, 2, FIRE_END };
 
 static u16 rng;
 static u8  rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }
 
-/* 砲塔(破壊可能)を艦上の世界座標に配置。船体中央 x=120。世界Y=艦頭(SC_SHIP_R0*16)+艦内y。 */
+/* 主砲塔(破壊可能)を艦上の世界座標に配置。艦中心 x=120(sprite左上→中心128)。世界Y=艦頭(SC_SHIP_R0*16)+艦内y。
+   hp=3: 抑え込み(肉薄で撃たせない)で安全に連射しないと落としにくい=「ゼロ距離抑え込み=最速撃破」を要求。 */
 static void spawn_turret(u16 shipY, u8 delay) {
     Entity *e = ent_spawn(ET_TURRET);
     if (e) {
         e->ax = 120; e->ay = (s16)(SC_SHIP_R0 * 16 + shipY);
-        e->color = 8; e->pat = SPR_BLOCK; e->hp = 2; e->fire = fd_gun; e->ftimer = delay;
+        e->color = 14; e->pat = SPR_TURRET; e->hp = 3; e->fire = fd_gun; e->ftimer = delay;
     }
 }
 
@@ -97,11 +122,13 @@ void stage_init(void) {
         g_lives = livestab[(g_lives_idx < 3) ? g_lives_idx : 1];
     }
 
-    /* 破壊可能砲塔(艦上の世界座標に配置。海フェーズ中は画面外)。全撃破でクリア。 */
+    /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。
+       艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
     g_gun_kills = 0;
-    spawn_turret(60,  30);   /* 主砲(前) */
-    spawn_turret(200, 50);   /* 主砲(中) */
-    spawn_turret(310, 70);   /* 主砲(後) */
+    spawn_turret( 72, 30);   /* Anton(前) */
+    spawn_turret(108, 45);   /* Bruno(前・超越) */
+    spawn_turret(300, 60);   /* Caesar(後) */
+    spawn_turret(344, 75);   /* Dora(後) */
 }
 
 u8 stage_update(void) {
