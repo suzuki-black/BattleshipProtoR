@@ -1,50 +1,78 @@
-/* scene_config.c — ★設定メニュー(冷たいシーン=bank6)。バンク側から常駐 vdp_text 等を呼ぶ。
+/* scene_config.c — ★設定メニュー(冷たいシーン=bank6)。タイトルで隠しコマンド(コナミ)から開く。
    UP/DOWN でカーソル移動、L/R で値変更、SPACE で START→ゲーム開始(SC_STAGE)。
-   選択は常駐 g_difficulty/g_lives_idx に書き、gameplay が参照する。 */
+   6項目(難易度/残機/耐久/ステージ/継続/無敵)を常駐 gamestate へ書き、gameplay が参照する。
+   ※描画は「入場時に全描画→以後は変化した行だけ再描画」。全画面再描画は遅く入力を取りこぼすため。 */
 #include "vdp.h"
 #include "input.h"
 #include "scene.h"
 #include "gamestate.h"
 
-static u8 cur;   /* 0=難易度 / 1=残機 / 2=START。RAM(data-loc)。init で初期化。 */
+#define CFG_START 6      /* 項目0..5 ＋ START(6) */
+#define ROWS 7
+
+static u8 cur;   /* 0=難易度/1=残機/2=耐久/3=ステージ/4=継続/5=無敵/6=START。RAM(data-loc)。 */
 
 static const char *const diffs[3]  = { "EASY  ", "NORMAL", "HARD  " };
 static const char *const livess[3] = { "2", "3", "5" };
+static const char *const onoff[2]  = { "OFF", "ON " };
+static const char *const num1_9[10]= { "0","1","2","3","4","5","6","7","8","9" };
+static const char *const labels[ROWS] = {
+    "DIFFICULTY", "LIVES", "DURABILITY", "STAGE", "CONTINUE", "INVINCIBLE", "START GAME"
+};
+static const u8 rowy[ROWS] = { 40, 60, 80, 100, 120, 140, 164 };
 
-static void row(u8 y, u8 idx, const char *label, const char *val) {
-    vdp_text(48, y, (cur == idx) ? 11 : 14, 1, (cur == idx) ? ">" : " ");
-    vdp_text(64, y, (cur == idx) ? 15 : 14, 1, label);
-    if (val) vdp_text(176, y, 15, 1, val);
+/* 行 idx の値文字列(START行は値なし=NULL)。 */
+static const char *val_of(u8 idx) {
+    if (idx == 0) return diffs[g_difficulty];
+    if (idx == 1) return livess[g_lives_idx];
+    if (idx == 2) return num1_9[g_durability];
+    if (idx == 3) return num1_9[g_stage_sel + 1];
+    if (idx == 4) return onoff[g_continue ? 1 : 0];
+    if (idx == 5) return onoff[g_invinc ? 1 : 0];
+    return (const char *)0;   /* START GAME */
 }
 
-static void draw(void) {
+/* 1行だけ描画(カーソル/ラベル/値)。値は毎回上書きするので幅固定 or 末尾空白で残像を防ぐ。 */
+static void draw_row(u8 idx) {
+    u8 y = rowy[idx];
+    const char *v = val_of(idx);
+    vdp_text(40, y, (cur == idx) ? 11 : 14, 1, (cur == idx) ? ">" : " ");
+    vdp_text(56, y, (cur == idx) ? 15 : 14, 1, labels[idx]);
+    if (v) vdp_text(184, y, 15, 1, v);
+}
+
+static void draw_all(void) {
+    u8 i;
     vdp_fill(0, 0, 256, 212, 1);
-    vdp_text(88, 24, 15, 1, "- CONFIG -");
-    row(72,  0, "DIFFICULTY", diffs[g_difficulty]);
-    row(96,  1, "LIVES",      livess[g_lives_idx]);
-    row(132, 2, "START GAME", (const char *)0);
-    vdp_text(24, 190, 14, 1, "UP/DN:SEL  L/R:CHG  SPACE:OK");
+    vdp_text(88, 12, 15, 1, "- CONFIG -");
+    for (i = 0; i < ROWS; i++) draw_row(i);
+    vdp_text(24, 194, 14, 1, "UP/DN:SEL  L/R:CHG  SPACE:OK");
+}
+
+/* L/R で1項目の値を増減(範囲クランプ)。変化したら1を返す。 */
+static u8 change(u8 idx, s8 d) {
+    if (idx == 0) { s8 v = (s8)g_difficulty + d; if (v >= 0 && v <= 2) { g_difficulty = (u8)v; return 1; } }
+    else if (idx == 1) { s8 v = (s8)g_lives_idx + d; if (v >= 0 && v <= 2) { g_lives_idx = (u8)v; return 1; } }
+    else if (idx == 2) { s8 v = (s8)g_durability + d; if (v >= 1 && v <= 9) { g_durability = (u8)v; return 1; } }
+    else if (idx == 3) { return 0; /* ステージは現状1面のみ */ }
+    else if (idx == 4) { u8 n = d > 0 ? 1 : (d < 0 ? 0 : g_continue); if (n != g_continue) { g_continue = n; return 1; } }
+    else if (idx == 5) { u8 n = d > 0 ? 1 : (d < 0 ? 0 : g_invinc);   if (n != g_invinc)   { g_invinc = n;   return 1; } }
+    return 0;
 }
 
 static void config_init(void) {
     vdp_set_display_page(0);
     cur = 0;
-    draw();
+    draw_all();
 }
 
 static u8 config_update(void) {
     u8 e = g_input_edge;
-    if (e & INP_DOWN) { if (cur < 2) cur++; }
-    if (e & INP_UP)   { if (cur > 0) cur--; }
-    if (cur == 0) {
-        if ((e & INP_RIGHT) && g_difficulty < 2) g_difficulty++;
-        if ((e & INP_LEFT)  && g_difficulty > 0) g_difficulty--;
-    } else if (cur == 1) {
-        if ((e & INP_RIGHT) && g_lives_idx < 2) g_lives_idx++;
-        if ((e & INP_LEFT)  && g_lives_idx > 0) g_lives_idx--;
-    }
-    if ((e & INP_TRIG) && cur == 2) return SC_STAGE;   /* START でステージ開始 */
-    if (e) draw();                                     /* 入力があった時だけ再描画 */
+    if ((e & INP_DOWN) && cur < CFG_START) { u8 o = cur; cur++; draw_row(o); draw_row(cur); }
+    if ((e & INP_UP)   && cur > 0)         { u8 o = cur; cur--; draw_row(o); draw_row(cur); }
+    if (e & INP_RIGHT) { if (change(cur, +1)) draw_row(cur); }
+    if (e & INP_LEFT)  { if (change(cur, -1)) draw_row(cur); }
+    if ((e & INP_TRIG) && cur == CFG_START) return SC_STAGE;   /* START でステージ開始 */
     return SCENE_NONE;
 }
 

@@ -120,6 +120,7 @@ void stage_init(void) {
         g_score = 0;
         g_kills = 0; g_playerhit = 0; g_pinv = 0;
         g_lives = livestab[(g_lives_idx < 3) ? g_lives_idx : 1];
+        g_php = g_durability ? g_durability : 1;   /* 1機あたりの耐久HP(設定) */
     }
 
     /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。

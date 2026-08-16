@@ -56,8 +56,9 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 ### 3.1 シーンFSM (`scene.h` / `scene.c`)
 `Scene { init(); update()->次ID; bank }` の表 `registry[]` を1か所に集約。
 `scene_run()` が「入場時 init 1回 → 毎フレーム update → 戻り値で遷移」を回す。**巨大 main() を作らない**。
-- **現在のフロー**: `SC_BOOT`(疎通) → `SC_TITLE`(bank5) → `SC_CONFIG`(bank6) → `SC_STAGE`(★連続面: 海→戦艦 地続き) →
-  `SC_ENDING`(bank7) → `SC_TITLE`。残機尽きは `SC_STAGE`→`SC_TITLE`(ゲームオーバー)。冷たい画面(title/config/ending)は全てバンク。
+- **現在のフロー**: `SC_BOOT`(疎通) → `SC_TITLE`(bank5)。タイトルで**トリガ(SPACE/ジョイ)→ `SC_STAGE`** で即ゲーム開始。
+  **設定は隠しコマンド(コナミ ↑↑↓↓←→←→ B A)で `SC_CONFIG`(bank6)** を開く(→STARTで `SC_STAGE`)。
+  `SC_STAGE`(★連続面: 海→戦艦 地続き) → `SC_ENDING`(bank7) → `SC_TITLE`。残機尽きは `SC_STAGE`→`SC_TITLE`。
   ★新ルール「各面=空戦→戦艦」を**画面カット無しの1本スクロール**(SC_STAGE)で実装(HANDOFF §2)。
   ※旧 `SC_INTRO`/`SC_BOSS`(2シーンのハードカット試作)は SC_STAGE に統合し削除済み。
 - **冷たいシーンのバンク化(実装済み)**: `registry` の `bank != 0` のシーンは、`call_scene()` が
@@ -231,7 +232,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | バンク | `src/banked/bank_demo.c` | 実バンクコール実証(bank4, 0xA000エントリ, 自己完結) |
 | バンク | `src/banked/bankhead.s` | バンク先頭スタブ(0xA000 に jp _banked_entry) |
 | シーン(bank) | `src/scenes/scene_title.c` | ★タイトル(bank5)。常駐APIを注入番地で呼ぶ |
-| シーン(bank) | `src/scenes/scene_config.c` | ★設定メニュー(bank6)。難易度/残機。g_difficultyを設定 |
+| シーン(bank) | `src/scenes/scene_config.c` | ★隠し設定(bank6, コナミで開く)。難易度/残機/耐久/ステージ/継続/無敵。行単位再描画 |
 | シーン(bank) | `src/scenes/scene_ending.c` | ★エンディング(bank7)。英文＋THE END |
 | ツール | `tools/gen_symdefs.mjs` | rom.noi→常駐シンボル絶対番地(.s)。バンクシーンのリンク用 |
 | シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_TITLEへ遷移 |

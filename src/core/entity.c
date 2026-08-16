@@ -134,11 +134,12 @@ void ent_resolve_collisions(void) {
             if ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_FIGHTER) {
                 if (overlap(e, p)) {
                     e->active = 0;                 /* 敵/敵弾は消す(すり抜け防止) */
-                    if (g_pinv == 0) {             /* 無敵中は残機を減らさない */
+                    if (g_pinv == 0 && !g_invinc) {/* 被弾直後の無敵中/設定無敵 は無傷 */
                         g_playerhit++;
-                        if (g_lives) g_lives--;
-                        g_pinv = 90;               /* 約1.5秒の無敵(点滅) */
+                        g_pinv = 90;               /* 約1.5秒の無敵点滅 */
                         ent_spawn_explosion(p->x, p->y);
+                        if (g_php > 1) g_php--;     /* 耐久が残る=まだ落ちない */
+                        else { if (g_lives) g_lives--; g_php = g_durability; }  /* 耐久尽き=1機喪失＋補充 */
                     }
                 }
             }

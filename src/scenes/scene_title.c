@@ -21,7 +21,12 @@ static const u8 title_ops[] = {
     OPS_END
 };
 
-static u16 tt;   /* 経過フレーム(アトラクト自動遷移用)。RAM(data-loc)。init で0クリア。 */
+/* 隠しコマンド(コナミ): 上上下下左右左右 B A。成立で設定メニュー(SC_CONFIG)を開く。
+   B=INP_TRIGB(ジョイ トリガ2 / キーM), A=INP_TRIG(スペース / ジョイ トリガ1)。 */
+static const u8 konami[10] = {
+    INP_UP, INP_UP, INP_DOWN, INP_DOWN, INP_LEFT, INP_RIGHT, INP_LEFT, INP_RIGHT, INP_TRIGB, INP_TRIG
+};
+static u8 kidx;   /* コナミ入力の進捗。RAM(data-loc)。init で0。 */
 
 static void title_init(void) {
     vdp_set_display_page(0);
@@ -29,12 +34,22 @@ static void title_init(void) {
     run_ops(0, 0, title_ops);
     vdp_text(72, 16, 15, 1, "BATTLESHIP PROTO R");
     vdp_text(88, 196, 14, 1, "PUSH SPACE");
-    tt = 0;
+    kidx = 0;
 }
 
 static u8 title_update(void) {
-    tt++;
-    if ((g_input_edge & INP_TRIG) || tt > 600) return SC_CONFIG;   /* トリガ or 10秒で設定へ */
+    u8 e = g_input_edge;
+    if (e) {
+        /* コナミ進捗: 期待キーが押下エッジに含まれれば前進、外れたらリセット
+           (押したのが先頭キー=UP ならそこから再開)。成立でコンフィグへ。 */
+        if (e & konami[kidx]) {
+            if (++kidx >= 10) { kidx = 0; return SC_CONFIG; }
+        } else {
+            kidx = (e & INP_UP) ? 1 : 0;
+        }
+    }
+    /* 通常トリガ(A)でゲーム開始。※コナミ成立時は上で return 済み(こちらへ来ない)。 */
+    if (e & INP_TRIG) return SC_STAGE;
     return SCENE_NONE;
 }
 
