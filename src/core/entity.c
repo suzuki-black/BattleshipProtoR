@@ -180,17 +180,40 @@ void ent_update_all(void) {
    残りは停止マーカで隠す。ハードウェア合成なので消去は不要。
    ※画面外(y が縦範囲外)は描画しない: スプライトYは u8 なので世界アンカーの砲塔などが
      画面上方(負のy)にある間に (u8)y へ折り返して海上に幽霊表示されるのを防ぐ。
-   ※同一走査線に8枚以上でスプライト欠け(V9938 mode2)。上端HUD＋敵密集時はレイアウト注意。 */
+   ★V9938 mode2 は1走査線8枚まで(9枚目以降は欠落)。弾幕対策:
+     - HUD(slot 0..g_spr_base-1) と 自機 は固定の最優先スロットで絶対に欠けさせない。
+     - 残り(弾/敵/砲塔/エフェクト)は毎フレーム割当開始を回転(rot)させ、9枚以上の走査線での
+       欠落を「常に同じ弾が消える」でなく「フレーム毎に入れ替わるちらつき」に分散する。
+     - 総数は 32 枚で頭打ち(それ以上は描かない)。 */
+static u8 draw1(u8 slot, const Entity *e) {   /* 1体を slot へ描画し、次 slot を返す */
+    vdp_sprite_color(slot, e->color);
+    vdp_sprite_pos(slot, (u8)e->x, (u8)e->y, e->pat);
+    return (u8)(slot + 1);
+}
+static u8 visible(const Entity *e, u8 skip_player) {
+    if (!e->active || e->hidden) return 0;
+    if (skip_player ? (e->type == ET_PLAYER) : (e->type != ET_PLAYER)) return 0;
+    return (e->y > -16 && e->y < 212);
+}
 void ent_draw_all(void) {
-    u8 i, slot = g_spr_base;   /* 先頭スロットは HUD が確保(g_spr_base) */
-    Entity *e;
-    for (i = 0; i < ENT_MAX; i++) {
-        e = &pool[i];
-        if (e->active && !e->hidden && e->y > -16 && e->y < 212) {
-            vdp_sprite_color(slot, e->color);
-            vdp_sprite_pos(slot, (u8)e->x, (u8)e->y, e->pat);
-            slot++;
+    static u8 rot;
+    u8 i, j, n = 0, slot = g_spr_base;
+    u8 vis[ENT_MAX];   /* 描画対象(自機以外)の pool 添字 */
+    /* 自機を固定最優先スロット(g_spr_base)へ=絶対に欠けさせない */
+    for (i = 0; i < ENT_MAX; i++)
+        if (visible(&pool[i], 0)) { slot = draw1(slot, &pool[i]); break; }
+    /* 描画対象を収集 */
+    for (i = 0; i < ENT_MAX; i++)
+        if (visible(&pool[i], 1)) vis[n++] = i;
+    /* 収集集合内で開始位置を毎フレーム回転させて割当。クラスタ位置に依らず均等に回るので、
+       同一走査線9枚以上の欠落が「フレーム毎に入れ替わるちらつき」へ均等分散する。 */
+    if (n) {
+        u8 start = (u8)(rot % n);
+        for (j = 0; j < n && slot < 32; j++) {
+            i = (u8)(start + j); if (i >= n) i -= n;
+            slot = draw1(slot, &pool[vis[i]]);
         }
     }
     vdp_sprite_hide_from(slot);
+    rot++;
 }
