@@ -99,7 +99,15 @@ static void apply_weave(void) {
     g_meander = weaveX;   /* 砲塔スプライトの横追従(次段の砲塔統合で使用) */
 }
 
-void stage_init(void) {
+/* 設定の残機初期値(config g_lives_idx→2/3/5)。 */
+static u8 lives_init(void) {
+    static const u8 t[3] = { 2, 3, 5 };
+    return t[(g_lives_idx < 3) ? g_lives_idx : 1];
+}
+
+/* 1回の挑戦のレイアウトを構築(海フェーズ先頭から)。ミス時に再実行=全砲台/敵が復活・面最初から。
+   スコア/残機は触らない(それらは新規ゲーム=stage_init が初期化)。 */
+static void stage_setup(void) {
     Entity *e;
     prerender_ship();     /* 艦をBへ(scroll_init前に必須) */
     scroll_init();
@@ -114,14 +122,9 @@ void stage_init(void) {
     e = ent_spawn(ET_PLAYER);
     if (e) { e->x = 120; e->y = 176; e->color = 15; e->pat = SPR_BLOCK; }
 
-    /* スコア/残機の初期化(残機は config の g_lives_idx→2/3/5 機) */
-    {
-        static const u8 livestab[3] = { 2, 3, 5 };
-        g_score = 0;
-        g_kills = 0; g_playerhit = 0; g_pinv = 0;
-        g_lives = livestab[(g_lives_idx < 3) ? g_lives_idx : 1];
-        g_php = g_durability ? g_durability : 1;   /* 1機あたりの耐久HP(設定) */
-    }
+    g_php = g_durability ? g_durability : 1;   /* 1機あたりの耐久HP(設定) */
+    g_pinv = 0;
+    g_miss = 0;
 
     /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
@@ -130,6 +133,14 @@ void stage_init(void) {
     spawn_turret(108, 45);   /* Bruno(前・超越) */
     spawn_turret(300, 60);   /* Caesar(後) */
     spawn_turret(344, 75);   /* Dora(後) */
+}
+
+/* シーン入場(新規ゲーム): スコア/被弾/残機を初期化してからレイアウト構築。 */
+void stage_init(void) {
+    g_score = 0;
+    g_kills = 0; g_playerhit = 0;
+    g_lives = lives_init();
+    stage_setup();
 }
 
 u8 stage_update(void) {
@@ -168,13 +179,28 @@ u8 stage_update(void) {
         apply_weave();
     }
 
+    /* HUD は R#23(縦スクロール)設定直後・エンティティ描画より前に確定させる。
+       画面最上部のHUDは最もラスタ競合しやすく、重い ent_draw_all の後に書くと
+       ラスタが既に上端を通過→R#23とズレて1px上下振動する(旧版で残っていた不具合)。 */
+    hud_draw(g_score, g_lives);
+
     ent_update_all();
     ent_resolve_collisions();
     ent_draw_all();
-    hud_draw(g_score, g_lives);
 
-    /* 残機尽き = ゲームオーバー → タイトルへ戻す */
-    if (g_lives == 0) return SC_TITLE;
+    /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。
+       尽きたら 継続ONでコンティニュー(残機を初期値へ戻して再挑戦=無限) / OFFでタイトルへ。 */
+    if (g_miss) {
+        g_miss = 0;
+        if (g_lives) g_lives--;
+        if (g_lives == 0) {
+            if (g_continue) { g_lives = lives_init(); stage_setup(); }
+            else return SC_TITLE;
+        } else {
+            stage_setup();
+        }
+        return SCENE_NONE;
+    }
     /* 全砲台撃破でクリア → エンディング(戦艦フェーズでのみ0になる) */
     if (phase == 1 && ent_count(ET_TURRET) == 0) return SC_ENDING;
     return SCENE_NONE;

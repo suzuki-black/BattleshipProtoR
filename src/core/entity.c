@@ -94,6 +94,7 @@ u8 g_kills;
 u8 g_gun_kills;
 u8 g_playerhit;
 u8 g_pinv;
+u8 g_miss;
 
 /* 16x16 実体の AABB 重なり(やや甘めのマージン14)。 */
 static u8 overlap(const Entity *a, const Entity *b) {
@@ -136,10 +137,9 @@ void ent_resolve_collisions(void) {
                     e->active = 0;                 /* 敵/敵弾は消す(すり抜け防止) */
                     if (g_pinv == 0 && !g_invinc) {/* 被弾直後の無敵中/設定無敵 は無傷 */
                         g_playerhit++;
-                        g_pinv = 90;               /* 約1.5秒の無敵点滅 */
                         ent_spawn_explosion(p->x, p->y);
-                        if (g_php > 1) g_php--;     /* 耐久が残る=まだ落ちない */
-                        else { if (g_lives) g_lives--; g_php = g_durability; }  /* 耐久尽き=1機喪失＋補充 */
+                        if (g_php > 1) { g_php--; g_pinv = 90; }  /* 耐久残=生存(1.5秒無敵点滅) */
+                        else { g_php = 0; g_miss = 1; }           /* 耐久尽き=撃墜。残機/リスタートはシーンが処理 */
                     }
                 }
             }

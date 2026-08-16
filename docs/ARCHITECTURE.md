@@ -58,7 +58,8 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 `scene_run()` が「入場時 init 1回 → 毎フレーム update → 戻り値で遷移」を回す。**巨大 main() を作らない**。
 - **現在のフロー**: `SC_BOOT`(疎通) → `SC_TITLE`(bank5)。タイトルで**トリガ(SPACE/ジョイ)→ `SC_STAGE`** で即ゲーム開始。
   **設定は隠しコマンド(コナミ ↑↑↓↓←→←→ B A)で `SC_CONFIG`(bank6)** を開く(→STARTで `SC_STAGE`)。
-  `SC_STAGE`(★連続面: 海→戦艦 地続き) → `SC_ENDING`(bank7) → `SC_TITLE`。残機尽きは `SC_STAGE`→`SC_TITLE`。
+  `SC_STAGE`(★連続面: 海→戦艦 地続き) → `SC_ENDING`(bank7) → `SC_TITLE`。ミスは面リスタート、残機尽きは
+  継続ONでコンティニュー(無限)/OFFで `SC_STAGE`→`SC_TITLE`。
   ★新ルール「各面=空戦→戦艦」を**画面カット無しの1本スクロール**(SC_STAGE)で実装(HANDOFF §2)。
   ※旧 `SC_INTRO`/`SC_BOSS`(2シーンのハードカット試作)は SC_STAGE に統合し削除済み。
 - **冷たいシーンのバンク化(実装済み)**: `registry` の `bank != 0` のシーンは、`call_scene()` が
@@ -109,9 +110,14 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - **当たり判定**(`ent_resolve_collisions`): 自機弾×敵戦闘機→両消滅・`g_kills`++・`g_score`+=10、
   自機弾×砲台→hp減算・0で撃破・`g_gun_kills`++・`g_score`+=50、敵弾/戦闘機×自機→被弾。
   16x16 AABB(甘めマージン)。弾の帰属は `Entity.team`(emit=TEAM_ENEMY / 自機発砲=TEAM_PLAYER)。
-- **残機/無敵**: 自機被弾で `g_pinv`(無敵フレーム)が0の時のみ `g_lives`-- ＋自機爆発、以後 `g_pinv`=90 の間は
-  無敵(自機点滅=`bh_player` が `e->hidden` を明滅)。`g_lives`==0 でゲームオーバー→タイトル。残機初期値は config の
-  `g_lives_idx`(2/3/5)。
+- **耐久/ミス/残機/コンティニュー**(HANDOFF §1): 被弾は `g_pinv`(無敵)=0 かつ 無敵設定OFF の時のみ有効。
+  耐久HP `g_php`>1 なら HP減＋短時間無敵点滅(生存)。0で**撃墜**=`g_miss` を立てる。シーン(`stage_update`)が
+  `g_miss` を見て **残機 `g_lives`-- → 残っていれば面最初から全砲台復活でリスタート(`stage_setup`)**。
+  残機0なら **継続ON(`g_continue`)でコンティニュー(残機を初期値へ戻し再挑戦=無限) / OFFでタイトル**。
+  耐久/残機の初期値は config(`g_durability` 1-9 / `g_lives_idx`→2/3/5)。無敵設定 `g_invinc` は被弾を完全無効。
+- **[解決済み] スクロール中のHUD 1px縦振動**: 画面最上部のHUDは最もラスタ競合しやすい。重い `ent_draw_all`
+  (敵/砲塔の色表を毎フレーム書く)の後に `hud_draw` を呼ぶと、ラスタが既に上端を通過してから属性を書く→R#23と
+  ズレて1px上下に揺れていた。→ **`hud_draw` を R#23 設定(scroll)直後・`ent_draw_all` より前**に移動し VBLANK 中に確定。
 
 ### 3.6 スプライトHUD (`hud.c`) — スコア/残機
 - 面表示は **page1(スクロールする環状バッファ)** なので `vdp_text`(page0直書き)は流れて使えない。
