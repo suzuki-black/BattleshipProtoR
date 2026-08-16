@@ -133,8 +133,10 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - **ISR(H.TIMI 60Hz)**: `snd_isr`(`__naked`, 全レジスタ退避)が毎フレーム `sfx_update`→`bgm_update`。ゲーム負荷非依存。
 - **PSG割当**: melody=tone A(SFX SHOTと共有), bass=tone B, noise C=SFX命中/破壊(将来drum)。**SFX優先**: `sfx_update`が
   tone A使用中フラグ `sfx_busy_a` を立て、`bgm_update`はその間 melody を譲る(SFXが鳴り終えると即復帰)。
-- **BGM曲データ**: `[nMel,nBas, melNote(nMel), melLen(nMel), basNote(nBas)]`。音符=音階index(0=C2..47=B5)/255=休符、
-  長さ=フレーム数。melodyは可変長、bassは固定ステップ。各パート独立ループ。周期表 `bgm_notetp[48]`。
+- **BGM曲データ**: `[nMel,nBas,basStep, melPeak,melSus,melVib, basPeak,basSus, drumOn, melNote, melLen, basNote]`。
+  音符=音階index(0=C2..47=B5)/255=休符、長さ=フレーム数。melody=可変長/bass=固定basStep/drum=標準マーチ(noise)。
+  各パート独立ループ。周期表 `bgm_notetp[48]`。エンベロープ=発音開始 peak→毎フレーム-1→sustain、末尾2f無音、
+  vibで伸ばし音に三角ビブラート(旧cportドライバを移植)。現状タイトル/1面マーチを旧 `bgm_tracks.h` から移植済み。
 - **★データバンク運用(土台)**: 曲データは**データバンク(bank8)**に置く。`bgm_play(track)`が `data_read()` で
   現曲だけ RAM(`bgm_ram`)へコピー→以後 ISR は **RAM のみ**参照(割込み中にバンク窓を触らない)。
   `data_read(bank,off,dst,len)`(`bank.c`)= di下で 0xA000窓を bank へ差替え→コピー→既定(bank3)へ復元。
@@ -215,7 +217,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/vdp.c` | VDPレジスタ/パレット/VRAM/LMMV/文字(BIOSフォント)/スプライト/スクロール |
 | 常駐 | `src/core/gamestate.c` | 共有ゲーム状態(g_difficulty/g_lives_idx/g_score/g_lives)。configが設定 |
 | 常駐 | `src/core/bank.c` | バンク切替 / `g_bank` / bcall glue / `data_read`(バンク→RAM先読み) |
-| 常駐 | `src/core/input.c` | カーソル/トリガ入力(row8直読み) |
+| 常駐 | `src/core/input.c` | 入力: キーボード(row8カーソル/SPACE, row4のM) ＋ ジョイスティックport1(PSG R#14, di保護)を論理和 |
 | 常駐 | `src/core/sound.c` | PSG効果音＋★BGM再生＋H.TIMI 60Hz割込みISR。BGMはbank8→RAMコピーで再生 |
 | 常駐 | `src/core/entity.c` | 汎用エンティティプール＋behavior＋スプライト描画＋当たり判定(team) |
 | 常駐 | `src/core/player.c` | 自機(ET_PLAYER): 入力で移動＋発砲、位置を公開(AIMED/UI用) |

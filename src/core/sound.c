@@ -26,6 +26,7 @@ static u8 sfxTimer[SND_CH];
 volatile u16 snd_ticks;
 volatile u8  snd_active;
 static u8 sfx_busy_a;   /* このフレーム tone A を SFX(SHOT)が使用中 → BGM melody は譲る */
+static u8 sfx_busy_c;   /* このフレーム noise C を SFX(HIT/BOOM)が使用中 → BGM drum は譲る */
 
 /* 効果音トリガ。type/timer の2バイト更新中に ISR が割り込むと中途半端を読むので di/ei 原子化。
    破壊音(BOOM)再生中は命中音(HIT)で上書きしない(鳴り切らせる)。 */
@@ -40,14 +41,15 @@ void sfx(u8 ch, u8 type) {
 
 /* 毎フレーム更新(ISRから呼ぶ=外部リンケージ)。各chの残り時間に応じ周波数/音量を更新(簡易エンベロープ)。 */
 void sfx_update(void) {
-    u8 ch, cnt = 0, ba = 0;
+    u8 ch, cnt = 0, ba = 0, bc = 0;
     for (ch = 0; ch < SND_CH; ch++) {
         u8 t, rem;
         if (sfxTimer[ch] == 0) continue;
         sfxTimer[ch]--;
         t = sfxType[ch];
         rem = sfxTimer[ch];
-        if (t == SFX_SHOT) ba = 1;   /* tone A を今フレーム SFX が占有 */
+        if (t == SFX_SHOT) ba = 1;               /* tone A を今フレーム SFX が占有 */
+        else if (t == SFX_HIT || t == SFX_BOOM) bc = 1;   /* noise C を占有 */
         if (t == SFX_SHOT) {                       /* 高→低の下降レーザー */
             u16 p = 40 + (u16)(7 - rem) * 62;
             psg(0, p & 0xFF); psg(1, (p >> 8) & 0x0F);
@@ -65,65 +67,98 @@ void sfx_update(void) {
     }
     snd_active = cnt;
     sfx_busy_a = ba;
+    sfx_busy_c = bc;
 }
 
-/* ---- BGM(データバンクの曲データを ISR で再生) ----
-   曲データ(RAMコピー)= [nMel,nBas, melNote(nMel), melLen(nMel), basNote(nBas)]。
-   melody=tone A(音符毎に可変長), bass=tone B(固定ステップ)。各パート独立ループ。 */
-#define BAS_STEP 16   /* ベース1音のフレーム数(固定) */
+/* ---- BGM(データバンクの曲データを ISR で再生。旧cportのドライバを移植) ----
+   曲データ(RAMコピー)= [nMel,nBas,basStep, melPeak,melSus,melVib, basPeak,basSus, drumOn,
+                          melNote(nMel), melLen(nMel), basNote(nBas)]。
+   melody=tone A(可変長), bass=tone B(固定basStep), drum=noise C(標準マーチ)。各パート独立ループ。
+   エンベロープ: 発音開始 peak → 毎フレーム-1 → sustain、末尾2フレーム無音。vib で伸ばし音に揺れ。 */
+#define BGM_REST 255
+static const s8 bgm_vibt[8]   = { 0, 1, 2, 1, 0, -1, -2, -1 };
+static const u8 bgm_drmPat[16]= { 1,3,2,3, 1,3,2,3, 1,3,2,3, 1,2,2,3 };  /* 1=キック/2=スネア/3=ハット */
+static const u8 bgm_drmNP[4]  = { 0, 20, 7, 3 };   /* noise周期 */
+static const u8 bgm_drmV0[4]  = { 0, 14, 13, 6 };  /* 初期音量 */
+static const u8 bgm_drmDec[4] = { 0, 3, 2, 3 };    /* 毎フレーム減衰 */
+
 static u8  bgm_ram[BGM_RAM_MAX];
 static u8 *mel_n, *mel_l, *bas_n;
-static u8  nMel, nBas;
-static u8  mi, ml, bi, bl;      /* melody/bass の index と残りフレーム */
-static u8  mcur, bcur;          /* 現在の音符(255=休符)。音量エンベロープ用 */
+static u8  nMel, nBas, basStep, melPeak, melSus, melVib, basPeak, basSus, drumOn;
+static u8  mIdx, mTrem, mCl;    /* melody: index / 残フレーム / 発音長 */
+static u8  bIdx, bTrem, bCl;    /* bass */
+static u8  drmIdx, drmT, drmType, drmVol;
 static u8  bgmOn;
 
 void bgm_play(u8 track) {
+    u8 *p;
     bgmOn = 0;                  /* 再構築中は ISR に BGM を無視させる(単バイト) */
     if (track >= BGM_TRACK_COUNT) return;
     data_read(BGM_BANK, bgm_off[track], bgm_ram, bgm_len[track]);
-    nMel  = bgm_ram[0];
-    nBas  = bgm_ram[1];
-    mel_n = bgm_ram + 2;
-    mel_l = bgm_ram + 2 + nMel;
-    bas_n = bgm_ram + 2 + nMel + nMel;
-    mi = ml = bi = bl = 0;
-    mcur = bcur = 255;
+    p = bgm_ram;
+    nMel = p[0]; nBas = p[1]; basStep = p[2];
+    melPeak = p[3]; melSus = p[4]; melVib = p[5];
+    basPeak = p[6]; basSus = p[7]; drumOn = p[8];
+    mel_n = p + 9;
+    mel_l = p + 9 + nMel;
+    bas_n = p + 9 + nMel + nMel;
+    mIdx = mTrem = mCl = 0;
+    bIdx = bTrem = bCl = 0;
+    drmIdx = drmT = drmType = drmVol = 0;
     bgmOn = 1;
 }
 
 void bgm_stop(void) {
     bgmOn = 0;
-    psg(8, 0); psg(9, 0);       /* melody/bass 消音(noise=SFXは触らない) */
+    psg(8, 0); psg(9, 0);       /* melody/bass 消音(noise=SFX共有なので触らない) */
 }
 
-/* ISR から毎フレーム(sfx_update の後)。SFX が tone A 使用中は melody を譲る。 */
+/* 1声を進める。busy(SFXがこのchを使用中)なら PSG 書込を譲る。ch: 0=toneA / 1=toneB。 */
+static void bgm_voice(u8 *idx, u8 *trem, u8 *curlen,
+                      const u8 *notes, const u8 *lens, u8 n,
+                      u8 fixed, u8 ch, u8 peak, u8 sustain, u8 vib, u8 busy) {
+    u8 note, el, vol;
+    u16 p;
+    if (*trem == 0) {
+        *idx = (u8)((*idx + 1 >= n) ? 0 : *idx + 1);
+        *trem = fixed ? fixed : lens[*idx];
+        *curlen = *trem;
+    }
+    (*trem)--;
+    if (busy) return;
+    note = notes[*idx];
+    if (note == BGM_REST || *trem < 2) { psg((u8)(8 + ch), 0); return; }   /* 休符/末尾=無音 */
+    el  = (u8)(*curlen - *trem);
+    vol = (el <= (u8)(peak - sustain)) ? (u8)(peak - (el - 1)) : sustain;
+    p = bgm_notetp[note];
+    if (vib && el > 8) p = (u16)((s16)p + bgm_vibt[(el >> 1) & 7]);
+    psg((u8)(ch * 2), (u8)(p & 0xFF));
+    psg((u8)(ch * 2 + 1), (u8)((p >> 8) & 0x0F));
+    psg((u8)(8 + ch), vol);
+}
+
+/* ドラム(noise ch=2)。8フレーム毎に次ステップ。busy(SFX命中/破壊)中は譲る。 */
+static void bgm_drum(u8 busy) {
+    if (drmT == 0) {
+        drmIdx  = (u8)((drmIdx + 1 >= 16) ? 0 : drmIdx + 1);
+        drmT    = 8;
+        drmType = bgm_drmPat[drmIdx];
+        drmVol  = bgm_drmV0[drmType];
+    }
+    drmT--;
+    if (busy) return;
+    if (drmType == 0) { psg(10, 0); return; }
+    psg(6, bgm_drmNP[drmType]);
+    psg(10, drmVol);
+    drmVol = (drmVol > bgm_drmDec[drmType]) ? (u8)(drmVol - bgm_drmDec[drmType]) : 0;
+}
+
+/* ISR から毎フレーム(sfx_update の後)。SFX が使う ch は譲る。 */
 void bgm_update(void) {
     if (!bgmOn) return;
-    /* melody(tone A) — 可変長。音符切替時に周波数、末尾2フレームで音量0(発音区切り)。 */
-    if (ml == 0) {
-        mcur = mel_n[mi];
-        ml   = mel_l[mi];
-        if (++mi >= nMel) mi = 0;
-        if (mcur != 255 && !sfx_busy_a) {
-            u16 tp = bgm_notetp[mcur];
-            psg(0, (u8)(tp & 0xFF)); psg(1, (u8)((tp >> 8) & 0x0F));
-        }
-    }
-    if (ml) ml--;
-    if (!sfx_busy_a) psg(8, (mcur == 255 || ml < 2) ? 0 : 12);
-    /* bass(tone B) — 固定ステップ。 */
-    if (bl == 0) {
-        bcur = bas_n[bi];
-        bl   = BAS_STEP;
-        if (++bi >= nBas) bi = 0;
-        if (bcur != 255) {
-            u16 tp = bgm_notetp[bcur];
-            psg(2, (u8)(tp & 0xFF)); psg(3, (u8)((tp >> 8) & 0x0F));
-        }
-    }
-    if (bl) bl--;
-    psg(9, (bcur == 255) ? 0 : 9);
+    bgm_voice(&mIdx, &mTrem, &mCl, mel_n, mel_l, nMel, 0,       0, melPeak, melSus, melVib, sfx_busy_a);
+    bgm_voice(&bIdx, &bTrem, &bCl, bas_n, (const u8 *)0, nBas, basStep, 1, basPeak, basSus, 0, 0);
+    if (drumOn) bgm_drum(sfx_busy_c);
 }
 
 /* H.TIMI から呼ばれる ISR。割込み文脈なので使用レジスタを全退避(__naked で自前 ret)。
