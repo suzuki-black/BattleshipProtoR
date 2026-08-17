@@ -17,7 +17,7 @@ static const u8 scene_bgm[SC_COUNT] = {
     /* SC_TITLE  */ 0,         /* タイトル曲 */
     /* SC_CONFIG */ BGM_KEEP,  /* タイトル曲を継続 */
     /* SC_STAGE  */ 1,         /* ステージ曲 */
-    /* SC_ENDING */ BGM_OFF,   /* (将来: 静かなED曲) */
+    /* SC_ENDING */ 2,         /* 静かなED曲(track2) */
 };
 static void scene_bgm_enter(u8 cur) {
     u8 t = scene_bgm[cur];

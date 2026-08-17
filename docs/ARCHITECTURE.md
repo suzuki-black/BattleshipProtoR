@@ -251,7 +251,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | バンク | `src/banked/bankhead.s` | バンク先頭スタブ(0xA000 に jp _banked_entry) |
 | シーン(bank) | `src/scenes/scene_title.c` | ★タイトル(bank5)。常駐APIを注入番地で呼ぶ |
 | シーン(bank) | `src/scenes/scene_config.c` | ★隠し設定(bank6, コナミで開く)。難易度/残機/耐久/ステージ/継続/無敵。行単位再描画 |
-| シーン(bank) | `src/scenes/scene_ending.c` | ★エンディング(bank7)。英文＋THE END |
+| シーン(bank) | `src/scenes/scene_ending.c` | ★エンディング(bank7)。静かなED曲(track2)＋スタッフロール(クレジットのページ送り→THE END) |
 | ツール | `tools/gen_symdefs.mjs` | rom.noi→常駐シンボル絶対番地(.s)。バンクシーンのリンク用 |
 | シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_TITLEへ遷移 |
 | ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
