@@ -78,6 +78,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 
 ### 3.3 データ駆動(骨格実装済み。難易度メカ等はこれから拡張)
 - **run_ops**(描画データ駆動 `ops.c`): 艦/敵/背景を op配列で描く。現状 OPS_RECT のみ(艦=船体/艦橋/砲の矩形)。
+  艦体OPSは**データバンク(bank8)**に置き `data_read` で RAM へ読んで描画(常駐に艦データを持たない)。
   将来 op を増やし(ライン/三角/艦橋段積み/パターン転送)、データは bank へ。
 - **run_fire**(発砲スクリプト `fire.c`): `FireDesc{interval, suppress, [op,a,kind,spd].., 0}`。op: FIXED/RING/**AIMED/AIMFAN**。
   方向は**32分割**(11.25°)。将来 予告/レイジ/固定弾安置も**データで**追加(ヘッダに足す)。原典: 前作 `docs/fire-script-spec.md`。
@@ -156,7 +157,10 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
   音符=音階index(0=C2..47=B5)/255=休符、長さ=フレーム数。melody=可変長/bass=固定basStep/drum=標準マーチ(noise)。
   各パート独立ループ。周期表 `bgm_notetp[48]`。エンベロープ=発音開始 peak→毎フレーム-1→sustain、末尾2f無音、
   vibで伸ばし音に三角ビブラート(旧cportドライバを移植)。現状タイトル/1面マーチを旧 `bgm_tracks.h` から移植済み。
-- **★データバンク運用(土台)**: 曲データは**データバンク(bank8)**に置く。`bgm_play(track)`が `data_read()` で
+- **★データバンク運用(土台)**: **BGM曲＋艦体OPS**を**データバンク(bank8)**に置き、`data_read()` で必要時に RAM へ読む。
+  艦体は `scene_stage` の `prerender_ship` が `data_read(ASSET_BANK, SHIP_TOP/BOT_OFF, ship_ram, LEN)`→`run_ops`(常駐文脈)。
+  =実ゲームデータをバンク化した最初の例(5艦・敵配置もこの型で bank へ載せる→常駐を膨らませない)。
+- BGM: 曲データは bank8。`bgm_play(track)`が `data_read()` で
   現曲だけ RAM(`bgm_ram`)へコピー→以後 ISR は **RAM のみ**参照(割込み中にバンク窓を触らない)。
   `data_read(bank,off,dst,len)`(`bank.c`)= di下で 0xA000窓を bank へ差替え→コピー→既定(bank3)へ復元。
   **★呼び元は必ず常駐**(バンクシーン内から呼ぶと窓復元で自シーンを追い出す)→ BGM切替は `scene.c` の
@@ -255,5 +259,5 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | ツール | `tools/gen_symdefs.mjs` | rom.noi→常駐シンボル絶対番地(.s)。バンクシーンのリンク用 |
 | シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_TITLEへ遷移 |
 | ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
-| ツール | `tools/gen_assets.mjs` | BGM曲(音名手書き)→ `build/assets.bin`(bank8)＋`build/bgm_data.h`(notetp/offset/len) |
+| ツール | `tools/gen_assets.mjs` | BGM曲(音名手書き)＋艦体OPS→ `build/assets.bin`(bank8)＋`build/assets_data.h`(offset/len定数) |
 | ツール | `tools/test_{boot,sound,bank,spr,stage,hud}.tcl` | openMSX headless 検証(起動/音/バンク/スプライト/連続面/HUD) |

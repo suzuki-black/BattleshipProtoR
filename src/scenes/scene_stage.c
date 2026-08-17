@@ -13,49 +13,13 @@
 #include "hud.h"
 #include "gamestate.h"
 #include "input.h"
+#include "bank.h"          /* data_read(艦体OPSをバンク→RAM) */
+#include "assets_data.h"   /* 自動生成: SHIP_TOP_OFF/LEN, SHIP_BOT_OFF/LEN, SHIP_OPS_RAM_MAX, ASSET_BANK */
 
-/* ★1面ビスマルク艦体(上面視, 縦416px)。OPS_RECTのyはu8(255まで)なので上下2パスで描く。
-   艦の中心x=128(=base96 + rectの中心)。船首(細)=上端(先に到達)、船尾=下端。
-   色: 船体/テーパ=灰14 / 木甲板=暗黄10 / 上構(艦橋・煙突・後部)=黒1 / 艦橋頂=白15。
-   主砲塔は破壊可能スプライト(ET_TURRET)。ここでは甲板に砲塔マウント(黒)だけ描き、砲身は sprite。
-   前部=Anton/Bruno(超越射撃), 後部=Caesar/Dora の4基(ビスマルク配置)。 */
-static const u8 ship_top[] = {      /* 世界 y0..255 を SHIPBUF_Y へ(船首側) */
-    /* 船首テーパ(先細り, 中心x=128) */
-    OPS_RECT, 24,   0, 16,  8, 14,
-    OPS_RECT, 18,   8, 28,  8, 14,
-    OPS_RECT, 12,  16, 40, 10, 14,
-    OPS_RECT,  6,  26, 52, 14, 14,
-    /* 主船体(前半) x100..156, y40..255 */
-    OPS_RECT,  4,  40, 56, 215, 14,
-    /* 木甲板ストライプ(内側) */
-    OPS_RECT, 14,  48, 36, 207, 10,
-    /* 前部主砲マウント(Anton y72 / Bruno y108=超越) */
-    OPS_RECT, 22,  72, 20, 16,  1,
-    OPS_RECT, 22, 108, 20, 16,  1,
-    /* 艦橋タワー(前部構造) y126..176 ＋頂部(白) */
-    OPS_RECT, 16, 126, 32, 50,  1,
-    OPS_RECT, 22, 134, 20, 20, 15,
-    /* 煙突 y196..232 ＋キャップ(灰) */
-    OPS_RECT, 20, 196, 24, 36,  1,
-    OPS_RECT, 24, 196, 16,  6, 14,
-    OPS_END
-};
-static const u8 ship_bot[] = {      /* 世界 y256..416 を SHIPBUF_Y+256 へ(船尾側, local y=worldY-256) */
-    /* 主船体(後半) x100..156, world256..376 */
-    OPS_RECT,  4,   0, 56, 120, 14,
-    OPS_RECT, 14,   0, 36, 116, 10,  /* 木甲板続き */
-    /* 後部構造(メインマスト基部) local12..42 */
-    OPS_RECT, 18,  12, 28, 30,  1,
-    /* 後部主砲マウント(Caesar world300→local44 / Dora world344→local88) */
-    OPS_RECT, 22,  44, 20, 16,  1,
-    OPS_RECT, 22,  88, 20, 16,  1,
-    /* 船尾テーパ local120..160 */
-    OPS_RECT,  6, 120, 52, 12, 14,
-    OPS_RECT, 12, 132, 40, 12, 14,
-    OPS_RECT, 20, 144, 24, 10, 14,
-    OPS_RECT, 26, 154, 12,  6, 14,
-    OPS_END
-};
+/* ★1面ビスマルク艦体(上面視, 縦416px)の OPS データは**データバンク(bank8)**へ移設(gen_assets.mjs)。
+   prerender_ship が data_read で RAM(ship_ram)へ読み run_ops で描く(=データバンク運用の実データ利用)。
+   艦の中心x=128, 船首=上端/船尾=下端。色: 船体灰14/木甲板暗黄10/上構黒1/艦橋頂白15。
+   前部Anton/Bruno(超越)＋後部Caesar/Dora の4砲塔は破壊可能スプライト(ET_TURRET, 甲板の黒マウント上に乗る)。 */
 
 /* 主砲の発砲: 50f毎に自機狙い4-way散弾(偶数=自機直線上に隙間)。
    ★suppress=24: 半径内(≒ゼロ距離)に自機が居ると発射スキップ=肉薄で撃たせない。難易度で半径増減。 */
@@ -76,11 +40,15 @@ static void spawn_turret(u16 shipY, u8 delay) {
     }
 }
 
-/* 戦艦をバッファB(page2/3)へ事前描画: 海地＋上下2パスの艦体。 */
+/* 戦艦をバッファB(page2/3)へ事前描画: 海地＋上下2パスの艦体。
+   艦体OPSは data_read でバンク→RAM へ読んでから run_ops(常駐文脈=stage_setup から呼ぶので窓差替え可)。 */
+static u8 ship_ram[SHIP_OPS_RAM_MAX];
 static void prerender_ship(void) {
     vdp_fill(0, SC_SHIPBUF_Y, 256, SC_SHIP_ROWS * 16, 4);   /* 海地(青) */
-    run_ops(96, SC_SHIPBUF_Y,       ship_top);
-    run_ops(96, SC_SHIPBUF_Y + 256, ship_bot);
+    data_read(ASSET_BANK, SHIP_TOP_OFF, ship_ram, SHIP_TOP_LEN);
+    run_ops(96, SC_SHIPBUF_Y,       ship_ram);
+    data_read(ASSET_BANK, SHIP_BOT_OFF, ship_ram, SHIP_BOT_LEN);
+    run_ops(96, SC_SHIPBUF_Y + 256, ship_ram);
 }
 
 #define WMAX 40   /* 横揺れ(weaveX)の振幅 */

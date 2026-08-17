@@ -20,7 +20,7 @@ INC    = -I$(SRC)/include -I$(BUILD)
 #    定義する entity.h 等)を変更したら全 .c を必ず再コンパイルする。これを怠ると
 #    「新旧で構造体レイアウトが食い違うオブジェクトが混在→メモリ破損」という
 #    stale-object バグを踏む(実際に踏んだ)。小規模なので全再コンパイルで十分。
-HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/bgm_data.h
+HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h
 
 # ── 常駐(bank0-2, <=24KB)にリンクするソース。crt0 は先頭に別途リンク。
 #    ここへ足すたびに常駐サイズが増える。冷たいものは足さず bcall バンクへ回すこと。
@@ -60,10 +60,10 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 # データアセット(BGM曲データ)を bin＋常駐用ヘッダへパック(gen_assets.mjs)。
-# bgm_data.h を先に作れば assets.bin も同時に出る(1回の実行で両方生成)。
-$(BUILD)/bgm_data.h: tools/gen_assets.mjs | $(BUILD)
-	node tools/gen_assets.mjs 8 $(BUILD)/assets.bin $(BUILD)/bgm_data.h
-$(BUILD)/assets.bin: $(BUILD)/bgm_data.h
+# assets_data.h を先に作れば assets.bin も同時に出る(1回の実行で両方生成)。
+$(BUILD)/assets_data.h: tools/gen_assets.mjs | $(BUILD)
+	node tools/gen_assets.mjs 8 $(BUILD)/assets.bin $(BUILD)/assets_data.h
+$(BUILD)/assets.bin: $(BUILD)/assets_data.h
 	@true
 
 # C ソースは core/ と scenes/ から探す(basename は一意に保つ)

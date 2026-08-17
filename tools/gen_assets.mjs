@@ -77,25 +77,64 @@ function packTrack(t) {
   ]);
 }
 
-const blobs = TRACKS.map(packTrack);
-const off = [];
+// ---- 艦体 OPS データ(旧 scene_stage の常駐const を bank へ移設。data_read でRAMへ) ----
+// OPS_RECT=1(x,y,w,h,color) / OPS_END=0。ops.h と一致。
+const OPS_RECT = 1, OPS_END = 0;
+function ops(recs) {
+  const b = [];
+  for (const r of recs) b.push(OPS_RECT, r[0], r[1], r[2], r[3], r[4]);
+  b.push(OPS_END);
+  for (const v of b) if (v < 0 || v > 255) throw new Error(`ops byte out of range: ${v}`);
+  return Buffer.from(b);
+}
+// 1面ビスマルク(上面視)。船首側(y0..255)＋船尾側(y0..160=world256..416)の2パス。
+const shipTop = ops([
+  [24, 0, 16, 8, 14], [18, 8, 28, 8, 14], [12, 16, 40, 10, 14], [6, 26, 52, 14, 14],
+  [4, 40, 56, 215, 14], [14, 48, 36, 207, 10],
+  [22, 72, 20, 16, 1], [22, 108, 20, 16, 1],
+  [16, 126, 32, 50, 1], [22, 134, 20, 20, 15],
+  [20, 196, 24, 36, 1], [24, 196, 16, 6, 14],
+]);
+const shipBot = ops([
+  [4, 0, 56, 120, 14], [14, 0, 36, 116, 10],
+  [18, 12, 28, 30, 1],
+  [22, 44, 20, 16, 1], [22, 88, 20, 16, 1],
+  [6, 120, 52, 12, 14], [12, 132, 40, 12, 14], [20, 144, 24, 10, 14], [26, 154, 12, 6, 14],
+]);
+
+// ---- バンク配置: BGM曲 → 艦体OPS の順に連結 ----
+const bgmBlobs = TRACKS.map(packTrack);
+const parts = [...bgmBlobs, shipTop, shipBot];
+const offAll = [];
 let cur = 0;
-for (const b of blobs) { off.push(cur); cur += b.length; }
-const bin = Buffer.concat(blobs);
+for (const b of parts) { offAll.push(cur); cur += b.length; }
+const bgmOff = offAll.slice(0, bgmBlobs.length);
+const shipTopOff = offAll[bgmBlobs.length];
+const shipBotOff = offAll[bgmBlobs.length + 1];
+const bin = Buffer.concat(parts);
 if (bin.length > 0x2000) throw new Error(`assets ${bin.length}B > 8KB bank`);
 writeFileSync(binOut, bin);
 
-const ramMax = Math.max(...blobs.map((b) => b.length));
+const bgmRamMax = Math.max(...bgmBlobs.map((b) => b.length));
+const shipRamMax = Math.max(shipTop.length, shipBot.length);
 const h = [
-  '/* 自動生成(tools/gen_assets.mjs)。手で編集しない。 */',
-  '#ifndef BGM_DATA_H', '#define BGM_DATA_H',
+  '/* 自動生成(tools/gen_assets.mjs)。手で編集しない。BGM＋艦体OPS をデータバンクへ。 */',
+  '#ifndef ASSETS_DATA_H', '#define ASSETS_DATA_H',
+  `#define ASSET_BANK ${BGM_BANK}`,
+  '/* --- BGM --- */',
   `#define BGM_BANK ${BGM_BANK}`,
   `#define BGM_TRACK_COUNT ${TRACKS.length}`,
-  `#define BGM_RAM_MAX ${ramMax}`,
+  `#define BGM_RAM_MAX ${bgmRamMax}`,
   `static const unsigned int bgm_notetp[48] = { ${notetp.join(',')} };`,
-  `static const unsigned int bgm_off[BGM_TRACK_COUNT] = { ${off.join(',')} };`,
-  `static const unsigned int bgm_len[BGM_TRACK_COUNT] = { ${blobs.map((b) => b.length).join(',')} };`,
-  '#endif /* BGM_DATA_H */', '',
+  `static const unsigned int bgm_off[BGM_TRACK_COUNT] = { ${bgmOff.join(',')} };`,
+  `static const unsigned int bgm_len[BGM_TRACK_COUNT] = { ${bgmBlobs.map((b) => b.length).join(',')} };`,
+  '/* --- 艦体 OPS(data_read で SHIP_OPS_RAM_MAX の RAM へ読み run_ops) --- */',
+  `#define SHIP_TOP_OFF ${shipTopOff}`,
+  `#define SHIP_TOP_LEN ${shipTop.length}`,
+  `#define SHIP_BOT_OFF ${shipBotOff}`,
+  `#define SHIP_BOT_LEN ${shipBot.length}`,
+  `#define SHIP_OPS_RAM_MAX ${shipRamMax}`,
+  '#endif /* ASSETS_DATA_H */', '',
 ];
 writeFileSync(hdrOut, h.join('\n'));
-console.log(`assets: ${bin.length}B (bank${BGM_BANK}), ${TRACKS.length} tracks, RAM_MAX=${ramMax}B → ${binOut}, ${hdrOut}`);
+console.log(`assets: ${bin.length}B (bank${BGM_BANK}), ${TRACKS.length} tracks + shipOps(${shipTop.length}+${shipBot.length}B) → ${binOut}, ${hdrOut}`);
