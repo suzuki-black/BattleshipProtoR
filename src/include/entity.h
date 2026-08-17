@@ -52,6 +52,8 @@ extern u8 g_miss;        /* 1=自機撃墜(耐久尽き)。シーンが残機減
 
 extern u8 g_spr_base;               /* エンティティ描画の開始スプライトslot(HUDが先頭を確保) */
 void    ent_reset(void);            /* プール全消去 */
+void    ent_clear_enemies(void);    /* 敵戦闘機と敵弾を一掃(空戦→戦艦の受け渡し等) */
+void    ent_clear_fighters(void);   /* 敵戦闘機のみ一掃(砲台弾は残す。接近中の毎フレーム掃除用) */
 Entity *ent_spawn(u8 type);         /* 空きを1つ確保(既定値で初期化)。無ければ NULL */
 void    ent_update_all(void);       /* 全 active の behavior update を回す */
 void    ent_draw_all(void);         /* active をスプライトへ(hidden除く) */

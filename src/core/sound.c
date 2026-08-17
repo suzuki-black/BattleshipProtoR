@@ -3,6 +3,7 @@
    BGM: melody=tone A(SFX SHOTと共有・SFX優先), bass=tone B。曲データはバンク8→RAMコピー。 */
 #include "sound.h"
 #include "bank.h"       /* data_read(曲データをバンク→RAM) */
+#include "vdp.h"        /* vdp_wait_frame(ファンファーレの前景同期) */
 #include "bgm_data.h"   /* 自動生成: bgm_notetp[48] / bgm_off[] / bgm_len[] / BGM_BANK / BGM_RAM_MAX */
 
 /* ---- PSG ポートI/O(規約非依存にファイルスコープ変数経由) ----
@@ -159,6 +160,23 @@ void bgm_update(void) {
     bgm_voice(&mIdx, &mTrem, &mCl, mel_n, mel_l, nMel, 0,       0, melPeak, melSus, melVib, sfx_busy_a);
     bgm_voice(&bIdx, &bTrem, &bCl, bas_n, (const u8 *)0, nBas, basStep, 1, basPeak, basSus, 0, 0);
     if (drumOn) bgm_drum(sfx_busy_c);
+}
+
+/* 勝ちどきファンファーレ(前景・同期再生)。撃破演出で使用。bgmを止め、mel=toneA/har=toneB を
+   直接鳴らして vdp_wait_frame で尺を取る(ISRのbgm_updateは bgmOn=0 で沈黙)。終了まで戻らない。 */
+void play_fanfare(void) {
+    static const u8 fmel[8] = { 31,31,31, 36,40,43, 40,43 };   /* G4 G4 G4 C5 E5 G5 E5 G5 */
+    static const u8 fhar[8] = { 19,19,19, 24,28,31, 28,31 };   /* 1オクターブ下で厚み */
+    static const u8 flen[8] = {  8, 8, 8, 12,12,12,  8,40 };
+    u8 i, f;
+    bgmOn = 0;
+    for (i = 0; i < 8; i++) {
+        u16 tp = bgm_notetp[fmel[i]]; psg(0, (u8)(tp & 0xFF)); psg(1, (u8)((tp >> 8) & 0x0F)); psg(8, 14);
+        tp = bgm_notetp[fhar[i]];     psg(2, (u8)(tp & 0xFF)); psg(3, (u8)((tp >> 8) & 0x0F)); psg(9, 11);
+        for (f = 1; f < flen[i]; f++) vdp_wait_frame();
+        psg(8, 0); psg(9, 0);         /* 末尾1フレーム無音=音符の区切り */
+        vdp_wait_frame();
+    }
 }
 
 /* H.TIMI から呼ばれる ISR。割込み文脈なので使用レジスタを全退避(__naked で自前 ret)。

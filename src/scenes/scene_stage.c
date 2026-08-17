@@ -12,6 +12,7 @@
 #include "sound.h"
 #include "hud.h"
 #include "gamestate.h"
+#include "input.h"
 
 /* ★1面ビスマルク艦体(上面視, 縦416px)。OPS_RECTのyはu8(255まで)なので上下2パスで描く。
    艦の中心x=128(=base96 + rectの中心)。船首(細)=上端(先に到達)、船尾=下端。
@@ -90,6 +91,9 @@ static u8  sdiv, wtimer, ftick;
 static s8  camdir;    /* 往復方向: -1=船首へ / +1=船尾へ */
 static s16 weaveX;
 static s8  wdir;
+static u8  dmode;     /* 撃破演出モード(0=通常 / 1=炎上スペクタクル中) */
+static u8  dtimer;    /* 撃破演出の残フレーム */
+static u8  raided;    /* 1=戦艦出現時に空襲(戦闘機/敵弾)を一掃済み */
 
 /* weaveX を横HWスクロール(R#26/27)へ。滑らかな左寄せは R#26=ceil(s/8)/R#27=(8-frac)。 */
 static void apply_weave(void) {
@@ -125,6 +129,7 @@ static void stage_setup(void) {
     g_php = g_durability ? g_durability : 1;   /* 1機あたりの耐久HP(設定) */
     g_pinv = 0;
     g_miss = 0;
+    dmode = 0; dtimer = 0; raided = 0;
 
     /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
@@ -143,13 +148,57 @@ void stage_init(void) {
     stage_setup();
 }
 
+/* スコアを5桁ゼロ詰め文字列へ(結果画面表示用)。 */
+static char scorebuf[6];
+static void fmt_score(u16 v) {
+    u8 i;
+    for (i = 5; i > 0; i--) { scorebuf[i - 1] = (char)('0' + (v % 10)); v /= 10; }
+    scorebuf[5] = 0;
+}
+
+/* 撃破結果画面(page0)＋勝ちどきファンファーレ(前景・ブロッキング)。終わりにトリガ待ち。 */
+static void results_and_fanfare(void) {
+    u8 f;
+    vdp_set_vscroll(0);                 /* 縦スクロール解除(page0テキストのズレ＋上端ゴミを防ぐ) */
+    vdp_sprite_hide_from(0);            /* スプライト全消し(停止マーカを slot0 へ) */
+    vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
+    vdp_fill(0, 0, 256, 212, 1);        /* 黒地 */
+    vdp_text(72,  60, 8,  1, "TARGET DESTROYED");
+    vdp_text(96,  88, 15, 1, "BISMARCK");
+    fmt_score(g_score);
+    vdp_text(72, 120, 15, 1, "SCORE");
+    vdp_text(120, 120, 11, 1, scorebuf);
+    play_fanfare();                     /* 勝ちどき(BGM停止・前景同期) */
+    vdp_text(88, 168, 14, 1, "PUSH SPACE");
+    for (f = 0; f < 180; f++) {         /* 約3秒 or トリガで次へ */
+        input_poll();
+        if (g_input_edge & INP_TRIG) break;
+        vdp_wait_frame();
+    }
+}
+
+/* 撃破演出(炎上スペクタクル): スクロール凍結・艦上へ爆発を降らせる＋轟音。尺が尽きたら結果へ。 */
+static u8 defeat_update(void) {
+    scroll_to(cam);                     /* 表示維持(cam凍結) */
+    if ((dtimer & 3) == 0) ent_spawn_explosion((s16)(96 + (rnd() % 64)), (s16)(24 + (rnd() % 152)));
+    if ((dtimer % 15) == 0) sfx(2, SFX_BOOM);
+    ent_update_all();                   /* 爆発アニメを進める */
+    ent_draw_all();
+    if (dtimer) dtimer--;
+    if (dtimer == 0) { results_and_fanfare(); return SC_ENDING; }
+    return SCENE_NONE;
+}
+
 u8 stage_update(void) {
+    if (dmode) return defeat_update();  /* 撃破演出中は専用処理 */
+
     if (phase == 0) {
         /* 海: 蛇行なしの直進。船尾が見えたら(=cam<=STERN)交戦フェーズへ地続きに移行 */
         if (++sdiv >= 2) { sdiv = 0; if (cam > SC_CAM_STERN) cam--; }
         scroll_to(cam);
-        /* 空戦: 敵戦闘機が上から降下(約半数は自機狙い) */
-        if ((++ftick % 40) == 0) {
+        /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
+           (でないと戦闘機が上端=艦の上に突然湧いてゴミに見える。HANDOFF §2: 空戦→戦艦)。 */
+        if (cam > SC_CAM_SHIP && (++ftick % 40) == 0) {
             Entity *f = ent_spawn(ET_FIGHTER);
             if (f) {
                 f->x = 24 + (rnd() % 200); f->y = -16;
@@ -158,6 +207,10 @@ u8 stage_update(void) {
                 if (rnd() & 1) { f->fire = fd_faim; f->ftimer = 20 + (rnd() % 30); }
             }
             sfx(1, SFX_HIT);
+        }
+        /* 戦艦が出現した瞬間に、残っている空襲(戦闘機/敵弾)を一掃(艦の手前に居残るゴミ防止)。 */
+        if (cam <= SC_CAM_SHIP) {   /* 戦艦出現後は空襲を退かせる: 初回に戦闘機＋敵弾を一掃、以後は戦闘機のみ毎フレーム掃除 */
+            if (!raided) { raided = 1; ent_clear_enemies(); } else ent_clear_fighters();
         }
         if (cam <= SC_CAM_STERN) { phase = 1; camdir = -1; }
     } else {
@@ -201,7 +254,11 @@ u8 stage_update(void) {
         }
         return SCENE_NONE;
     }
-    /* 全砲台撃破でクリア → エンディング(戦艦フェーズでのみ0になる) */
-    if (phase == 1 && ent_count(ET_TURRET) == 0) return SC_ENDING;
+    /* 全砲台撃破でクリア → 撃破演出へ(炎上→撃破!!→スコア→ファンファーレ→エンディング) */
+    if (phase == 1 && ent_count(ET_TURRET) == 0) {
+        dmode = 1; dtimer = 150;   /* 約2.5秒の炎上スペクタクル */
+        bgm_stop();
+        return SCENE_NONE;
+    }
     return SCENE_NONE;
 }

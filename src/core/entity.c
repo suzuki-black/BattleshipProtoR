@@ -152,6 +152,23 @@ void ent_reset(void) {
     for (i = 0; i < ENT_MAX; i++) pool[i].active = 0;
 }
 
+/* 敵戦闘機と敵弾だけを消す(自機/自機弾/砲台は残す)。空戦→戦艦の受け渡しで空襲を退かせる用。 */
+void ent_clear_enemies(void) {
+    u8 i;
+    for (i = 0; i < ENT_MAX; i++) {
+        Entity *e = &pool[i];
+        if (!e->active) continue;
+        if (e->type == ET_FIGHTER || (e->type == ET_BULLET && e->team == TEAM_ENEMY)) e->active = 0;
+    }
+}
+
+/* 敵戦闘機だけを消す(戦艦接近中に紛れ込む戦闘機の毎フレーム掃除用。砲台弾は残す)。 */
+void ent_clear_fighters(void) {
+    u8 i;
+    for (i = 0; i < ENT_MAX; i++)
+        if (pool[i].active && pool[i].type == ET_FIGHTER) pool[i].active = 0;
+}
+
 Entity *ent_spawn(u8 type) {
     u8 i;
     for (i = 0; i < ENT_MAX; i++) {

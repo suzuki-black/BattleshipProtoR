@@ -61,6 +61,10 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
   `SC_STAGE`(★連続面: 海→戦艦 地続き) → `SC_ENDING`(bank7) → `SC_TITLE`。ミスは面リスタート、残機尽きは
   継続ONでコンティニュー(無限)/OFFで `SC_STAGE`→`SC_TITLE`。
   ★新ルール「各面=空戦→戦艦」を**画面カット無しの1本スクロール**(SC_STAGE)で実装(HANDOFF §2)。
+  空戦(戦闘機)は**戦艦が未出現の開けた海の間だけ**湧く(`cam>SC_CAM_SHIP`)。艦が出現した瞬間に
+  残存する戦闘機/敵弾を一掃し(`ent_clear_enemies`)、以後は戦闘機のみ毎フレーム掃除(艦の手前にゴミが
+  居残らない)。全砲台撃破で**撃破演出**(炎上スペクタクル→「TARGET DESTROYED」＋スコア→勝ちどき
+  ファンファーレ `play_fanfare`)→ SC_ENDING。
   ※旧 `SC_INTRO`/`SC_BOSS`(2シーンのハードカット試作)は SC_STAGE に統合し削除済み。
 - **冷たいシーンのバンク化(実装済み)**: `registry` の `bank != 0` のシーンは、`call_scene()` が
   `g_scene_phase`(0=init/1=update)をセットして `bcall_to(bank)` で当該バンクの 0xA000 エントリを実行。
@@ -146,6 +150,8 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - **ISR(H.TIMI 60Hz)**: `snd_isr`(`__naked`, 全レジスタ退避)が毎フレーム `sfx_update`→`bgm_update`。ゲーム負荷非依存。
 - **PSG割当**: melody=tone A(SFX SHOTと共有), bass=tone B, noise C=SFX命中/破壊(将来drum)。**SFX優先**: `sfx_update`が
   tone A使用中フラグ `sfx_busy_a` を立て、`bgm_update`はその間 melody を譲る(SFXが鳴り終えると即復帰)。
+- **ファンファーレ** `play_fanfare`: ループBGMとは別に、`bgmOn=0` にして前景で mel(A)+har(B) を直接鳴らし
+  `vdp_wait_frame` で尺を取る**同期(ブロッキング)再生**。撃破演出の勝ちどきで使用(終了まで戻らない)。
 - **BGM曲データ**: `[nMel,nBas,basStep, melPeak,melSus,melVib, basPeak,basSus, drumOn, melNote, melLen, basNote]`。
   音符=音階index(0=C2..47=B5)/255=休符、長さ=フレーム数。melody=可変長/bass=固定basStep/drum=標準マーチ(noise)。
   各パート独立ループ。周期表 `bgm_notetp[48]`。エンベロープ=発音開始 peak→毎フレーム-1→sustain、末尾2f無音、
@@ -238,7 +244,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/ops.c` | データ駆動描画 run_ops(艦体等)。OPS_RECTのx/yはu8(255まで) |
 | 常駐 | `src/core/scroll.c` | ★連続縦スクロール地形(page1リング+R#23、艦をBから流し込み) |
 | 常駐 | `src/core/hud.c` | ★スプライトHUD(スコア5桁＋残機)。数字はBIOSフォントを16x16へ写す。slot0-5確保 |
-| シーン | `src/scenes/scene_stage.c` | ★1本の連続面(海直進→戦艦 往復蛇行)。ビスマルク艦体(前2/後2砲塔)＋ゼロ距離抑え込み |
+| シーン | `src/scenes/scene_stage.c` | ★1本の連続面(空戦→戦艦 往復蛇行)。ビスマルク艦体＋ゼロ距離抑え込み＋撃破演出(炎上/スコア/ファンファーレ) |
 | 常駐 | `src/core/sprites.c` | スプライトパターン定義＋一括投入(sprites_load) |
 | 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
 | バンク | `src/banked/bank_demo.c` | 実バンクコール実証(bank4, 0xA000エントリ, 自己完結) |

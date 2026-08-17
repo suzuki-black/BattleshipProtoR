@@ -14,10 +14,11 @@
 #define SC_SHIP_R0    2                        /* 戦艦の先頭世界行(船首) */
 #define SC_SHIP_ROWS  26                       /* 戦艦の行数(416px, 画面より長い) */
 #define SC_SHIP_R1    (SC_SHIP_R0 + SC_SHIP_ROWS)   /* =28 */
-#define SC_WORLD_ROWS (SC_SHIP_R1 + 16)        /* 手前の海(=開始側)を含む世界行数 */
-#define SC_CAM_START  ((SC_WORLD_ROWS - 14) * 16)   /* 開始=手前の海(戦艦の先) */
+#define SC_WORLD_ROWS (SC_SHIP_R1 + 24)        /* 手前の海(=開始側)を含む世界行数。空戦イントロぶんの海を確保 */
+#define SC_CAM_START  ((SC_WORLD_ROWS - 14) * 16)   /* 開始=手前の海(戦艦の先)。ここから空戦→艦出現 */
 #define SC_CAM_BOW    (SC_SHIP_R0 * 16)             /* 船首が画面上端(往復の下限) */
 #define SC_CAM_STERN  (SC_SHIP_R1 * 16 - 212)       /* 船尾が画面下端(往復の上限=交戦開始) */
+#define SC_CAM_SHIP   (SC_SHIP_R1 * 16)             /* これ以下で戦艦が画面に出現(=空戦を終える境目) */
 
 #define SC_SHIPBUF_Y  512   /* 戦艦事前描画バッファB(page2/3)の基準Y。艦はここへ run_ops で描く */
 
