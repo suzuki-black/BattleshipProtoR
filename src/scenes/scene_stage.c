@@ -30,6 +30,10 @@ static const u8 fd_faim[] = { 45,  0, FIRE_AIMED, 3, 1, 2, FIRE_END };
 static u16 rng;
 static u8  rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }
 
+static u8 curstage;   /* 現在の面(0..STAGE_COUNT-1)。stage_init が g_stage_sel から設定 */
+/* 面ごとの艦名(結果画面用)。艦体OPS/長さは assets_data.h の ship_*_off/len[curstage]。 */
+static const char *const stagename[STAGE_COUNT] = { "BISMARCK", "IOWA" };
+
 /* 主砲塔(破壊可能)を艦上の世界座標に配置。艦中心 x=120(sprite左上→中心128)。世界Y=艦頭(SC_SHIP_R0*16)+艦内y。
    hp=3: 抑え込み(肉薄で撃たせない)で安全に連射しないと落としにくい=「ゼロ距離抑え込み=最速撃破」を要求。 */
 static void spawn_turret(u16 shipY, u8 delay) {
@@ -45,9 +49,9 @@ static void spawn_turret(u16 shipY, u8 delay) {
 static u8 ship_ram[SHIP_OPS_RAM_MAX];
 static void prerender_ship(void) {
     vdp_fill(0, SC_SHIPBUF_Y, 256, SC_SHIP_ROWS * 16, 4);   /* 海地(青) */
-    data_read(ASSET_BANK, SHIP_TOP_OFF, ship_ram, SHIP_TOP_LEN);
+    data_read(ASSET_BANK, ship_top_off[curstage], ship_ram, ship_top_len[curstage]);
     run_ops(96, SC_SHIPBUF_Y,       ship_ram);
-    data_read(ASSET_BANK, SHIP_BOT_OFF, ship_ram, SHIP_BOT_LEN);
+    data_read(ASSET_BANK, ship_bot_off[curstage], ship_ram, ship_bot_len[curstage]);
     run_ops(96, SC_SHIPBUF_Y + 256, ship_ram);
 }
 
@@ -108,11 +112,12 @@ static void stage_setup(void) {
     spawn_turret(344, 75);   /* Dora(後) */
 }
 
-/* シーン入場(新規ゲーム): スコア/被弾/残機を初期化してからレイアウト構築。 */
+/* シーン入場(新規ゲーム): スコア/被弾/残機を初期化し、開始面(config選択)からレイアウト構築。 */
 void stage_init(void) {
     g_score = 0;
     g_kills = 0; g_playerhit = 0;
     g_lives = lives_init();
+    curstage = (g_stage_sel < STAGE_COUNT) ? g_stage_sel : 0;
     stage_setup();
 }
 
@@ -132,7 +137,7 @@ static void results_and_fanfare(void) {
     vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
     vdp_fill(0, 0, 256, 212, 1);        /* 黒地 */
     vdp_text(72,  60, 8,  1, "TARGET DESTROYED");
-    vdp_text(96,  88, 15, 1, "BISMARCK");
+    vdp_text(96,  88, 15, 1, stagename[curstage]);
     fmt_score(g_score);
     vdp_text(72, 120, 15, 1, "SCORE");
     vdp_text(120, 120, 11, 1, scorebuf);
@@ -153,7 +158,15 @@ static u8 defeat_update(void) {
     ent_update_all();                   /* 爆発アニメを進める */
     ent_draw_all();
     if (dtimer) dtimer--;
-    if (dtimer == 0) { results_and_fanfare(); return SC_ENDING; }
+    if (dtimer == 0) {
+        results_and_fanfare();
+        if (curstage + 1 < STAGE_COUNT) {   /* 次の面へ(スコア/残機は持ち越し) */
+            curstage++;
+            stage_setup();
+            return SCENE_NONE;
+        }
+        return SC_ENDING;               /* 最終面クリア → エンディング */
+    }
     return SCENE_NONE;
 }
 

@@ -158,8 +158,10 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
   各パート独立ループ。周期表 `bgm_notetp[48]`。エンベロープ=発音開始 peak→毎フレーム-1→sustain、末尾2f無音、
   vibで伸ばし音に三角ビブラート(旧cportドライバを移植)。現状タイトル/1面マーチを旧 `bgm_tracks.h` から移植済み。
 - **★データバンク運用(土台)**: **BGM曲＋艦体OPS**を**データバンク(bank8)**に置き、`data_read()` で必要時に RAM へ読む。
-  艦体は `scene_stage` の `prerender_ship` が `data_read(ASSET_BANK, SHIP_TOP/BOT_OFF, ship_ram, LEN)`→`run_ops`(常駐文脈)。
-  =実ゲームデータをバンク化した最初の例(5艦・敵配置もこの型で bank へ載せる→常駐を膨らませない)。
+  艦体は**面ごと**にバンクへ(`ship_top_off/len[stage]`, `ship_bot_off/len[stage]`)。`prerender_ship` が
+  `data_read(ASSET_BANK, ship_*_off[curstage], ship_ram, ..)`→`run_ops`(常駐文脈)。=実ゲームデータをバンク化した例。
+  **多面化**: `STAGE_COUNT` 面。クリア(全砲台撃破→撃破演出)で `curstage++`→次艦を setup(スコア/残機持ち越し)、
+  最終面で SC_ENDING。config の**ステージ選択** `g_stage_sel` で開始面を選べる。5艦・敵配置もこの型で載せる。
 - BGM: 曲データは bank8。`bgm_play(track)`が `data_read()` で
   現曲だけ RAM(`bgm_ram`)へコピー→以後 ISR は **RAM のみ**参照(割込み中にバンク窓を触らない)。
   `data_read(bank,off,dst,len)`(`bank.c`)= di下で 0xA000窓を bank へ差替え→コピー→既定(bank3)へ復元。

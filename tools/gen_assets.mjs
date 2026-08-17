@@ -87,38 +87,60 @@ function ops(recs) {
   for (const v of b) if (v < 0 || v > 255) throw new Error(`ops byte out of range: ${v}`);
   return Buffer.from(b);
 }
-// 1面ビスマルク(上面視)。船首側(y0..255)＋船尾側(y0..160=world256..416)の2パス。
-const shipTop = ops([
-  [24, 0, 16, 8, 14], [18, 8, 28, 8, 14], [12, 16, 40, 10, 14], [6, 26, 52, 14, 14],
-  [4, 40, 56, 215, 14], [14, 48, 36, 207, 10],
-  [22, 72, 20, 16, 1], [22, 108, 20, 16, 1],
-  [16, 126, 32, 50, 1], [22, 134, 20, 20, 15],
-  [20, 196, 24, 36, 1], [24, 196, 16, 6, 14],
-]);
-const shipBot = ops([
-  [4, 0, 56, 120, 14], [14, 0, 36, 116, 10],
-  [18, 12, 28, 30, 1],
-  [22, 44, 20, 16, 1], [22, 88, 20, 16, 1],
-  [6, 120, 52, 12, 14], [12, 132, 40, 12, 14], [20, 144, 24, 10, 14], [26, 154, 12, 6, 14],
-]);
+// 各面の艦(上面視)。船首側(y0..255)＋船尾側(y0..160=world256..416)の2パス。
+// 主砲マウント(黒矩形)は全艦とも 前72/108・後44/88(world300/344) に置く(砲塔スプライトの配置と一致)。
+const SHIPS = [
+  { name: 'BISMARCK', // 1面: 木甲板(暗黄10)・艦橋1＋煙突1
+    top: ops([
+      [24, 0, 16, 8, 14], [18, 8, 28, 8, 14], [12, 16, 40, 10, 14], [6, 26, 52, 14, 14],
+      [4, 40, 56, 215, 14], [14, 48, 36, 207, 10],
+      [22, 72, 20, 16, 1], [22, 108, 20, 16, 1],
+      [16, 126, 32, 50, 1], [22, 134, 20, 20, 15],
+      [20, 196, 24, 36, 1], [24, 196, 16, 6, 14],
+    ]),
+    bot: ops([
+      [4, 0, 56, 120, 14], [14, 0, 36, 116, 10],
+      [18, 12, 28, 30, 1],
+      [22, 44, 20, 16, 1], [22, 88, 20, 16, 1],
+      [6, 120, 52, 12, 14], [12, 132, 40, 12, 14], [20, 144, 24, 10, 14], [26, 154, 12, 6, 14],
+    ]),
+  },
+  { name: 'IOWA', // 2面: 甲板暗赤6・艦橋(低め)＋煙突2(区別)。マウント位置は同一
+    top: ops([
+      [24, 0, 16, 8, 14], [18, 8, 28, 8, 14], [12, 16, 40, 10, 14], [6, 26, 52, 14, 14],
+      [4, 40, 56, 215, 14], [14, 48, 36, 207, 6],
+      [22, 72, 20, 16, 1], [22, 108, 20, 16, 1],
+      [16, 124, 32, 30, 1], [22, 130, 20, 14, 15],
+      [20, 160, 20, 20, 1], [20, 196, 20, 20, 1],
+    ]),
+    bot: ops([
+      [4, 0, 56, 120, 14], [14, 0, 36, 116, 6],
+      [18, 12, 28, 24, 1],
+      [22, 44, 20, 16, 1], [22, 88, 20, 16, 1],
+      [6, 120, 52, 12, 14], [12, 132, 40, 12, 14], [20, 144, 24, 10, 14], [26, 154, 12, 6, 14],
+    ]),
+  },
+];
 
-// ---- バンク配置: BGM曲 → 艦体OPS の順に連結 ----
+// ---- バンク配置: BGM曲 → 各艦の top/bot の順に連結 ----
 const bgmBlobs = TRACKS.map(packTrack);
-const parts = [...bgmBlobs, shipTop, shipBot];
+const shipBlobs = [];
+for (const s of SHIPS) { shipBlobs.push(s.top, s.bot); }
+const parts = [...bgmBlobs, ...shipBlobs];
 const offAll = [];
 let cur = 0;
 for (const b of parts) { offAll.push(cur); cur += b.length; }
 const bgmOff = offAll.slice(0, bgmBlobs.length);
-const shipTopOff = offAll[bgmBlobs.length];
-const shipBotOff = offAll[bgmBlobs.length + 1];
+const shipTopOff = SHIPS.map((_, i) => offAll[bgmBlobs.length + i * 2]);
+const shipBotOff = SHIPS.map((_, i) => offAll[bgmBlobs.length + i * 2 + 1]);
 const bin = Buffer.concat(parts);
 if (bin.length > 0x2000) throw new Error(`assets ${bin.length}B > 8KB bank`);
 writeFileSync(binOut, bin);
 
 const bgmRamMax = Math.max(...bgmBlobs.map((b) => b.length));
-const shipRamMax = Math.max(shipTop.length, shipBot.length);
+const shipRamMax = Math.max(...shipBlobs.map((b) => b.length));
 const h = [
-  '/* 自動生成(tools/gen_assets.mjs)。手で編集しない。BGM＋艦体OPS をデータバンクへ。 */',
+  '/* 自動生成(tools/gen_assets.mjs)。手で編集しない。BGM＋各面の艦体OPS をデータバンクへ。 */',
   '#ifndef ASSETS_DATA_H', '#define ASSETS_DATA_H',
   `#define ASSET_BANK ${BGM_BANK}`,
   '/* --- BGM --- */',
@@ -128,13 +150,14 @@ const h = [
   `static const unsigned int bgm_notetp[48] = { ${notetp.join(',')} };`,
   `static const unsigned int bgm_off[BGM_TRACK_COUNT] = { ${bgmOff.join(',')} };`,
   `static const unsigned int bgm_len[BGM_TRACK_COUNT] = { ${bgmBlobs.map((b) => b.length).join(',')} };`,
-  '/* --- 艦体 OPS(data_read で SHIP_OPS_RAM_MAX の RAM へ読み run_ops) --- */',
-  `#define SHIP_TOP_OFF ${shipTopOff}`,
-  `#define SHIP_TOP_LEN ${shipTop.length}`,
-  `#define SHIP_BOT_OFF ${shipBotOff}`,
-  `#define SHIP_BOT_LEN ${shipBot.length}`,
+  '/* --- 艦体 OPS(面ごと。data_read で SHIP_OPS_RAM_MAX の RAM へ読み run_ops) --- */',
+  `#define STAGE_COUNT ${SHIPS.length}`,
   `#define SHIP_OPS_RAM_MAX ${shipRamMax}`,
+  `static const unsigned int ship_top_off[STAGE_COUNT] = { ${shipTopOff.join(',')} };`,
+  `static const unsigned int ship_top_len[STAGE_COUNT] = { ${SHIPS.map((s) => s.top.length).join(',')} };`,
+  `static const unsigned int ship_bot_off[STAGE_COUNT] = { ${shipBotOff.join(',')} };`,
+  `static const unsigned int ship_bot_len[STAGE_COUNT] = { ${SHIPS.map((s) => s.bot.length).join(',')} };`,
   '#endif /* ASSETS_DATA_H */', '',
 ];
 writeFileSync(hdrOut, h.join('\n'));
-console.log(`assets: ${bin.length}B (bank${BGM_BANK}), ${TRACKS.length} tracks + shipOps(${shipTop.length}+${shipBot.length}B) → ${binOut}, ${hdrOut}`);
+console.log(`assets: ${bin.length}B (bank${BGM_BANK}), ${TRACKS.length} tracks + ${SHIPS.length} ships → ${binOut}, ${hdrOut}`);
