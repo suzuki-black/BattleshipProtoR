@@ -196,5 +196,6 @@ void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum) {
 
 void vdp_sprite_hide_from(u8 slot) {
     vdp_write_addr(SPR_ATTR + (u16)slot * 4);
-    VDP_DAT = 208;           /* Y=208 = 以降のスプライト処理を停止 */
+    VDP_DAT = 216;           /* Y=216(0xD8)=212ライン時の停止マーカ。以降のスプライトを非表示
+                                (208=0xD0は192ライン用。212ラインでは終端にならず古い残像が残る) */
 }

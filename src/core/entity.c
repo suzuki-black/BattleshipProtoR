@@ -210,7 +210,9 @@ static u8 draw1(u8 slot, const Entity *e) {   /* 1体を slot へ描画し、次
 static u8 visible(const Entity *e, u8 skip_player) {
     if (!e->active || e->hidden) return 0;
     if (skip_player ? (e->type == ET_PLAYER) : (e->type != ET_PLAYER)) return 0;
-    return (e->y > -16 && e->y < 212);
+    /* スプライトX/Yは u8。画面外(特に x<0/y<0)は (u8)化で反対端へ折り返すので描画しない
+       (左端を抜けた弾が右端に出る等を防ぐ)。x は 0..255(=画面幅), y は -16..212 を可視域とする。 */
+    return (e->y > -16 && e->y < 212 && e->x >= 0 && e->x < 256);
 }
 void ent_draw_all(void) {
     static u8 rot;
