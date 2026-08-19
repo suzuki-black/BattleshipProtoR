@@ -232,6 +232,35 @@ void vdp_text(u8 px, u8 py, u8 fg, u8 bg, const char *s) {
     }
 }
 
+/* 拡大文字描画(自前フォント, scale 倍角)。各グリフ画素を scale×scale ブロックへ展開。
+   1文字=8*scale px 幅 / 8*scale 行。px は偶数前提(2px/byte 境界)。見出し(STAGE/TARGET/艦名)用。 */
+void vdp_text_s(u8 px, u8 py, u8 fg, u8 bg, u8 scale, const char *s) {
+    u8 c;
+    vdp_cmd_wait();
+    while ((c = (u8)*s++) != 0) {
+        s8 idx = font_index(c);
+        const u8 *g = (idx >= 0) ? fontset[idx] : (const u8 *)0;
+        u8 gr;
+        for (gr = 0; gr < 8; gr++) {           /* グリフの各行 */
+            u8 fb = g ? g[gr] : 0;
+            u8 sv;
+            for (sv = 0; sv < scale; sv++) {   /* 縦 scale 倍 */
+                u8 bit, pending = 0, have = 0;
+                vdp_write_addr((u16)((u16)(u8)(py + gr * scale + sv) * 128 + (px >> 1)));
+                for (bit = 0; bit < 8; bit++) {            /* MSB→LSB の8画素 */
+                    u8 col = (fb & (u8)(0x80 >> bit)) ? fg : bg;
+                    u8 k;
+                    for (k = 0; k < scale; k++) {          /* 横 scale 倍。2px=1byteに詰める */
+                        if (!have) { pending = (u8)(col << 4); have = 1; }
+                        else       { VDP_DAT = (u8)(pending | col); have = 0; }
+                    }
+                }
+            }
+        }
+        px += (u8)(8 * scale);
+    }
+}
+
 /* ===== スクロール =====
    R#23 縦スクロールは VRAM 全体(スプライト含む)を縦シフトする。g_vscroll に量を保持し、
    vdp_sprite_pos が Y へ加算 → 縦スクロール中もスプライトを画面固定に見せる。

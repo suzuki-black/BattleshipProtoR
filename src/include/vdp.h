@@ -28,6 +28,9 @@ void vdp_palette_game(void);
 /* 文字 c の自前8x8フォント・グリフ(8B)を返す(未収録/空白は空グリフ)。HUD数字パターン生成等が使う。 */
 const u8 *vdp_glyph(u8 c);
 
+/* 拡大文字描画(自前フォント, scale 倍角。px 偶数前提)。見出し(STAGE/TARGET/艦名)用。 */
+void vdp_text_s(u8 px, u8 py, u8 fg, u8 bg, u8 scale, const char *s);
+
 /* SCREEN12(GRAPHIC7 + YJK 自然画, 256x212)へ切替。タイトルYJK画の表示に使う。 */
 void vdp_screen12(void);
 
