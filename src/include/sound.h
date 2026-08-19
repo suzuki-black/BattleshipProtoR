@@ -29,6 +29,7 @@ void sfx(u8 ch, u8 type);     /* ch(0..2) に効果音 type をトリガ(同ch�
 void bgm_play(u8 track);      /* track(0..) をバンクから RAM へ読み再生開始。★常駐からのみ呼ぶ */
 void bgm_stop(void);          /* BGM停止＋melody/bass 消音(SFX/noiseは不干渉) */
 void play_fanfare(void);      /* 勝ちどきファンファーレ(前景同期・BGM停止)。撃破演出用。終了まで戻らない */
+void play_fanfare_open(void); /* 開始ファンファーレ(前景同期・BGM停止)。ステージ開始カード用。終了まで戻らない */
 
 /* ISR 稼働の観測点(検証・HUD用) */
 extern volatile u16 snd_ticks;   /* ISRが毎フレーム ++(H.TIMI稼働の証跡) */

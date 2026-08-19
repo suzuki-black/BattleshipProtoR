@@ -39,18 +39,20 @@ RESIDENT_RELS = \
   $(BUILD)/scroll.rel \
   $(BUILD)/hud.rel \
   $(BUILD)/scene.rel \
-  $(BUILD)/scene_boot.rel \
   $(BUILD)/scene_stage.rel \
   $(BUILD)/main.rel
 
 # ── 追加バンク(冷たいコード/データ)。--bank N file の形で rompack へ渡す。
 #    冷たいコードは「単独コンパイル → --code-loc 0xA000 でリンク → rompack が当該バンクへ格納」。
 #    被呼コードは 0xA000 が単一エントリで自己完結(ARCHITECTURE §2)。
+# title.yjk(54272B の変換済みYJK)は bank9 から連続7バンク(9..15)へ跨って敷く(--asset)。
+# 常駐の vdp_blit_bank_vram が bank9,10,… を 8KB窓でめくって SCREEN12 VRAM へ流す。
 ROMPACK_BANKS = --bank 4 $(BUILD)/bank_demo.ihx \
                 --bank 5 $(BUILD)/scene_title.ihx \
                 --bank 6 $(BUILD)/scene_config.ihx \
                 --bank 7 $(BUILD)/scene_ending.ihx \
-                --bank 8 $(BUILD)/assets.bin
+                --bank 8 $(BUILD)/assets.bin \
+                --asset 9 assets/title.yjk
 
 .PHONY: all rom clean run
 all: rom
@@ -103,7 +105,7 @@ $(BUILD)/scene_%.ihx: $(SCENES)/scene_%.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)
 BANK_IHX = $(BUILD)/bank_demo.ihx $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx
 
-GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin
+GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk
 	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS)
 
 # openMSX で起動 → 数秒後にスクショ → 終了(headless 検証)

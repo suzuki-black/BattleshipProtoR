@@ -24,12 +24,14 @@ const ASSET_FIRST = 4;         // データ/バンクコードは bank4 以降
 // ---- 引数パース ----
 const args = process.argv.slice(2);
 let inIhx = null, outRom = null;
-const banks = [];              // { n, file }
+const banks = [];              // { n, file }         … 1バンク以内のコード/データ
+const assets = [];             // { n, file }         … 複数バンクにまたがる大アセット(YJK画像等)
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--code') inIhx = args[++i];
   else if (a === '--out') outRom = args[++i];
   else if (a === '--bank') { const n = parseInt(args[++i], 10); banks.push({ n, file: args[++i] }); }
+  else if (a === '--asset') { const n = parseInt(args[++i], 10); assets.push({ n, file: args[++i] }); }
   else { console.error(`ERROR: 不明な引数: ${a}`); process.exit(2); }
 }
 if (!inIhx || !outRom) {
@@ -90,6 +92,31 @@ for (const { n, file } of banks) {
     len = buf.length;
   }
   used[n] = Math.max(used[n], len);
+}
+
+// ---- 大アセット(複数バンク連続配置) ----
+// YJKタイトル画等、8KBを超える生データを bankN から連続バンクへ跨って敷き詰める。
+// 読み出し側は bankN,N+1,… を 8KB窓でめくって VRAM へ流す(vdp_blit_bank_vram)。
+for (const { n, file } of assets) {
+  if (!Number.isInteger(n) || n < ASSET_FIRST || n >= ROM_SIZE / BANK_SIZE) {
+    console.error(`ERROR: --asset のバンク番号が範囲外(${ASSET_FIRST}..${ROM_SIZE / BANK_SIZE - 1}): ${n}`); process.exit(2);
+  }
+  if (!existsSync(file)) { console.error(`ERROR: --asset ${n} のファイルが無い: ${file}`); process.exit(2); }
+  const buf = readFileSync(file);
+  const romBase = n * BANK_SIZE;
+  if (romBase + buf.length > ROM_SIZE) {
+    console.error(`ERROR: --asset ${n} が ROM 末尾を超過: ${buf.length}B @ bank${n} (末尾まで ${ROM_SIZE - romBase}B)`); process.exit(2);
+  }
+  const span = Math.ceil(buf.length / BANK_SIZE);
+  for (let k = 0; k < span; k++) {
+    if (used[n + k] > 0) { console.error(`ERROR: --asset ${n}(${file}) が使用済み bank${n + k} と衝突`); process.exit(2); }
+  }
+  buf.copy(rom, romBase);
+  for (let k = 0; k < span; k++) {
+    const inThis = Math.min(BANK_SIZE, buf.length - k * BANK_SIZE);
+    used[n + k] = Math.max(used[n + k], inThis);
+  }
+  console.log(`  asset ${file}: ${buf.length}B → bank${n}..${n + span - 1} (${span}バンク)`);
 }
 
 writeFileSync(outRom, rom);

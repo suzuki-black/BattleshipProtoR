@@ -81,19 +81,18 @@ static u8 lives_init(void) {
     return t[(g_lives_idx < 3) ? g_lives_idx : 1];
 }
 
-/* 1回の挑戦のレイアウトを構築(海フェーズ先頭から)。ミス時に再実行=全砲台/敵が復活・面最初から。
+/* 1回の挑戦のレイアウトを「表示を切替えず」構築(艦はオフスクリーンのバッファBへ事前描画)。
+   ★これを開始カード表示中に呼ぶことで、カードの裏でステージ準備が進む(旧版と同じ)。
    スコア/残機は触らない(それらは新規ゲーム=stage_init が初期化)。 */
-static void stage_setup(void) {
+static void stage_build(void) {
     Entity *e;
-    prerender_ship();     /* 艦をBへ(scroll_init前に必須) */
-    scroll_init();
+    prerender_ship();     /* 艦をバッファB(オフスクリーン)へ。stage_begin_display の前に必須 */
     vdp_sprite_init();
     sprites_load();
     hud_init();           /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
     ent_reset();
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
-    vdp_set_hscroll(0, 0);
 
     e = ent_spawn(ET_PLAYER);
     if (e) { e->x = 120; e->y = 176; e->color = 15; e->pat = SPR_BLOCK; }
@@ -112,13 +111,71 @@ static void stage_setup(void) {
     spawn_turret(344, 75);   /* Dora(後) */
 }
 
+/* 地形リングを表示(page1)＝ここでゲーム画面が現れる。scroll_init は prerender 済みが前提。 */
+static void stage_begin_display(void) {
+    scroll_init();
+    vdp_set_hscroll(0, 0);
+}
+
+/* ミス再挑戦: 開始カード/ファンファーレ無しで即再構築(BGMは鳴りっぱなしのまま面最初から)。 */
+static void stage_setup(void) {
+    stage_build();
+    stage_begin_display();
+}
+
+#define BGM_STAGE 1   /* gen_assets.mjs のトラック順: 0=タイトル / 1=ステージ / 2=エンディング */
+
+/* ステージ開始シーケンス(旧版準拠)。各面の開始時(新規ゲーム/次面へ)にだけ実行=ミス再挑戦では出さない。
+   手順: BGM停止(無音) → カード(STAGE n/TARGET/艦名/シルエット)を page0 に描く
+        → ★カードの裏でステージ準備(stage_build=艦の事前描画・砲台配線をオフスクリーンで)
+        → 開始ファンファーレ(BGM無音でこれだけ鳴る) → 余韻
+        → メインBGM開始 → 地形を表示(stage_begin_display)＝ゲーム開始。
+   艦名は可変長なので中央寄せ(8px/char)。 */
+static void stage_intro(void) {
+    const char *nm = stagename[curstage];
+    u8 f, n = 0;
+    char num[2];
+    while (nm[n]) n++;                       /* 艦名の長さ(中央寄せ用) */
+
+    bgm_stop();                              /* カード中は無音(タイトル/前面のBGMを止める) */
+    vdp_set_vscroll(0);                      /* 縦スクロール解除(page0のズレ防止) */
+    vdp_sprite_hide_from(0);                 /* スプライト全消し */
+    vdp_set_display_page(0);
+    vdp_fill(0, 0, 256, 212, 1);            /* 黒地 */
+    vdp_fill(0, 40, 256, 2, 8);            /* 上装飾ライン(赤) */
+    vdp_fill(0, 176, 256, 2, 8);           /* 下装飾ライン(赤) */
+
+    num[0] = (char)('1' + curstage); num[1] = 0;
+    vdp_text(92, 52, 14, 1, "STAGE");
+    vdp_text(140, 52, 15, 1, num);
+    vdp_text(72, 80, 8, 1, "- TARGET WARSHIP -");
+
+    /* 簡易戦艦シルエット(側面視, 中央x=128 幅140)。船体灰/上構白/煙突黒/主砲赤/喫水青。 */
+    vdp_fill(58, 126, 140, 16, 14);        /* 船体(灰) */
+    vdp_fill(58, 140, 140,  3,  4);        /* 喫水線(青) */
+    vdp_fill(106, 108, 40, 20, 15);        /* 艦橋/上構(白) */
+    vdp_fill(120, 100, 14, 10,  1);        /* 煙突(黒) */
+    vdp_fill(74, 120, 26,  6,  8);         /* 前部主砲(赤) */
+    vdp_fill(156, 120, 26, 6,  8);         /* 後部主砲(赤) */
+
+    vdp_text((u8)(128 - n * 4), 152, 15, 1, nm);   /* 艦名(中央寄せ) */
+
+    stage_build();                          /* ★カードの裏でステージ準備(オフスクリーン・表示は保つ) */
+
+    play_fanfare_open();                    /* 開始ファンファーレ(BGM無音でこれだけ鳴る) */
+    for (f = 0; f < 40; f++) vdp_wait_frame();     /* 少し余韻(旧版と同じ40フレーム) */
+
+    bgm_play(BGM_STAGE);                     /* メインBGM開始 */
+    stage_begin_display();                   /* 地形を表示=ゲーム開始 */
+}
+
 /* シーン入場(新規ゲーム): スコア/被弾/残機を初期化し、開始面(config選択)からレイアウト構築。 */
 void stage_init(void) {
     g_score = 0;
     g_kills = 0; g_playerhit = 0;
     g_lives = lives_init();
     curstage = (g_stage_sel < STAGE_COUNT) ? g_stage_sel : 0;
-    stage_setup();
+    stage_intro();        /* 1面開始: カード＋ファンファーレ→準備→BGM→開始 */
 }
 
 /* スコアを5桁ゼロ詰め文字列へ(結果画面表示用)。 */
@@ -162,7 +219,7 @@ static u8 defeat_update(void) {
         results_and_fanfare();
         if (curstage + 1 < STAGE_COUNT) {   /* 次の面へ(スコア/残機は持ち越し) */
             curstage++;
-            stage_setup();
+            stage_intro();      /* 次面開始: カード＋ファンファーレ→準備→BGM→開始 */
             return SCENE_NONE;
         }
         return SC_ENDING;               /* 最終面クリア → エンディング */

@@ -22,6 +22,15 @@ void vdp_data(u8 v);
 /* SCREEN5(GRAPHIC4, 256x212 16色)へ切替(BIOS CHGMOD)。 */
 void vdp_screen5(void);
 
+/* ゲーム標準パレット(SCREEN5)を張る。SCREEN5 へ入る度(CHGMOD後)に呼ぶ。 */
+void vdp_palette_game(void);
+
+/* SCREEN12(GRAPHIC7 + YJK 自然画, 256x212)へ切替。タイトルYJK画の表示に使う。 */
+void vdp_screen12(void);
+
+/* first_bank から連続バンクの生データ total バイトを現行スクリーンVRAM先頭へ流す(常駐のみ)。 */
+void vdp_blit_bank_vram(u8 first_bank, u16 total);
+
 /* VDPコマンド完了待ち(CE ポーリング)。 */
 void vdp_cmd_wait(void);
 

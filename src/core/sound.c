@@ -162,21 +162,34 @@ void bgm_update(void) {
     if (drumOn) bgm_drum(sfx_busy_c);
 }
 
-/* 勝ちどきファンファーレ(前景・同期再生)。撃破演出で使用。bgmを止め、mel=toneA/har=toneB を
-   直接鳴らして vdp_wait_frame で尺を取る(ISRのbgm_updateは bgmOn=0 で沈黙)。終了まで戻らない。 */
+/* ファンファーレ本体(前景・同期再生)。bgmを止め、mel=toneA/har=toneB を直接鳴らして
+   vdp_wait_frame で尺を取る(ISRのbgm_updateは bgmOn=0 で沈黙)。終了まで戻らない。 */
+static void fanfare_seq(const u8 *mel, const u8 *har, const u8 *len, u8 n) {
+    u8 i, f;
+    bgmOn = 0;
+    for (i = 0; i < n; i++) {
+        u16 tp = bgm_notetp[mel[i]]; psg(0, (u8)(tp & 0xFF)); psg(1, (u8)((tp >> 8) & 0x0F)); psg(8, 14);
+        tp = bgm_notetp[har[i]];     psg(2, (u8)(tp & 0xFF)); psg(3, (u8)((tp >> 8) & 0x0F)); psg(9, 11);
+        for (f = 1; f < len[i]; f++) vdp_wait_frame();
+        psg(8, 0); psg(9, 0);         /* 末尾1フレーム無音=音符の区切り */
+        vdp_wait_frame();
+    }
+}
+
+/* 勝ちどきファンファーレ(撃破演出で使用)。 */
 void play_fanfare(void) {
     static const u8 fmel[8] = { 31,31,31, 36,40,43, 40,43 };   /* G4 G4 G4 C5 E5 G5 E5 G5 */
     static const u8 fhar[8] = { 19,19,19, 24,28,31, 28,31 };   /* 1オクターブ下で厚み */
     static const u8 flen[8] = {  8, 8, 8, 12,12,12,  8,40 };
-    u8 i, f;
-    bgmOn = 0;
-    for (i = 0; i < 8; i++) {
-        u16 tp = bgm_notetp[fmel[i]]; psg(0, (u8)(tp & 0xFF)); psg(1, (u8)((tp >> 8) & 0x0F)); psg(8, 14);
-        tp = bgm_notetp[fhar[i]];     psg(2, (u8)(tp & 0xFF)); psg(3, (u8)((tp >> 8) & 0x0F)); psg(9, 11);
-        for (f = 1; f < flen[i]; f++) vdp_wait_frame();
-        psg(8, 0); psg(9, 0);         /* 末尾1フレーム無音=音符の区切り */
-        vdp_wait_frame();
-    }
+    fanfare_seq(fmel, fhar, flen, 8);
+}
+
+/* 開始ファンファーレ(ステージ開始カードで使用。旧版 fanOp を移植)。BGM無音でこれだけ鳴らす。 */
+void play_fanfare_open(void) {
+    static const u8 omel[8] = { 33,38,42,45,42,38,33,38 };
+    static const u8 ohar[8] = { 26,30,33,38,33,30,26,26 };
+    static const u8 olen[8] = {  8, 8,16,24, 8, 8, 8,36 };
+    fanfare_seq(omel, ohar, olen, 8);
 }
 
 /* H.TIMI から呼ばれる ISR。割込み文脈なので使用レジスタを全退避(__naked で自前 ret)。

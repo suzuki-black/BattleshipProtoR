@@ -7,5 +7,5 @@
 void main(void) {
     sys_init();           /* turboR: R800 ブースト等          */
     sound_init();         /* PSG初期化 + H.TIMI 60Hz ISR 設置 */
-    scene_run(SC_BOOT);   /* 以降ここから戻らない             */
+    scene_run(SC_TITLE);  /* タイトル(SCREEN12/YJK)から。以降ここから戻らない */
 }

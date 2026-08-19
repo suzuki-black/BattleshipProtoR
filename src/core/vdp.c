@@ -3,6 +3,7 @@
      0x99 への2バイト書込は割込みで壊れるので各自 di/ei で原子化する。 */
 #include "vdp.h"
 #include "msx.h"
+#include "bank.h"    /* vdp_blit_bank_vram が窓めくりに使う(bank_data/bank_restore) */
 
 __sfr __at(0x98) VDP_DAT;    /* VRAM データ                          */
 __sfr __at(0x99) VDP_CTRL;   /* アドレス/レジスタ                    */
@@ -37,13 +38,62 @@ void vdp_data(u8 v) {
     VDP_DAT = v;
 }
 
-/* SCREEN5(GRAPHIC4)へ。BIOS ワーク(SCRMOD)を 5 にして CHGMOD。 */
+/* SCREEN5(GRAPHIC4)へ。BIOS ワーク(SCRMOD)を 5 にして CHGMOD。
+   ★R#25 を明示的に 0 へ: BIOS CHGMOD は V9958 拡張レジスタ R#25 を管理しないため、
+     SCREEN12(R#25 YJK=1)からの復帰で YJK ビットが残り、GRAPHIC4 の表示が壊れる(海が白化)。
+     ここで必ず 0 に落として YJK/横スクロール拡張の残留を断つ。 */
 void vdp_screen5(void) {
     __asm
         ld   a, #5
         ld   (0xFCAF), a       ; SCRMOD_W
         call 0x005F            ; CHGMOD
     __endasm;
+    vdp_wreg(25, 0x00);        /* YJK/YAE/SP2/MSK を全クリア(SCREEN12 残留対策) */
+}
+
+/* ゲーム標準パレット(SCREEN5)。CHGMOD は既定パレットに戻すので、SCREEN5 へ入る度に張り直す。
+   既定パレット + 4色の上書き(黒/海の青/赤/白)+ ボーダー青。爆発色(11,10,6,14等)は既定を使う。 */
+void vdp_palette_game(void) {
+    vdp_set_pal(0, 0, 0, 0);    /* 背景=黒   */
+    vdp_set_pal(4, 1, 2, 6);    /* 海の青    */
+    vdp_set_pal(8, 6, 1, 1);    /* 赤        */
+    vdp_set_pal(15, 7, 7, 7);   /* 白        */
+    vdp_wreg(7, 0x04);          /* ボーダー色=青 */
+}
+
+/* SCREEN12(GRAPHIC7 + YJK 自然画, 256x212, 256B/line, 約19268色)へ。
+   BIOS ワーク(SCRMOD)を 8 にして CHGMOD で GRAPHIC7 を立て、R#25 の YJK ビットを付ける。
+   R#25 = 0x08: YJK=1(YJKデコード on), YAE=0(パレット併用なし)。前作(実機確定)と同一手順。 */
+void vdp_screen12(void) {
+    __asm
+        ld   a, #8
+        ld   (0xFCAF), a       ; SCRMOD_W = 8 (GRAPHIC7)
+        call 0x005F            ; CHGMOD
+    __endasm;
+    vdp_wreg(25, 0x08);        /* R#25: YJK=1 → SCREEN12 */
+}
+
+/* bank から連続する生データ(total バイト)を現行スクリーンの VRAM 先頭(0)へ流し込む。
+   YJKタイトル画(54272B, bank9..15)のロード用。
+   ★V9938 の VRAMアドレスカウンタは14bit(=16KB)で、オートインクリメントの桁上げは R#14 へ
+     伝播しない。ゆえに 16KB を跨がぬよう、8KB(=バンク境界)ごとに vdp_write_addr で貼り直す。
+     8KB×連続バンクは常に 0/8192 始まりなので、各チャンク内で14bit桁上げは起きない。
+   窓(0xA000)は bank ごとにめくる。ISR(音)は窓/VDPアドレスに触れないので di 不要
+     (VDP_DAT=0x98 のオートインクリメント書込はフリップフロップを使わない)。 */
+void vdp_blit_bank_vram(u8 first_bank, u16 total) {
+    const volatile u8 *win = (const volatile u8 *)0xA000;
+    u16 off = 0;
+    u8 bank = first_bank;
+    while (off < total) {
+        u16 j, chunk = (u16)(total - off);
+        if (chunk > 0x2000) chunk = 0x2000;    /* 8KB */
+        bank_data(bank);
+        vdp_write_addr(off);
+        for (j = 0; j < chunk; j++) VDP_DAT = win[j];
+        off = (u16)(off + chunk);
+        bank++;
+    }
+    bank_restore();
 }
 
 /* VDPコマンド完了待ち。CE(S#2 bit0)=1 の間ループ。
