@@ -103,9 +103,13 @@ void bgm_play(u8 track) {
     mel_n = p + 9;
     mel_l = p + 9 + nMel;
     bas_n = p + 9 + nMel + nMel;
-    mIdx = mTrem = mCl = 0;
-    bIdx = bTrem = bCl = 0;
-    drmIdx = drmT = drmType = drmVol = 0;
+    /* ★idx は n-1 で初期化する。bgm_voice/bgm_drum は「trem/drmT==0 なら *先に* idx を進めて
+       から鳴らす」実装のため、0 始まりだと最初のtickで idx が 0→1 に進み 1音目(index0)を飛ばし
+       2音目から鳴る=「曲が途中から始まる」。n-1 始まりなら最初の前進で 0 に戻り 1音目から正しく
+       鳴る(旧版の drmIdx=DRM_N-1 と同じ流儀)。 */
+    mIdx = (u8)(nMel ? nMel - 1 : 0); mTrem = mCl = 0;
+    bIdx = (u8)(nBas ? nBas - 1 : 0); bTrem = bCl = 0;
+    drmIdx = 15; drmT = drmType = drmVol = 0;   /* 16手ドラムも最初の前進で 0 へ */
     bgmOn = 1;
 }
 
