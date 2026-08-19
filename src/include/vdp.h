@@ -25,6 +25,9 @@ void vdp_screen5(void);
 /* ゲーム標準パレット(SCREEN5)を張る。SCREEN5 へ入る度(CHGMOD後)に呼ぶ。 */
 void vdp_palette_game(void);
 
+/* 文字 c の自前8x8フォント・グリフ(8B)を返す(未収録/空白は空グリフ)。HUD数字パターン生成等が使う。 */
+const u8 *vdp_glyph(u8 c);
+
 /* SCREEN12(GRAPHIC7 + YJK 自然画, 256x212)へ切替。タイトルYJK画の表示に使う。 */
 void vdp_screen12(void);
 
