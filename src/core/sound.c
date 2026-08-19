@@ -111,7 +111,10 @@ void bgm_play(u8 track) {
 
 void bgm_stop(void) {
     bgmOn = 0;
-    psg(8, 0); psg(9, 0);       /* melody/bass 消音(noise=SFX共有なので触らない) */
+    psg(8, 0); psg(9, 0);       /* melody(A)/bass(B) 消音 */
+    psg(10, 0);                 /* ★drum/noise(C) も消音。放置すると直前のドラム音量が残り
+                                   「さーーー」とノイズが鳴り続ける(ステージ開始カードで顕在化)。
+                                   SFXがCを使う場合も sfx_update が次フレーム音量を再設定するので安全。 */
 }
 
 /* 1声を進める。busy(SFXがこのchを使用中)なら PSG 書込を譲る。ch: 0=toneA / 1=toneB。 */
