@@ -21,9 +21,18 @@
    paint_hull＋波切り艦首＋主砲/艦橋/煙突OPS＋対空砲23基を バッファB(SC_SHIPBUF_Y=528)へ事前描画。
    前部Anton/Bruno(超越)＋後部Cäsar/Dora の4主砲は破壊可能スプライト(ET_TURRET)。全撃破でクリア。 */
 
-/* 主砲の発砲: 50f毎に自機狙い4-way散弾(偶数=自機直線上に隙間)。
-   ★suppress=24: 半径内(≒ゼロ距離)に自機が居ると発射スキップ=肉薄で撃たせない。難易度で半径増減。 */
-static const u8 fd_gun[]  = { 50, 24, FIRE_AIMFAN, 4, 2, 3, FIRE_END };
+/* 主砲の発砲(★面別難易度)。{interval, suppress, op, a(弾数), kind, spd, END}。
+   後半ほど 間隔↓(速い)・弾数↑(3→5-way)・弾速↑・suppress↓(安全半径が狭い=肉薄が難しい)。
+   ★suppress: 半径内(≒ゼロ距離)に自機が居ると発射スキップ=肉薄で撃たせない教育メカ。1面ほど広い。
+   面順=BB/Carrier/Hood/Twins/Iowa。 */
+static const u8 fd_gun_bb[]   = { 56, 26, FIRE_AIMFAN, 3, 2, 2, FIRE_END };  /* 1面: 遅い3-way(教育) */
+static const u8 fd_gun_cv[]   = { 50, 24, FIRE_AIMFAN, 4, 2, 3, FIRE_END };
+static const u8 fd_gun_hd[]   = { 44, 22, FIRE_AIMFAN, 4, 2, 3, FIRE_END };
+static const u8 fd_gun_tw[]   = { 38, 20, FIRE_AIMFAN, 5, 2, 3, FIRE_END };
+static const u8 fd_gun_iowa[] = { 32, 18, FIRE_AIMFAN, 5, 2, 4, FIRE_END };  /* 5面: 速い5-way高速弾 */
+static const u8 *const fd_gun_stage[STAGE_COUNT] = {
+    fd_gun_bb, fd_gun_cv, fd_gun_hd, fd_gun_tw, fd_gun_iowa
+};
 /* 戦闘機の発砲: 45f毎に自機狙い＋散らし円錐(±3)。空中の的なので抑え込みは無し(suppress=0)。 */
 static const u8 fd_faim[] = { 45,  0, FIRE_AIMED, 3, 1, 2, FIRE_END };
 
@@ -41,7 +50,7 @@ static void spawn_turret(u8 shipX, u16 shipY, u8 delay) {
     if (e) {
         e->ax = (s16)shipX - 8;                /* 砲塔中心x→スプライト左上 */
         e->ay = (s16)(SC_SHIP_R0 * 16 + shipY);
-        e->color = 5; e->pat = SPR_TURRET; e->hp = 3; e->fire = fd_gun; e->ftimer = delay;
+        e->color = 5; e->pat = SPR_TURRET; e->hp = 3; e->fire = fd_gun_stage[curstage]; e->ftimer = delay;
     }
 }
 /* 各面の主砲4基の艦内(x,y)=OPSの主砲位置。順=BB/Carrier/Hood/Twins/Iowa。空母/双子はx左右に分かれる。 */
