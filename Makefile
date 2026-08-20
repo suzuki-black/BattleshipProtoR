@@ -48,7 +48,7 @@ RESIDENT_RELS = \
 #    被呼コードは 0xA000 が単一エントリで自己完結(ARCHITECTURE §2)。
 # title.yjk(54272B の変換済みYJK)は bank9 から連続7バンク(9..15)へ跨って敷く(--asset)。
 # 常駐の vdp_blit_bank_vram が bank9,10,… を 8KB窓でめくって SCREEN12 VRAM へ流す。
-ROMPACK_BANKS = --bank 4 $(BUILD)/bank_demo.ihx \
+ROMPACK_BANKS = --bank 4 assets/cards.bin \
                 --bank 5 $(BUILD)/scene_title.ihx \
                 --bank 6 $(BUILD)/scene_config.ihx \
                 --bank 7 $(BUILD)/scene_ending.ihx \
@@ -103,10 +103,10 @@ $(BUILD)/scene_%.ihx: $(SCENES)/scene_%.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/scene_$*.rel $(BUILD)/resident_syms.rel -o $@
 
-BANK_IHX = $(BUILD)/bank_demo.ihx $(BUILD)/scene_title.ihx \
+BANK_IHX = $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx
 
-GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk
+GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk assets/cards.bin
 	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS)
 
 # openMSX で起動 → 数秒後にスクショ → 終了(headless 検証)

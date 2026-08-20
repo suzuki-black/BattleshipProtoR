@@ -50,10 +50,10 @@ void sea_init(u8 stage) {
 /* 艦出現後: 艦とその影を避けた海コラム帯へ切替(艦のx範囲を塗り潰さない)。 */
 void sea_set_ship(u8 stage) {
     switch (stage) {
-        case 2:  sea_ranges = sea_cv; sea_nranges = 2; break;   /* 空母 */
-        case 3:  sea_ranges = sea_hd; sea_nranges = 2; break;   /* フッド */
-        case 4:  sea_ranges = sea_tw; sea_nranges = 3; break;   /* 双子(3帯) */
-        default: sea_ranges = sea_bb; sea_nranges = 2; break;   /* 0=BB / 1=Iowa */
+        case 1:  sea_ranges = sea_cv; sea_nranges = 2; break;   /* 空母 */
+        case 2:  sea_ranges = sea_hd; sea_nranges = 2; break;   /* フッド */
+        case 3:  sea_ranges = sea_tw; sea_nranges = 3; break;   /* 双子(3帯) */
+        default: sea_ranges = sea_bb; sea_nranges = 2; break;   /* 0=BB / 4=Iowa */
     }
 }
 
