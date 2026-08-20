@@ -20,7 +20,7 @@ static void psg(u8 r, u8 v) {
 }
 
 /* ---- SFX 状態 ---- */
-static const u8 sfxDur[SFX_COUNT] = { 0, 8, 4, 28 };   /* NONE/SHOT/HIT/BOOM の持続フレーム */
+static const u8 sfxDur[SFX_COUNT] = { 0, 8, 4, 28, 16, 6 };   /* NONE/SHOT/HIT/BOOM/PHIT/EFIRE */
 static u8 sfxType[SND_CH];
 static u8 sfxTimer[SND_CH];
 
@@ -49,14 +49,20 @@ void sfx_update(void) {
         sfxTimer[ch]--;
         t = sfxType[ch];
         rem = sfxTimer[ch];
-        if (t == SFX_SHOT) ba = 1;               /* tone A を今フレーム SFX が占有 */
-        else if (t == SFX_HIT || t == SFX_BOOM) bc = 1;   /* noise C を占有 */
+        if (t == SFX_SHOT || t == SFX_PHIT) ba = 1;               /* tone A を SFX が占有 */
+        else if (t == SFX_HIT || t == SFX_BOOM || t == SFX_EFIRE) bc = 1;   /* noise C を占有 */
         if (t == SFX_SHOT) {                       /* 高→低の下降レーザー */
             u16 p = 40 + (u16)(7 - rem) * 62;
             psg(0, p & 0xFF); psg(1, (p >> 8) & 0x0F);
             psg(8, (rem >= 2) ? 13 : (rem * 6));
+        } else if (t == SFX_PHIT) {                /* 自機被弾: 低い下降の痛み音(tone A) */
+            u16 p = (u16)(120 + (u16)(15 - rem) * 30);   /* 周期↑=音程↓(下降) */
+            psg(0, p & 0xFF); psg(1, (p >> 8) & 0x0F);
+            psg(8, (rem >= 2) ? 12 : (u8)(rem * 5));
         } else if (t == SFX_HIT) {                 /* 短いノイズ "コッ" */
             psg(6, 15); psg(10, rem * 3);
+        } else if (t == SFX_EFIRE) {               /* 敵発砲: 静かな短いノイズ "プッ" */
+            psg(6, 12); psg(10, (u8)(rem * 2));    /* 低音量(自機弾より静か) */
         } else if (t == SFX_BOOM) {                /* 長い "ズガーン" */
             u8 np = (u8)(3 + (27 - rem));          /* noise周期 3(鋭)→30(深) */
             if (np > 31) np = 31;

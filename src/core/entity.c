@@ -7,6 +7,7 @@
 #include "sprites.h"
 #include "scroll.h"     /* g_cam(砲塔の世界→画面Y変換) */
 #include "gamestate.h"  /* g_score(撃破で加算) */
+#include "sound.h"      /* sfx(被弾音 SFX_PHIT) */
 
 u8 g_spr_base;          /* エンティティ描画の開始スプライトスロット(先頭はHUDが確保) */
 
@@ -137,6 +138,7 @@ void ent_resolve_collisions(void) {
                     e->active = 0;                 /* 敵/敵弾は消す(すり抜け防止) */
                     if (g_pinv == 0 && !g_invinc) {/* 被弾直後の無敵中/設定無敵 は無傷 */
                         g_playerhit++;
+                        sfx(0, SFX_PHIT);          /* 被弾の痛み音(tone A) */
                         ent_spawn_explosion(p->x, p->y);
                         if (g_php > 1) { g_php--; g_pinv = 90; }  /* 耐久残=生存(1.5秒無敵点滅) */
                         else { g_php = 0; g_miss = 1; }           /* 耐久尽き=撃墜。残機/リスタートはシーンが処理 */
