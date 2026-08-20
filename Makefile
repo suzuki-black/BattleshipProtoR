@@ -78,10 +78,7 @@ $(BUILD)/%.rel: %.c $(HDRS) | $(BUILD)
 $(BUILD)/crt0rom.rel: $(SRC)/crt0rom.s | $(BUILD)
 	sdasz80 -o $@ $<
 
-# 冷たいコード(バンク)を 0xA000 単独リンク。data-loc はバンク関数用の RAM 退避域(0xE900)。
-$(BUILD)/bank_demo.ihx: $(SRC)/banked/bank_demo.c $(HDRS) | $(BUILD)
-	sdcc -m$(TARGET) -c $(OPT) $(INC) $< -o $(BUILD)/bank_demo.rel
-	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE900 $(BUILD)/bank_demo.rel -o $@
+# (bank4 は開始カードの事前ベイク艦画像 assets/cards.bin に転用。旧 bank_demo は撤去)
 
 # 常駐イメージのリンク(crt0 が先頭 = _HEADER/_CODE 起点)。rom.noi に常駐シンボル番地が出る。
 $(BUILD)/rom.ihx: $(BUILD)/crt0rom.rel $(RESIDENT_RELS)
