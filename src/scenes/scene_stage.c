@@ -135,7 +135,9 @@ static void stage_setup(void) {
     stage_begin_display();
 }
 
-#define BGM_STAGE 1   /* gen_assets.mjs のトラック順: 0=タイトル / 1=ステージ / 2=エンディング */
+/* 面別BGM(gen_assets のトラック順: 0=title/1=BBマーチ/2=ED/3=空母/4=フッド哀歌/5=双子/6=Iowa)。
+   順=BB/Iowa/Carrier/Hood/Twins。 */
+static const u8 stage_bgm[STAGE_COUNT] = { 1, 6, 3, 4, 5 };
 
 /* ステージ開始シーケンス(旧版準拠)。各面の開始時(新規ゲーム/次面へ)にだけ実行=ミス再挑戦では出さない。
    手順: BGM停止(無音) → カード(STAGE n/TARGET/艦名/シルエット)を page0 に描く
@@ -170,7 +172,7 @@ static void stage_intro(void) {
     play_fanfare_open();                    /* 開始ファンファーレ(BGM無音でこれだけ鳴る) */
     for (f = 0; f < 40; f++) vdp_wait_frame();     /* 少し余韻(旧版と同じ40フレーム) */
 
-    bgm_play(BGM_STAGE);                     /* メインBGM開始 */
+    bgm_play(stage_bgm[curstage]);           /* 面別メインBGM開始 */
     stage_begin_display();                   /* 地形を表示=ゲーム開始 */
 }
 
