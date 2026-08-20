@@ -28,4 +28,8 @@
    ops/ops2 = data_read でRAMへ読んだ艦OPS(7B/レコード, op=0終端)。aagp=[gb,gs,ab,as]。 */
 void ship_render(u8 kind, u8 hull, u8 bow_cnt, u16 bow_yb, u8 aag_tbl, const u8 *aagp, const u8 *ops, const u8 *ops2);
 
+#define SHIP_NAAG 23   /* 対空砲マウント数 */
+/* 対空砲 i(0..22)の艦内座標(艦種tbl)。発砲システム(scene_stage)が使う。 */
+void ship_aag_pos(u8 tbl, u8 i, s16 *px, u16 *py);
+
 #endif /* SHIP_H */

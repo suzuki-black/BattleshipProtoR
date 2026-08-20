@@ -39,6 +39,19 @@ Entity *emit(s16 x, s16 y, u8 dir, u8 kind, u8 spd) {
     return b;
 }
 
+/* 時限信管弾(対空砲エアバースト): dir へ spd で飛び、fuze フレーム後に炸裂(bh_aaburst)。 */
+Entity *emit_burst(s16 x, s16 y, u8 dir, u8 spd, u8 fuze) {
+    Entity *b = ent_spawn(ET_AABURST);
+    if (!b) return (Entity *)0;
+    dir &= 31;
+    b->x = x; b->y = y;
+    b->vx = (s16)dvx[dir] * spd / 8;
+    b->vy = (s16)dvy[dir] * spd / 8;
+    b->ftimer = fuze;
+    b->color = 12; b->pat = BULLET_PAT;   /* 太い信管弾=橙(視認性) */
+    return b;
+}
+
 u8 aim_dir(s16 ex, s16 ey, s16 px, s16 py) {
     s16 dx = px - ex, dy = py - ey;
     s16 best = -32767;

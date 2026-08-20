@@ -35,6 +35,8 @@
 
 /* 1発生成。dir(0-31)/spd から速度を決め ET_BULLET を1つ spawn。戻り値は実体(満杯なら NULL)。 */
 Entity *emit(s16 x, s16 y, u8 dir, u8 kind, u8 spd);
+/* 時限信管弾(エアバースト): fuze フレーム後に下向き3破片へ炸裂する ET_AABURST を1つ spawn。 */
+Entity *emit_burst(s16 x, s16 y, u8 dir, u8 spd, u8 fuze);
 
 /* (ex,ey)から(px,py)への最近傍方向(0-31)。自機狙い用。 */
 u8 aim_dir(s16 ex, s16 ey, s16 px, s16 py);

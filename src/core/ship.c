@@ -250,6 +250,18 @@ static void draw_aag(u8 tbl, u8 gb, u8 gs, u8 ab, u8 as) {
     }
 }
 
+/* 対空砲 i(0..22)の艦内座標を返す(発砲システム=scene_stage が使う)。tbl=艦種(bb0/cv1/hd2/nl3)。 */
+void ship_aag_pos(u8 tbl, u8 i, s16 *px, u16 *py) {
+    const u8 *ax; const u16 *ay;
+    switch (tbl) {
+        case 1:  ax = aag_x_cv; ay = aag_y_cv; break;
+        case 2:  ax = aag_x_hd; ay = aag_y_hd; break;
+        case 3:  ax = aag_x_nl; ay = aag_y_nl; break;
+        default: ax = aag_x_bb; ay = aag_y_bb; break;
+    }
+    *px = (s16)ax[i]; *py = ay[i];
+}
+
 /* ---- 艦OPS(7B/レコード {op,x,ylo,yhi,p1,p2,p3}, op=0終端)を解釈 ---- */
 static void run_ship_ops(const u8 *d) {
     for (;;) {

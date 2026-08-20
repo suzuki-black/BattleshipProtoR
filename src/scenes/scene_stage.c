@@ -13,6 +13,7 @@
 #include "hud.h"
 #include "gamestate.h"
 #include "input.h"
+#include "player.h"        /* g_player_x/y(対空砲の自機狙い) */
 #include "bank.h"          /* data_read(艦体OPSをバンク→RAM) */
 #include "assets_data.h"   /* 自動生成: ship_ops_off/len, ship_hull/bowcnt/bowyb, SHIP_OPS_RAM_MAX, ASSET_BANK */
 
@@ -107,6 +108,31 @@ static void apply_weave(void) {
     g_meander = weaveX;   /* 砲塔スプライトの横追従(次段の砲塔統合で使用) */
 }
 
+/* ===== 対空砲23基の発砲(旧版 airburst 移植) =====
+   艦の対空砲は バッファB に描画済みで実体は持たない。ここで座標(ship_aag_pos)を毎フレーム回し、
+   画面帯[8,200]に居るものだけ自機狙いで撃つ。前14=大型→時限信管エアバースト / 後9=小型→通常小弾。
+   面別間隔 aafire_iv[](小=激しい)＋砲ごとの位相ずらし。艦が画面に居る時(sy帯内)だけ発砲。 */
+static u8 aa_fire[SHIP_NAAG];
+static const u8 aafire_iv[STAGE_COUNT] = { 140, 132, 84, 64, 40 };
+static void aa_reset(void) { u8 i; for (i = 0; i < SHIP_NAAG; i++) aa_fire[i] = (u8)(60 + i * 11); }
+static void aa_update(void) {
+    u8 tbl = ship_aagtbl[curstage], i;
+    for (i = 0; i < SHIP_NAAG; i++) {
+        s16 gx, sy, sx; u16 gy;
+        ship_aag_pos(tbl, i, &gx, &gy);
+        sy = (s16)(SC_SHIP_R0 * 16 + (s16)gy) - (s16)cam;   /* 画面Y */
+        if (sy < 8 || sy > 200) continue;                   /* 画面帯外は撃たない(=艦が視界に無い間も含む) */
+        if (aa_fire[i]) { aa_fire[i]--; continue; }
+        sx = gx + g_meander;                                /* 画面X(蛇行に追従) */
+        { u8 dir = aim_dir(sx, sy, (s16)g_player_x, (s16)g_player_y);
+          if (i < 14) { emit_burst(sx, sy, dir, 2, 42); }    /* 大型=時限信管エアバースト(橙, fuze42) */
+          else { Entity *b = emit(sx, sy, dir, 0, 2); if (b) b->color = 11; }  /* 小型=通常小弾(赤) */
+        }
+        aa_fire[i] = (u8)(aafire_iv[curstage] + i * 6);
+        sfx(1, SFX_EFIRE);
+    }
+}
+
 /* 設定の残機初期値(config g_lives_idx→2/3/5)。 */
 static u8 lives_init(void) {
     static const u8 t[3] = { 2, 3, 5 };
@@ -137,6 +163,7 @@ static void stage_build(void) {
     /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
     g_gun_kills = 0;
+    aa_reset();            /* 対空砲の発射タイマ初期化 */
     spawn_turret(gun_x[curstage][0], gun_y[curstage][0], 30);
     spawn_turret(gun_x[curstage][1], gun_y[curstage][1], 45);
     spawn_turret(gun_x[curstage][2], gun_y[curstage][2], 60);
@@ -304,6 +331,7 @@ u8 stage_update(void) {
     hud_draw(g_score, g_lives);
 
     ent_update_all();
+    aa_update();    /* 対空砲23基の発砲(画面内のみ。エアバースト/小弾) */
     ent_resolve_collisions();
     ent_draw_all();
     sea_frame();   /* SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール */

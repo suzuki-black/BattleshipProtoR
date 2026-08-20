@@ -18,6 +18,7 @@ enum {
     ET_PLAYER,    /* 自機: 入力で移動＋発砲 */
     ET_TURRET,    /* 戦艦の砲台: 破壊可能(hp)＋fireで発砲。全撃破でクリア */
     ET_EXPLOSION, /* 撃破エフェクト: 数フレーム色を変えて消滅 */
+    ET_AABURST,   /* 対空砲の時限信管弾: 飛翔し ftimer(信管)で下向き3破片へ炸裂(下端では不発) */
     ET_COUNT
 };
 

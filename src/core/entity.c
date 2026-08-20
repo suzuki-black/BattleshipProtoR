@@ -33,6 +33,38 @@ static void bh_bullet(Entity *e) {
     if (e->x < -16 || e->x > SCR_W || e->y < -16 || e->y > SCR_H) e->active = 0;
 }
 
+/* 8方向単位ベクトル(0=上,1=右上,2=右,3=右下,4=下,5=左下,6=左,7=左上)。 */
+static const s8 dirdx8[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
+static const s8 dirdy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
+
+/* 対空砲の時限信管弾: 直進しつつ ftimer(信管)を数え、0で空中炸裂。自機帯(y>=185)より下では不発。
+   炸裂時は下向き3破片(右下/下/左下)を速度3で撒き、その場に爆発演出。旧版 airburst の移植。 */
+static void bh_aaburst(Entity *e) {
+    e->x += e->vx;
+    e->y += e->vy;
+    if (e->x < 0 || e->x > 255 || e->y < 16 || e->y > 220) { e->active = 0; return; }
+    if (e->ftimer == 0) {                       /* 信管作動 */
+        if (e->y < 185) {                       /* 自機帯より上でのみ炸裂(下から湧かない) */
+            static const u8 shdir[3] = { 3, 4, 5 };   /* 右下/下/左下の扇 */
+            u8 k;
+            for (k = 0; k < 3; k++) {
+                Entity *f = ent_spawn(ET_BULLET);
+                if (f) {
+                    f->team = TEAM_ENEMY;
+                    f->x = e->x; f->y = (s16)(e->y + k * 3);   /* Yを少しずらし同一走査線回避 */
+                    f->vx = (s16)(dirdx8[shdir[k]] * 3); f->vy = (s16)(dirdy8[shdir[k]] * 3);
+                    f->color = 11; f->pat = SPR_BULLET;
+                }
+            }
+            ent_spawn_explosion(e->x, e->y);    /* 炸裂の見た目 */
+            sfx(2, SFX_HIT);                     /* 炸裂音(小) */
+        }
+        e->active = 0;
+        return;
+    }
+    e->ftimer--;
+}
+
 /* 射手: 発砲スクリプトを進める(発射は run_fire→emit)。位置は固定。 */
 static void bh_shooter(Entity *e) {
     run_fire(e);
@@ -77,6 +109,7 @@ static const Behavior behaviors[ET_COUNT] = {
     bh_player,    /* ET_PLAYER    */
     bh_turret,    /* ET_TURRET(蛇行追従＋発砲。破壊可能) */
     bh_explosion, /* ET_EXPLOSION */
+    bh_aaburst,   /* ET_AABURST(時限信管弾→下向き3破片へ炸裂) */
 };
 
 u8 ent_count(u8 type) {
@@ -133,7 +166,7 @@ void ent_resolve_collisions(void) {
         for (j = 0; j < ENT_MAX; j++) {
             Entity *e = &pool[j];
             if (!e->active) continue;
-            if ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_FIGHTER) {
+            if ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_FIGHTER || e->type == ET_AABURST) {
                 if (overlap(e, p)) {
                     e->active = 0;                 /* 敵/敵弾は消す(すり抜け防止) */
                     if (g_pinv == 0 && !g_invinc) {/* 被弾直後の無敵中/設定無敵 は無傷 */
