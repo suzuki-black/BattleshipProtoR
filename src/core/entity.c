@@ -57,7 +57,7 @@ static void bh_fighter(Entity *e) {
 }
 
 /* 撃破エフェクト: 寿命を ftimer で数え、色を変えながら消滅。 */
-static const u8 exp_col[6] = { 15, 11, 10, 8, 6, 4 };
+static const u8 exp_col[6] = { 15, 15, 12, 11, 7, 7 };   /* 白→橙→赤→暗(旧パレットの火色) */
 static void bh_explosion(Entity *e) {
     if (e->ftimer == 0) { e->active = 0; return; }
     e->ftimer--;

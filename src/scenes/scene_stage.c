@@ -7,19 +7,18 @@
 #include "entity.h"
 #include "sprites.h"
 #include "scroll.h"
-#include "ops.h"
+#include "ship.h"          /* 旧版忠実の艦レンダラ */
 #include "fire.h"
 #include "sound.h"
 #include "hud.h"
 #include "gamestate.h"
 #include "input.h"
 #include "bank.h"          /* data_read(艦体OPSをバンク→RAM) */
-#include "assets_data.h"   /* 自動生成: SHIP_TOP_OFF/LEN, SHIP_BOT_OFF/LEN, SHIP_OPS_RAM_MAX, ASSET_BANK */
+#include "assets_data.h"   /* 自動生成: ship_ops_off/len, ship_hull/bowcnt/bowyb, SHIP_OPS_RAM_MAX, ASSET_BANK */
 
-/* ★1面ビスマルク艦体(上面視, 縦416px)の OPS データは**データバンク(bank8)**へ移設(gen_assets.mjs)。
-   prerender_ship が data_read で RAM(ship_ram)へ読み run_ops で描く(=データバンク運用の実データ利用)。
-   艦の中心x=128, 船首=上端/船尾=下端。色: 船体灰14/木甲板暗黄10/上構黒1/艦橋頂白15。
-   前部Anton/Bruno(超越)＋後部Caesar/Dora の4砲塔は破壊可能スプライト(ET_TURRET, 甲板の黒マウント上に乗る)。 */
+/* ★艦(上面視, 496px)は旧版 BattleshipProto の艦システムを忠実移植(ship.c)。海テンプレを下地に
+   paint_hull＋波切り艦首＋主砲/艦橋/煙突OPS＋対空砲23基を バッファB(SC_SHIPBUF_Y=528)へ事前描画。
+   前部Anton/Bruno(超越)＋後部Cäsar/Dora の4主砲は破壊可能スプライト(ET_TURRET)。全撃破でクリア。 */
 
 /* 主砲の発砲: 50f毎に自機狙い4-way散弾(偶数=自機直線上に隙間)。
    ★suppress=24: 半径内(≒ゼロ距離)に自機が居ると発射スキップ=肉薄で撃たせない。難易度で半径増減。 */
@@ -40,19 +39,35 @@ static void spawn_turret(u16 shipY, u8 delay) {
     Entity *e = ent_spawn(ET_TURRET);
     if (e) {
         e->ax = 120; e->ay = (s16)(SC_SHIP_R0 * 16 + shipY);
-        e->color = 14; e->pat = SPR_TURRET; e->hp = 3; e->fire = fd_gun; e->ftimer = delay;
+        e->color = 5; e->pat = SPR_TURRET; e->hp = 3; e->fire = fd_gun; e->ftimer = delay;
     }
 }
+/* 各面の主砲(4基)の艦内Y(=OPSの主砲位置)。ビスマルク:Anton64/Bruno104/Cäsar322/Dora362。アイオワ:72/108/330/372。 */
+static const u16 gun_y[STAGE_COUNT][4] = { { 64, 104, 322, 362 }, { 72, 108, 330, 372 } };
 
-/* 戦艦をバッファB(page2/3)へ事前描画: 海地＋上下2パスの艦体。
-   艦体OPSは data_read でバンク→RAM へ読んでから run_ops(常駐文脈=stage_setup から呼ぶので窓差替え可)。 */
+/* 戦艦を バッファB へ事前描画(旧版忠実)。海テンプレ構築→OPSをRAMへ読み ship_render。
+   ★重い(数千VDP塗り)ので、バッファBに既に現在の艦が居るなら再生成しない
+     (ミス再挑戦は同じ艦=Bは有効→即再開)。新しい面に入る時だけ生成する。 */
 static u8 ship_ram[SHIP_OPS_RAM_MAX];
+static s8 rendered_stage = -1;   /* バッファBに描画済みの面(-1=未) */
 static void prerender_ship(void) {
-    vdp_fill(0, SC_SHIPBUF_Y, 256, SC_SHIP_ROWS * 16, 4);   /* 海地(青) */
-    data_read(ASSET_BANK, ship_top_off[curstage], ship_ram, ship_top_len[curstage]);
-    run_ops(96, SC_SHIPBUF_Y,       ship_ram);
-    data_read(ASSET_BANK, ship_bot_off[curstage], ship_ram, ship_bot_len[curstage]);
-    run_ops(96, SC_SHIPBUF_Y + 256, ship_ram);
+    if (rendered_stage == (s8)curstage) return;   /* 既に描画済み=再生成不要 */
+    scroll_build_sea();                        /* 海テンプレート(512) */
+    data_read(ASSET_BANK, ship_ops_off[curstage], ship_ram, ship_ops_len[curstage]);
+    ship_render(ship_hull[curstage], ship_bowcnt[curstage], ship_bowyb[curstage], ship_ram);
+    rendered_stage = (s8)curstage;
+}
+
+/* 開始カードの艦画像: 事前ベイクした 64x88(88行x32byte) の SCREEN5ビットマップを page0 カード窓へ即blit。
+   重い ship_render(バッファB=ゲーム本体用)を待たずカードを完成表示できる。窓=x96,y58。 */
+static u8 card_ram[SHIP_CARD_LEN];
+static void draw_card_ship(void) {
+    u8 r, b;
+    data_read(ASSET_BANK, ship_card_off[curstage], card_ram, SHIP_CARD_LEN);
+    for (r = 0; r < 88; r++) {
+        vdp_write_addr((u16)((u16)(58 + r) * 128 + 48));    /* x96(=48byte),y58+r */
+        for (b = 0; b < 32; b++) vdp_data(card_ram[(u16)r * 32 + b]);
+    }
 }
 
 #define WMAX 40   /* 横揺れ(weaveX)の振幅 */
@@ -105,10 +120,10 @@ static void stage_build(void) {
     /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
     g_gun_kills = 0;
-    spawn_turret( 72, 30);   /* Anton(前) */
-    spawn_turret(108, 45);   /* Bruno(前・超越) */
-    spawn_turret(300, 60);   /* Caesar(後) */
-    spawn_turret(344, 75);   /* Dora(後) */
+    spawn_turret(gun_y[curstage][0], 30);   /* Anton(前)   */
+    spawn_turret(gun_y[curstage][1], 45);   /* Bruno(前)   */
+    spawn_turret(gun_y[curstage][2], 60);   /* Cäsar(後)   */
+    spawn_turret(gun_y[curstage][3], 75);   /* Dora(後)    */
 }
 
 /* 地形リングを表示(page1)＝ここでゲーム画面が現れる。scroll_init は prerender 済みが前提。 */
@@ -141,23 +156,19 @@ static void stage_intro(void) {
     vdp_set_vscroll(0);                      /* 縦スクロール解除(page0のズレ防止) */
     vdp_sprite_hide_from(0);                 /* スプライト全消し */
     vdp_set_display_page(0);
-    vdp_fill(0, 0, 256, 212, 3);            /* 背景=寒色の濃紺(旧版のカード背景。色3)。装飾ラインは無し */
+    vdp_fill(0, 0, 256, 212, 1);            /* 背景=海の濃紺(旧パレット色1=1,4,5)。装飾ラインは無し */
 
-    /* 見出しは2倍角(旧版準拠)。STAGE n / - TARGET - / 艦名 を中央寄せで大きく。地色=背景(3)。 */
+    /* 見出しは2倍角(旧版準拠)。STAGE n / - TARGET - / 艦名 を中央寄せで大きく。地色=背景(1)。 */
     num[0] = (char)('1' + curstage); num[1] = 0;
-    vdp_text_s(72, 12, 14, 3, 2, "STAGE");         /* "STAGE"(5字×16=80) 72..152 */
-    vdp_text_s(168, 12, 15, 3, 2, num);            /* n は空白1つ空けて 168 */
-    vdp_text_s(48, 32, 8, 3, 2, "- TARGET -");     /* 10字×16=160 → x48 中央 */
+    vdp_text_s(72, 12, 15, 1, 2, "STAGE");         /* "STAGE"(5字×16=80) 72..152。白で視認性確保 */
+    vdp_text_s(168, 12, 15, 1, 2, num);            /* n は空白1つ空けて 168 */
+    vdp_text_s(48, 32, 11, 1, 2, "- TARGET -");    /* 10字×16=160 → x48 中央(赤) */
 
     /* 枠無し: 船影(実艦BG)は stage_build 後に背景へ直接コピーする(下地/白枠は描かない)。 */
-    vdp_text_s((u8)(128 - n * 8), 156, 15, 3, 2, nm);   /* 艦名(2倍角・中央寄せ, 1字=16px) */
+    vdp_text_s((u8)(128 - n * 8), 156, 15, 1, 2, nm);   /* 艦名(2倍角・中央寄せ, 1字=16px) */
 
-    stage_build();                          /* ★カードの裏でステージ準備。艦はバッファB(実描画)へ */
-
-    /* ★実艦BG(バッファB=SC_SHIPBUF_Y)の胴体中央部(上構〜煙突, world-y 122..210)を額縁内へ
-       close-up コピー(LMMM)。run_ops の幾何再描画ではなく「ゲームに実際に出る艦そのもの」を額装
-       =本物のプレビュー。艦は buffer B の x100..156 に居るので x96始点(海の余白込み64px)で切り出す。 */
-    vdp_copy(96, (u16)(SC_SHIPBUF_Y + 122), 96, 58, 64, 88);
+    draw_card_ship();                       /* 事前ベイク艦画像を即blit=カード完成(重い生成を待たない) */
+    stage_build();                          /* ★カードの裏でゲーム本体の艦をバッファBへ生成(重い) */
 
     play_fanfare_open();                    /* 開始ファンファーレ(BGM無音でこれだけ鳴る) */
     for (f = 0; f < 40; f++) vdp_wait_frame();     /* 少し余韻(旧版と同じ40フレーム) */
@@ -238,7 +249,7 @@ u8 stage_update(void) {
             if (f) {
                 f->x = 24 + (rnd() % 200); f->y = -16;
                 f->vx = (rnd() & 1) ? 1 : -1; f->vy = 2 + (rnd() % 2);
-                f->color = 8; f->pat = SPR_FIGHTER;
+                f->color = 11; f->pat = SPR_FIGHTER;   /* 赤(旧パレット11) */
                 if (rnd() & 1) { f->fire = fd_faim; f->ftimer = 20 + (rnd() % 30); }
             }
             sfx(1, SFX_HIT);
@@ -275,6 +286,7 @@ u8 stage_update(void) {
     ent_update_all();
     ent_resolve_collisions();
     ent_draw_all();
+    sea_frame();   /* SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール */
 
     /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。
        尽きたら 継続ONでコンティニュー(残機を初期値へ戻して再挑戦=無限) / OFFでタイトルへ。 */
