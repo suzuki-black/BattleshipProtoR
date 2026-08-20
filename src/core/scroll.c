@@ -31,14 +31,21 @@ static void draw_row(s16 r) {
 /* ===== SEA13: 海コラムだけ位相流し(艦とその影は不可侵=帯で避ける) ===== */
 static u16 sea_phase;
 static u8  sea_acc, sea_strip;
-/* {startX,width,...} 艦＋影を避けた海コラム。ビスマルク(半幅54,右落ち影196まで): x0..72 と x196..256。 */
-static const u8 sea_bb[4] = { 0, 72, 196, 60 };
+/* {startX,width,...} 艦＋影を避けた海コラム(艦種別に手調整)。順=BB/Iowa/Carrier/Hood/Twins。 */
+static const u8 sea_bb[4] = { 0, 72, 196, 60 };            /* ビスマルク/アイオワ(半幅54): x0..72 と x196.. */
+static const u8 sea_cv[4] = { 0, 66, 190, 66 };            /* 空母(半幅58,対称影) */
+static const u8 sea_hd[4] = { 0, 80, 190, 66 };            /* フッド(半幅46) */
+static const u8 sea_tw[6] = { 0, 50, 116, 38, 220, 36 };   /* 双子: 左/船間/右の3帯 */
 static const u8 *sea_ranges = sea_bb;
 static u8 sea_nranges = 2;
 
 void sea_init(u8 stage) {
-    (void)stage;                 /* 現状ビスマルク/アイオワとも艦幅は sea_bb 内に収まる */
-    sea_ranges = sea_bb; sea_nranges = 2;
+    switch (stage) {
+        case 2:  sea_ranges = sea_cv; sea_nranges = 2; break;   /* 空母 */
+        case 3:  sea_ranges = sea_hd; sea_nranges = 2; break;   /* フッド */
+        case 4:  sea_ranges = sea_tw; sea_nranges = 3; break;   /* 双子(3帯) */
+        default: sea_ranges = sea_bb; sea_nranges = 2; break;   /* 0=BB / 1=Iowa */
+    }
     sea_phase = 0; sea_acc = 0; sea_strip = 0;
 }
 
@@ -61,7 +68,7 @@ void sea_frame(void) {
 void scroll_init(void) {
     s16 r;
     vdp_set_display_page(1);          /* page1 リングを表示。スプライト表は page0 で非スクロール */
-    sea_init(0);
+    /* sea_init(stage) は呼び元(scene_stage)が艦種に合わせて呼ぶ */
 
     g_cam = SC_CAM_START;
     drawn_top = (s16)(g_cam >> 4);

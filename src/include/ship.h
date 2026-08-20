@@ -23,8 +23,9 @@
 #define HULL_BISMARCK 0
 #define HULL_IOWA     3
 
-/* 艦を バッファB へ描画: 海地(バッファ全消し海色)→船体→波切り艦首→OPS(砲/艦橋/煙突等)→対空砲23基。
-   ops = data_read でRAMへ読んだ艦OPS(7B/レコード {op,x,ylo,yhi,p1,p2,p3}, op=0終端)。 */
-void ship_render(u8 hull, u8 bow_cnt, u16 bow_yb, const u8 *ops);
+/* 艦を バッファB へ描画。kind=0単艦(BB/Iowa/Hood) / 1双子(2隻) / 2空母(飛行甲板+2パス)。
+   海タイル→(艦種別に船体/艦首/甲板)→OPS(→ops2は空母のみ)→対空砲23基。
+   ops/ops2 = data_read でRAMへ読んだ艦OPS(7B/レコード, op=0終端)。aagp=[gb,gs,ab,as]。 */
+void ship_render(u8 kind, u8 hull, u8 bow_cnt, u16 bow_yb, u8 aag_tbl, const u8 *aagp, const u8 *ops, const u8 *ops2);
 
 #endif /* SHIP_H */

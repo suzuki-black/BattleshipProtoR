@@ -91,7 +91,7 @@ function shipops(recs) {
 // 各面の艦(上面視, 艦高496px, 中心x=128)。hull=船体プロファイル(0=Bismarck/3=Iowa)、
 // bowCnt/bowYb=波切り艦首シェブロン。船体/艦首/対空砲23基はコード(ship_render)、OPSは砲塔/艦橋/煙突/副砲。
 const SHIPS = [
-  { name: 'BISMARCK', hull: 0, bowCnt: 20, bowYb: 42,
+  { name: 'BISMARCK', kind: 0, hull: 0, bowCnt: 20, bowYb: 42, aagTbl: 0, aagP: [7,5,6,5],
     ops: shipops([
       [7,121,6,2,26,13], [7,135,6,2,26,13],                                  // 艦首波(暗)
       [3,118,34,5,0,0], [3,138,34,5,0,0],                                    // 前部ドーム
@@ -134,7 +134,7 @@ const SHIPS = [
       [6,88,308,7,0,0], [6,168,308,7,0,0],
     ]),
   },
-  { name: 'IOWA', hull: 3, bowCnt: 22, bowYb: 28,
+  { name: 'IOWA', kind: 0, hull: 3, bowCnt: 22, bowYb: 28, aagTbl: 0, aagP: [7,5,6,5],
     ops: shipops([
       [1,128,72,21,0,0], [2,128,72,19,0,0],                                 // 主砲1
       [1,128,108,23,0,0], [2,128,108,21,0,0],                               // 主砲2
@@ -154,20 +154,70 @@ const SHIPS = [
       [1,128,372,21,0,0], [2,128,372,19,0,0],                              // 主砲4
     ]),
   },
+  // ---- 空母(2パス: carrier_ops→metalNoise→carrier2_ops)。飛行甲板/係留機はコード(ship_render kind2) ----
+  { name: 'CARRIER', kind: 2, hull: 0, bowCnt: 0, bowYb: 0, aagTbl: 1, aagP: [6,6,6,6],
+    ops: shipops([
+      [5,140,78,34,36,4], [5,82,340,34,36,4],                              // エレベータ2
+      [7,122,10,12,2,15],                                                  // 艦首甲板端マーク
+      [1,95,100,9,0,0], [2,95,100,8,0,0], [1,161,100,9,0,0], [2,161,100,8,0,0],   // 5in砲(前)
+      [1,95,300,9,0,0], [2,95,300,8,0,0], [1,161,300,9,0,0], [2,161,300,8,0,0],   // 5in砲(後)
+      [5,134,132,50,104,4], [5,137,140,44,86,5], [5,140,150,38,40,5],      // 島(段積み)
+      [7,143,155,32,5,15], [5,146,164,26,24,4],                            // 窓白帯/操舵室頂
+    ]),
+    ops2: shipops([
+      [7,143,155,32,1,15], [7,143,155,1,5,14],                             // 窓上光/左光
+      [3,159,158,7,0,0],                                                   // 操舵室ドーム
+      [4,168,205,11,13,0], [4,164,201,8,5,0], [4,168,205,6,13,0],          // 煙突
+      [7,158,214,22,5,4],                                                  // 煙突キャップ帯
+      [7,158,168,3,30,9],                                                  // マスト
+      [4,158,173,5,14,0], [4,158,185,3,15,0],                              // レーダー
+      [6,159,136,7,0,0], [6,159,232,7,0,0],                                // 前後AAディレクタ
+    ]),
+  },
+  // ---- フッド(単艦, 細い艦体 半幅46/鋭い艦首) ----
+  { name: 'HOOD', kind: 0, hull: 1, bowCnt: 16, bowYb: 30, aagTbl: 2, aagP: [7,5,6,5],
+    ops: shipops([
+      [7,127,120,2,200,4],                                                 // 中央通路
+      [1,128,70,14,0,0], [2,128,70,12,0,0], [1,128,108,14,0,0], [2,128,108,12,0,0],   // 主砲A/B
+      [1,128,372,14,0,0], [2,128,372,12,0,0], [1,128,410,14,0,0], [2,128,410,12,0,0], // 主砲X/Y
+      [5,114,144,28,50,4], [7,118,149,20,4,15], [5,116,153,24,34,5], [5,118,159,20,22,5],  // 艦橋城
+      [3,128,148,7,0,0], [3,128,164,6,0,0], [3,128,176,5,0,0], [4,128,176,3,13,0],    // 司令塔/測距儀
+      [4,128,216,9,13,0], [4,128,213,7,4,0], [4,128,216,6,13,0], [7,120,222,16,3,4],  // 煙突1
+      [4,128,258,8,13,0], [4,128,256,6,4,0], [4,128,258,5,13,0], [7,121,264,14,3,4],  // 煙突2
+      [5,118,296,20,26,5], [5,120,301,16,16,4],                            // 後部構造2段
+      [3,128,300,5,0,0], [3,128,312,5,0,0], [4,128,312,3,13,0],            // 後部指揮所/測距儀
+    ]),
+  },
+  // ---- 双子戦艦(2隻: L cx=76 / R cx=180, 細い艦体 半幅24)。船体/艦首は各hull、OPSは絶対Xで両艦 ----
+  { name: 'TWINS', kind: 1, hull: 2, bowCnt: 12, bowYb: 24, aagTbl: 3, aagP: [6,5,5,5],
+    ops: shipops([
+      [7,75,120,2,200,4],                                                  // L中央通路
+      [1,76,80,11,0,0], [2,76,80,9,0,0], [1,76,360,11,0,0], [2,76,360,9,0,0],   // L前後主砲
+      [5,64,148,24,46,4], [7,67,152,18,4,15], [5,66,156,20,30,5], [5,68,162,16,18,4],  // L艦橋城
+      [3,76,150,6,0,0], [3,76,166,5,0,0], [4,76,166,3,13,0],               // L司令塔/測距儀
+      [4,76,222,7,13,0], [4,76,219,5,4,0], [4,76,222,4,13,0], [7,69,228,14,3,4],   // L煙突
+      [5,66,300,20,22,5], [3,76,304,5,0,0],                                // L後部構造
+      [7,179,120,2,200,4],                                                 // R中央通路
+      [1,180,80,11,0,0], [2,180,80,9,0,0], [1,180,360,11,0,0], [2,180,360,9,0,0], // R前後主砲
+      [5,168,148,24,46,4], [7,171,152,18,4,15], [5,170,156,20,30,5], [5,172,162,16,18,4],  // R艦橋城
+      [3,180,150,6,0,0], [3,180,166,5,0,0], [4,180,166,3,13,0],            // R司令塔/測距儀
+      [4,180,222,7,13,0], [4,180,219,5,4,0], [4,180,222,4,13,0], [7,173,228,14,3,4],  // R煙突
+      [5,170,300,20,22,5], [3,180,304,5,0,0],                              // R後部構造
+    ]),
+  },
 ];
 
-// ---- バンク配置: BGM曲 → 各艦の ops → 各艦のカード画像(事前ベイク64x88 SCREEN5ビットマップ) ----
+// ---- バンク配置(bank8): BGM曲 → 各艦の [ops, ops2] を連結 ----
+const emptyops = shipops([]);   // ops2 が無い艦(1バイト END)
 const bgmBlobs = TRACKS.map(packTrack);
-const shipBlobs = SHIPS.map((s) => s.ops);
-// カード画像: 生成済み艦から吸い出した 88行×32byte(64px幅) の SCREEN5 生ビットマップ(assets/shipN_card.bin)。
-const cardBlobs = SHIPS.map((_, i) => readFileSync(`assets/ship${i}_card.bin`));
-const parts = [...bgmBlobs, ...shipBlobs, ...cardBlobs];
+const shipBlobs = SHIPS.flatMap((s) => [s.ops, s.ops2 || emptyops]);   // 艦ごとに ops, ops2 の2枚
+const parts = [...bgmBlobs, ...shipBlobs];
 const offAll = [];
 let cur = 0;
 for (const b of parts) { offAll.push(cur); cur += b.length; }
 const bgmOff = offAll.slice(0, bgmBlobs.length);
-const shipOpsOff = SHIPS.map((_, i) => offAll[bgmBlobs.length + i]);
-const shipCardOff = SHIPS.map((_, i) => offAll[bgmBlobs.length + shipBlobs.length + i]);
+const shipOpsOff  = SHIPS.map((_, i) => offAll[bgmBlobs.length + i * 2]);
+const shipOps2Off = SHIPS.map((_, i) => offAll[bgmBlobs.length + i * 2 + 1]);
 const bin = Buffer.concat(parts);
 if (bin.length > 0x2000) throw new Error(`assets ${bin.length}B > 8KB bank`);
 writeFileSync(binOut, bin);
@@ -188,14 +238,16 @@ const h = [
   '/* --- 艦体 OPS(面ごと。data_read で SHIP_OPS_RAM_MAX の RAM へ読み ship_render で解釈) --- */',
   `#define STAGE_COUNT ${SHIPS.length}`,
   `#define SHIP_OPS_RAM_MAX ${shipRamMax}`,
-  `static const unsigned int ship_ops_off[STAGE_COUNT] = { ${shipOpsOff.join(',')} };`,
-  `static const unsigned int ship_ops_len[STAGE_COUNT] = { ${SHIPS.map((s) => s.ops.length).join(',')} };`,
-  `static const unsigned char ship_hull[STAGE_COUNT]  = { ${SHIPS.map((s) => s.hull).join(',')} };`,
+  `static const unsigned int ship_ops_off[STAGE_COUNT]  = { ${shipOpsOff.join(',')} };`,
+  `static const unsigned int ship_ops_len[STAGE_COUNT]  = { ${SHIPS.map((s) => s.ops.length).join(',')} };`,
+  `static const unsigned int ship_ops2_off[STAGE_COUNT] = { ${shipOps2Off.join(',')} };`,
+  `static const unsigned int ship_ops2_len[STAGE_COUNT] = { ${SHIPS.map((s) => (s.ops2 || emptyops).length).join(',')} };`,
+  `static const unsigned char ship_kind[STAGE_COUNT]   = { ${SHIPS.map((s) => s.kind).join(',')} };`,
+  `static const unsigned char ship_hull[STAGE_COUNT]   = { ${SHIPS.map((s) => s.hull).join(',')} };`,
   `static const unsigned char ship_bowcnt[STAGE_COUNT] = { ${SHIPS.map((s) => s.bowCnt).join(',')} };`,
-  `static const unsigned int ship_bowyb[STAGE_COUNT]  = { ${SHIPS.map((s) => s.bowYb).join(',')} };`,
-  '/* --- カード用の事前ベイク艦画像(64x88=88行x32byte の SCREEN5生ビットマップ) --- */',
-  `#define SHIP_CARD_LEN ${cardBlobs[0].length}`,
-  `static const unsigned int ship_card_off[STAGE_COUNT] = { ${shipCardOff.join(',')} };`,
+  `static const unsigned int ship_bowyb[STAGE_COUNT]   = { ${SHIPS.map((s) => s.bowYb).join(',')} };`,
+  `static const unsigned char ship_aagtbl[STAGE_COUNT] = { ${SHIPS.map((s) => s.aagTbl).join(',')} };`,
+  `static const unsigned char ship_aagp[STAGE_COUNT][4] = { ${SHIPS.map((s) => `{${s.aagP.join(',')}}`).join(', ')} };`,
   '#endif /* ASSETS_DATA_H */', '',
 ];
 writeFileSync(hdrOut, h.join('\n'));

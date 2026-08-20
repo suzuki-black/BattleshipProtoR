@@ -31,43 +31,39 @@ static u8  rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }
 
 static u8 curstage;   /* 現在の面(0..STAGE_COUNT-1)。stage_init が g_stage_sel から設定 */
 /* 面ごとの艦名(結果画面用)。艦体OPS/長さは assets_data.h の ship_*_off/len[curstage]。 */
-static const char *const stagename[STAGE_COUNT] = { "BISMARCK", "IOWA" };
+static const char *const stagename[STAGE_COUNT] = { "BISMARCK", "IOWA", "CARRIER", "HOOD", "TWINS" };
 
 /* 主砲塔(破壊可能)を艦上の世界座標に配置。艦中心 x=120(sprite左上→中心128)。世界Y=艦頭(SC_SHIP_R0*16)+艦内y。
    hp=3: 抑え込み(肉薄で撃たせない)で安全に連射しないと落としにくい=「ゼロ距離抑え込み=最速撃破」を要求。 */
-static void spawn_turret(u16 shipY, u8 delay) {
+static void spawn_turret(u8 shipX, u16 shipY, u8 delay) {
     Entity *e = ent_spawn(ET_TURRET);
     if (e) {
-        e->ax = 120; e->ay = (s16)(SC_SHIP_R0 * 16 + shipY);
+        e->ax = (s16)shipX - 8;                /* 砲塔中心x→スプライト左上 */
+        e->ay = (s16)(SC_SHIP_R0 * 16 + shipY);
         e->color = 5; e->pat = SPR_TURRET; e->hp = 3; e->fire = fd_gun; e->ftimer = delay;
     }
 }
-/* 各面の主砲(4基)の艦内Y(=OPSの主砲位置)。ビスマルク:Anton64/Bruno104/Cäsar322/Dora362。アイオワ:72/108/330/372。 */
-static const u16 gun_y[STAGE_COUNT][4] = { { 64, 104, 322, 362 }, { 72, 108, 330, 372 } };
+/* 各面の主砲4基の艦内(x,y)=OPSの主砲位置。順=BB/Iowa/Carrier/Hood/Twins。空母/双子はx左右に分かれる。 */
+static const u8  gun_x[STAGE_COUNT][4] = {
+    {128,128,128,128}, {128,128,128,128}, {95,161,95,161}, {128,128,128,128}, {76,76,180,180}
+};
+static const u16 gun_y[STAGE_COUNT][4] = {
+    {64,104,322,362}, {72,108,330,372}, {100,100,300,300}, {70,108,372,410}, {80,360,80,360}
+};
 
-/* 戦艦を バッファB へ事前描画(旧版忠実)。海テンプレ構築→OPSをRAMへ読み ship_render。
-   ★重い(数千VDP塗り)ので、バッファBに既に現在の艦が居るなら再生成しない
-     (ミス再挑戦は同じ艦=Bは有効→即再開)。新しい面に入る時だけ生成する。 */
+/* 戦艦を バッファB へ事前描画(旧版忠実)。海テンプレ→OPS(+ops2)をRAMへ読み ship_render(艦種別)。
+   ★重い(数千VDP塗り)ので、Bに既に現在の艦が居るなら再生成しない(ミス再挑戦=即再開)。 */
 static u8 ship_ram[SHIP_OPS_RAM_MAX];
+static u8 ship_ram2[128];        /* ops2(空母のみ, max85) */
 static s8 rendered_stage = -1;   /* バッファBに描画済みの面(-1=未) */
 static void prerender_ship(void) {
     if (rendered_stage == (s8)curstage) return;   /* 既に描画済み=再生成不要 */
     scroll_build_sea();                        /* 海テンプレート(512) */
-    data_read(ASSET_BANK, ship_ops_off[curstage], ship_ram, ship_ops_len[curstage]);
-    ship_render(ship_hull[curstage], ship_bowcnt[curstage], ship_bowyb[curstage], ship_ram);
+    data_read(ASSET_BANK, ship_ops_off[curstage],  ship_ram,  ship_ops_len[curstage]);
+    data_read(ASSET_BANK, ship_ops2_off[curstage], ship_ram2, ship_ops2_len[curstage]);
+    ship_render(ship_kind[curstage], ship_hull[curstage], ship_bowcnt[curstage], ship_bowyb[curstage],
+                ship_aagtbl[curstage], ship_aagp[curstage], ship_ram, ship_ram2);
     rendered_stage = (s8)curstage;
-}
-
-/* 開始カードの艦画像: 事前ベイクした 64x88(88行x32byte) の SCREEN5ビットマップを page0 カード窓へ即blit。
-   重い ship_render(バッファB=ゲーム本体用)を待たずカードを完成表示できる。窓=x96,y58。 */
-static u8 card_ram[SHIP_CARD_LEN];
-static void draw_card_ship(void) {
-    u8 r, b;
-    data_read(ASSET_BANK, ship_card_off[curstage], card_ram, SHIP_CARD_LEN);
-    for (r = 0; r < 88; r++) {
-        vdp_write_addr((u16)((u16)(58 + r) * 128 + 48));    /* x96(=48byte),y58+r */
-        for (b = 0; b < 32; b++) vdp_data(card_ram[(u16)r * 32 + b]);
-    }
 }
 
 #define WMAX 40   /* 横揺れ(weaveX)の振幅 */
@@ -120,15 +116,16 @@ static void stage_build(void) {
     /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
     g_gun_kills = 0;
-    spawn_turret(gun_y[curstage][0], 30);   /* Anton(前)   */
-    spawn_turret(gun_y[curstage][1], 45);   /* Bruno(前)   */
-    spawn_turret(gun_y[curstage][2], 60);   /* Cäsar(後)   */
-    spawn_turret(gun_y[curstage][3], 75);   /* Dora(後)    */
+    spawn_turret(gun_x[curstage][0], gun_y[curstage][0], 30);
+    spawn_turret(gun_x[curstage][1], gun_y[curstage][1], 45);
+    spawn_turret(gun_x[curstage][2], gun_y[curstage][2], 60);
+    spawn_turret(gun_x[curstage][3], gun_y[curstage][3], 75);
 }
 
 /* 地形リングを表示(page1)＝ここでゲーム画面が現れる。scroll_init は prerender 済みが前提。 */
 static void stage_begin_display(void) {
     scroll_init();
+    sea_init(curstage);          /* 艦種別の海コラム帯を選択 */
     vdp_set_hscroll(0, 0);
 }
 
@@ -167,8 +164,8 @@ static void stage_intro(void) {
     /* 枠無し: 船影(実艦BG)は stage_build 後に背景へ直接コピーする(下地/白枠は描かない)。 */
     vdp_text_s((u8)(128 - n * 8), 156, 15, 1, 2, nm);   /* 艦名(2倍角・中央寄せ, 1字=16px) */
 
-    draw_card_ship();                       /* 事前ベイク艦画像を即blit=カード完成(重い生成を待たない) */
     stage_build();                          /* ★カードの裏でゲーム本体の艦をバッファBへ生成(重い) */
+    vdp_copy(96, (u16)(SC_SHIPBUF_Y + 122), 96, 58, 64, 88);   /* 実艦Bの胴体中央を額縁へ(生成後に反映) */
 
     play_fanfare_open();                    /* 開始ファンファーレ(BGM無音でこれだけ鳴る) */
     for (f = 0; f < 40; f++) vdp_wait_frame();     /* 少し余韻(旧版と同じ40フレーム) */

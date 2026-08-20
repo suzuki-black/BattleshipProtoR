@@ -138,7 +138,19 @@ static void deckBox(s16 x, s16 y, s16 w, s16 h, u8 fill) {
 
 /* ---- 船体半幅プロファイル(y=ship-local)。整数除算は切り捨て(旧版と一致) ---- */
 static s16 hull_w(s16 y) {
-    if (g_hull == HULL_IOWA) {
+    if (g_hull == 1) {                                    /* フッド(細い艦体 半幅46/鋭い艦首) */
+        if (y < 44)  return (s16)(5 + (41 * y) / 44);
+        if (y < 436) return 46;
+        if (y < 474) return (s16)(46 - (16 * (y - 436)) / 38);
+        return (s16)(30 - (5 * (y - 474)) / 22);
+    }
+    if (g_hull == 2) {                                    /* 双子(ネルソン級, 半幅24/丸い艦首=2隻並べる) */
+        if (y < 28)  return (s16)(6 + (18 * y) / 28);
+        if (y < 440) return 24;
+        if (y < 476) return (s16)(24 - (10 * (y - 440)) / 36);
+        return (s16)(14 - (3 * (y - 476)) / 20);
+    }
+    if (g_hull == HULL_IOWA) {                            /* アイオワ */
         if (y < 50)  return (s16)(5 + (45 * y) / 50);
         if (y < 448) return 50;
         if (y < 486) return (s16)(50 - (20 * (y - 448)) / 38);
@@ -149,6 +161,14 @@ static s16 hull_w(s16 y) {
     if (y < 400) return 54;
     if (y < 462) return (s16)(54 - (21 * (y - 400)) / 62);
     return (s16)(33 - (3 * (y - 462)) / 34);
+}
+
+/* ---- 空母の飛行甲板プロファイル(フラット幅広, 半幅58) ---- */
+static s16 carrier_w(s16 y) {
+    if (y < 28)  return (s16)(20 + (38 * y) / 28);
+    if (y < 452) return 58;
+    if (y < 490) return (s16)(58 - (26 * (y - 452)) / 38);
+    return 32;
 }
 
 /* ---- 船体本体(走査線ごとの甲板＋縁陰影＋縦通材＋甲板斑点＋レール刻み＋ドロップシャドウ) ---- */
@@ -207,18 +227,26 @@ static void draw_bow(s16 cx, u8 cnt, u16 yb) {
     }
 }
 
-/* ---- 対空砲23基(ビスマルク/アイオワ共用 _bb 配置)。前14=大径, 後9=小径 ---- */
-static const u8  aag_x[NAAG] = {
-    108,148, 88,168, 88,168, 88,168, 88,168, 88,168, 88,168, 110,146,110,146,110,146,118,138,128
-};
-static const u16 aag_y[NAAG] = {
-    196,196,150,150,178,178,206,206,240,240,280,280,308,308,232,232,282,282,300,300,34,34,452
-};
-static void draw_aag(void) {
-    u8 i;
+/* ---- 対空砲23基(艦種別配置 bb=0/cv=1/hd=2/nl=3)。前14=大径(gb/ab), 後9=小径(gs/as) ---- */
+static const u8  aag_x_bb[NAAG] = { 108,148,88,168,88,168,88,168,88,168,88,168,88,168,110,146,110,146,110,146,118,138,128 };
+static const u16 aag_y_bb[NAAG] = { 196,196,150,150,178,178,206,206,240,240,280,280,308,308,232,232,282,282,300,300,34,34,452 };
+static const u8  aag_x_cv[NAAG] = { 74,182,74,182,74,182,74,182,74,182,74,182,74,182,74,182,144,144,128,100,156,128,172 };
+static const u16 aag_y_cv[NAAG] = { 62,62,106,106,150,150,194,194,238,238,282,282,326,326,370,370,140,220,22,442,442,448,405 };
+static const u8  aag_x_hd[NAAG] = { 100,156,100,156,100,156,100,156,100,156,100,156,100,156,128,118,138,118,138,128,118,138,128 };
+static const u16 aag_y_hd[NAAG] = { 145,145,180,180,215,215,250,250,285,285,315,315,345,345,195,235,235,270,270,330,388,388,452 };
+static const u8  aag_x_nl[NAAG] = { 62,90,62,90,62,90,76,166,194,166,194,166,194,180,76,76,62,90,180,180,166,194,180 };
+static const u16 aag_y_nl[NAAG] = { 140,140,220,220,300,300,180,140,140,220,220,300,300,180,110,260,340,340,110,260,340,340,380 };
+static void draw_aag(u8 tbl, u8 gb, u8 gs, u8 ab, u8 as) {
+    const u8 *ax; const u16 *ay; u8 i;
+    switch (tbl) {
+        case 1:  ax = aag_x_cv; ay = aag_y_cv; break;
+        case 2:  ax = aag_x_hd; ay = aag_y_hd; break;
+        case 3:  ax = aag_x_nl; ay = aag_y_nl; break;
+        default: ax = aag_x_bb; ay = aag_y_bb; break;
+    }
     for (i = 0; i < NAAG; i++) {
-        ground((s16)aag_x[i], (s16)aag_y[i], (i < 14) ? 7 : 5);
-        aaGun ((s16)aag_x[i], (s16)aag_y[i], (i < 14) ? 6 : 5);
+        ground((s16)ax[i], (s16)ay[i], (i < 14) ? gb : gs);
+        aaGun ((s16)ax[i], (s16)ay[i], (i < 14) ? ab : as);
     }
 }
 
@@ -241,14 +269,55 @@ static void run_ship_ops(const u8 *d) {
     }
 }
 
-void ship_render(u8 hull, u8 bow_cnt, u16 bow_yb, const u8 *ops) {
+/* ---- 空母の飛行甲板(舷側影→木甲板+光/影縁→板目→甲板ノイズ→センターライン破線)。コード生成。 ---- */
+static void carrier_deck(void) {
+    s16 y, y2, w, i, nx, ny; u16 h; u8 r;
+    y = 4;                                          /* 舷側影(±(w+2), SHADOWC)。同幅帯まとめ */
+    while (y < 494) {
+        w = carrier_w(y - 4);
+        y2 = y + 1; while (y2 < 494 && carrier_w(y2 - 4) == w) y2++;
+        sfill((u16)(128 - w - 2), (u16)(B + y), (u16)((w + 2) * 2), (u16)(y2 - y), SHADOWC);
+        y = y2;
+    }
+    y = 0;                                          /* 飛行甲板(木6)+左舷光(14,15)/右舷影(13,9) */
+    while (y < 496) {
+        w = carrier_w(y);
+        y2 = y + 1; while (y2 < 496 && carrier_w(y2) == w) y2++;
+        h = (u16)(y2 - y);
+        sfill((u16)(128 - w), (u16)(B + y), (u16)(w * 2), h, 6);
+        sfill((u16)(128 - w), (u16)(B + y), 1, h, 14);
+        sfill((u16)(128 - w + 1), (u16)(B + y), 1, h, 15);
+        sfill((u16)(128 + w - 1), (u16)(B + y), 1, h, 13);
+        sfill((u16)(128 + w - 2), (u16)(B + y), 1, h, 9);
+        y = y2;
+    }
+    for (i = -3; i <= 3; i++) if (i) sfill((u16)(128 + i * 15), (u16)(B + 28), 1, 424, 9);   /* 板目 */
+    for (ny = 8; ny < 488; ny += 2) {               /* 甲板ノイズ(9/14) */
+        w = carrier_w(ny); if (w < 14) continue;
+        for (nx = (s16)(128 - w + 3); nx < (s16)(128 + w - 3); nx += 2)
+            { r = rnd(); if (r < 70) spset((u16)nx, (u16)(B + ny), (u8)((r & 1) ? 9 : 14)); }
+    }
+    for (y = 34; y < 452; y += 14) sfill(127, (u16)(B + y), 2, 8, 15);   /* センターライン破線(白) */
+}
+
+void ship_render(u8 kind, u8 hull, u8 bow_cnt, u16 bow_yb, u8 aag_tbl, const u8 *aagp, const u8 *ops, const u8 *ops2) {
     u8 r;
     g_hull = hull;
     rng = 12345;                                   /* 斑点を毎回同一に(決定的) */
     for (r = 0; r < SC_SHIP_ROWS; r++)             /* 海テンプレ(512)を31行タイルして下地に */
         vdp_copy(0, SC_SEATMPL_Y, 0, (u16)(B + (u16)r * 16), 256, 16);
-    paint_hull_at(128);                            /* 船体(コード) */
-    draw_bow(128, bow_cnt, bow_yb);                /* 波切り艦首(コード) */
-    run_ship_ops(ops);                             /* 砲塔/艦橋/煙突/副砲(データ) */
-    draw_aag();                                    /* 対空砲23基(コード) */
+    if (kind == 2) {                               /* 空母: 飛行甲板→carrier_ops→島の金属ノイズ→carrier2_ops */
+        carrier_deck();
+        run_ship_ops(ops);
+        metalNoise(140, 150, 36, 42);
+        run_ship_ops(ops2);
+    } else if (kind == 1) {                        /* 双子: 2隻ぶんの船体+艦首、上構は1回のOPS(絶対X) */
+        paint_hull_at(76);  draw_bow(76, bow_cnt, bow_yb);
+        paint_hull_at(180); draw_bow(180, bow_cnt, bow_yb);
+        run_ship_ops(ops);
+    } else {                                       /* 単艦(BB/Iowa/Hood) */
+        paint_hull_at(128); draw_bow(128, bow_cnt, bow_yb);
+        run_ship_ops(ops);
+    }
+    draw_aag(aag_tbl, aagp[0], aagp[1], aagp[2], aagp[3]);   /* 対空砲23基(艦種別配置) */
 }
