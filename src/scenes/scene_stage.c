@@ -36,6 +36,21 @@ static const u8 *const fd_gun_stage[STAGE_COUNT] = {
 /* 戦闘機の発砲: 45f毎に自機狙い＋散らし円錐(±3)。空中の的なので抑え込みは無し(suppress=0)。 */
 static const u8 fd_faim[] = { 45,  0, FIRE_AIMED, 3, 1, 2, FIRE_END };
 
+/* ★海イントロ敵機=各面ボス艦の所属国の典型機(主人公=零戦/日本なので敵は各国海軍)。
+   面順=BB(独)/Carrier(米)/Hood(英)/Twins(独)/Iowa(米)。形(pat)＋視認性優先色(col)で識別。 */
+static const u8 fighter_pat[STAGE_COUNT]  = { SPR_BF109, SPR_CORSAIR, SPR_SPITFIRE, SPR_FW190, SPR_HELLCAT };
+static const u8 fighter_col[STAGE_COUNT]  = { 3, 12, 9, 14, 11 };  /* 独緑/米橙/英オリーブ/独灰/米赤(単色fallback) */
+static const u8 fighter_arch[STAGE_COUNT] = { 0, 2, 1, 0, 2 };     /* 挙動: 独=急降下/米=直進/英=蛇行 */
+static const u8 fighter_iv[STAGE_COUNT]   = { 40, 28, 40, 40, 28 };/* 出現間隔(米面は数で押す=短い) */
+/* mode2の1ライン1色で陰影(row0=上/尾〜row15=下/機首)。国籍ベース色＋主翼ハイライト／尾翼・機首シャドウ。 */
+static const u8 fighter_ctab[STAGE_COUNT][16] = {
+    { 3, 3, 3, 3, 3, 3, 8,10, 8, 3, 3, 3, 3, 3, 3, 3},  /* Bf109 独緑: 翼r6-8を明緑 */
+    {12,12,11,12,12,12,14,12,11,12,12,12,11,12,12,12},  /* Corsair 米橙: ガル翼端に光沢14/翼根影11 */
+    { 9, 3, 9, 9, 9, 9,10,10,10,10, 9, 9, 9, 9, 9, 9},  /* Spitfire 英: 楕円翼r6-9を明色 */
+    {14,14,13,14,14,14,15,15,14,14,14,14,13,14,13,14},  /* Fw190 独灰: 翼に白光沢/尾機首に暗灰 */
+    {11,11,11,11,11,11,12,15,12,11,11,11,11,11,11,11},  /* Hellcat 米赤: 翼peak r7に白光沢 */
+};
+
 static u16 rng;
 static u8  rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }
 
@@ -300,12 +315,17 @@ u8 stage_update(void) {
         scroll_to(cam);
         /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
            (でないと戦闘機が上端=艦の上に突然湧いてゴミに見える。HANDOFF §2: 空戦→戦艦)。 */
-        if (cam > SC_CAM_SHIP && (++ftick % 40) == 0) {
+        if (cam > SC_CAM_SHIP && (++ftick % fighter_iv[curstage]) == 0) {
             Entity *f = ent_spawn(ET_FIGHTER);
             if (f) {
+                u8 arch = fighter_arch[curstage];
                 f->x = 24 + (rnd() % 200); f->y = -16;
-                f->vx = (rnd() & 1) ? 1 : -1; f->vy = 2 + (rnd() % 2);
-                f->color = 11; f->pat = SPR_FIGHTER;   /* 赤(旧パレット11) */
+                f->ax = arch;                                  /* 挙動archetype(bh_fighterが解釈) */
+                if (arch == 0)      { f->vx = (rnd() & 1) ? 1 : -1; f->vy = 3; }              /* 独 急降下(以後加速) */
+                else if (arch == 1) { f->vx = (rnd() & 1) ? 2 : -2; f->vy = 2; }              /* 英 蛇行 */
+                else                { f->vx = (rnd() & 1) ? 1 : -1; f->vy = 2 + (rnd() % 2); }/* 米 直進 */
+                f->color = fighter_col[curstage]; f->pat = fighter_pat[curstage];
+                f->coltab = fighter_ctab[curstage];   /* 行別色=陰影 */
                 if (rnd() & 1) { f->fire = fd_faim; f->ftimer = 20 + (rnd() % 30); }
             }
             sfx(1, SFX_HIT);

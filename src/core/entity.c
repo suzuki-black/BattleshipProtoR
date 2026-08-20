@@ -80,13 +80,22 @@ static void bh_turret(Entity *e) {
     else e->ftimer = 1;                          /* 画面外はチャージ据置(即撃ちさせない) */
 }
 
-/* 敵戦闘機(空戦): 下方向へ進み、左右に浅く蛇行しつつ画面下で消滅。fireを持てば発砲も。 */
+/* 敵戦闘機(空戦): 下方向へ進み画面下で消滅。fireを持てば発砲も。
+   ★所属国別の飛び方(archetype=e->ax, 位相=e->ay):
+     0=独(急降下): 徐々に加速する直進降下(一撃離脱)。
+     1=英(旋回機): 16fごとにvx反転=横蛇行しながら降下。
+     2=米(直進/数): 一定速の直進(端で反転)。scene側で出現間隔を詰めて数で押す。 */
 static void bh_fighter(Entity *e) {
     e->y += e->vy;
     e->x += e->vx;
-    if (e->x < 0 || e->x > (s16)(SCR_W - e->w)) e->vx = -e->vx;   /* 端で横反転=浅い蛇行 */
+    if ((u8)e->ax == 0) {                                 /* 独: 急降下(加速) */
+        if ((++e->ay & 31) == 0 && e->vy < 6) e->vy++;
+    } else if ((u8)e->ax == 1) {                          /* 英: 横蛇行 */
+        if ((++e->ay & 15) == 0) e->vx = (s16)(-e->vx);
+    }
+    if (e->x < 0 || e->x > (s16)(SCR_W - e->w)) e->vx = (s16)(-e->vx);  /* 端で横反転 */
     if (e->fire) run_fire(e);
-    if (e->y > SCR_H + 8) e->active = 0;                          /* 下へ抜けたら消滅 */
+    if (e->y > SCR_H + 8) e->active = 0;                  /* 下へ抜けたら消滅 */
 }
 
 /* 撃破エフェクト: 寿命を ftimer で数え、色を変えながら消滅。 */
@@ -214,6 +223,7 @@ Entity *ent_spawn(u8 type) {
             e->w = 16; e->h = 16; e->color = 15; e->pat = 0;
             e->hidden = 0; e->hp = 1; e->team = TEAM_ENEMY;
             e->fire = (const u8 *)0; e->ftimer = 0;
+            e->coltab = (const u8 *)0;
             return e;
         }
     }
@@ -238,7 +248,8 @@ void ent_update_all(void) {
        欠落を「常に同じ弾が消える」でなく「フレーム毎に入れ替わるちらつき」に分散する。
      - 総数は 32 枚で頭打ち(それ以上は描かない)。 */
 static u8 draw1(u8 slot, const Entity *e) {   /* 1体を slot へ描画し、次 slot を返す */
-    vdp_sprite_color(slot, e->color);
+    if (e->coltab) vdp_sprite_color_tab(slot, e->coltab);   /* 行別色(陰影) */
+    else           vdp_sprite_color(slot, e->color);        /* 単色 */
     vdp_sprite_pos(slot, (u8)e->x, (u8)e->y, e->pat);
     return (u8)(slot + 1);
 }

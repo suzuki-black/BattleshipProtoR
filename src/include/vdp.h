@@ -71,6 +71,7 @@ void vdp_set_display_page(u8 page);
 void vdp_sprite_init(void);                          /* 16x16化＋テーブル基底設定＋全消し */
 void vdp_sprite_pattern(u8 patnum, const u8 *d32);   /* 16x16=32B をパターン patnum へ(patnumは4の倍数) */
 void vdp_sprite_color(u8 slot, u8 color);            /* slot の色表16行を単色 color に */
+void vdp_sprite_color_tab(u8 slot, const u8 *tab16); /* slot の色表を行別に(陰影)。row0=上 */
 void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum); /* slot の属性(Y=y-1,X,pattern)を更新 */
 void vdp_sprite_hide_from(u8 slot);                  /* slot に停止マーカ(Y=208)=以降非表示 */
 

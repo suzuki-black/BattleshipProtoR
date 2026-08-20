@@ -11,6 +11,14 @@
 #define SPR_DIGIT0  12  /* 数字0のパターン番号。数字d = SPR_DIGIT0 + d*4(HUD用, BIOSフォント) */
 #define SPR_TURRET  52  /* 戦艦の主砲塔(灰の砲塔＋2連装砲身)。数字は12..48を占有→次は52 */
 
+/* 海イントロ敵機=各面ボス艦の所属国の当時の典型機(上面視・機首下向き)。番号は4刻み。
+   ハイブリッド識別: 形(主翼の平面形)＋視認性優先色(scene_stage の fighter_col)。 */
+#define SPR_BF109    56  /* 独: Bf109 = 細い先細り翼 */
+#define SPR_CORSAIR  60  /* 米: F4U = 逆ガル翼(曲がった翼) */
+#define SPR_SPITFIRE 64  /* 英: Spitfire = 楕円翼 */
+#define SPR_FW190    68  /* 独: Fw190 = 幅広翼＋太い機首 */
+#define SPR_HELLCAT  72  /* 米: F6F = 幅広角形の直線翼(ずんぐり) */
+
 void sprites_load(void);   /* 全パターンを VRAM(0x7800)へ投入 */
 
 #endif /* SPRITES_H */

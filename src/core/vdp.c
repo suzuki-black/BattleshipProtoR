@@ -340,6 +340,13 @@ void vdp_sprite_color(u8 slot, u8 color) {
     for (i = 0; i < 16; i++) VDP_DAT = color;
 }
 
+/* mode2の「1ライン1色」で陰影を付ける: 16行それぞれの色を tab16[0..15] から書く(row0=上)。 */
+void vdp_sprite_color_tab(u8 slot, const u8 *tab16) {
+    u8 i;
+    vdp_write_addr(SPR_COLOR + (u16)slot * 16);
+    for (i = 0; i < 16; i++) VDP_DAT = tab16[i];
+}
+
 void vdp_sprite_pos(u8 slot, u8 x, u8 y, u8 patnum) {
     vdp_write_addr(SPR_ATTR + (u16)slot * 4);
     /* 表示Y=属性Y+1 のため -1。縦スクロール量を足して画面固定に補正。 */
