@@ -255,7 +255,7 @@ u8 stage_update(void) {
         }
         /* 戦艦が出現した瞬間に、残っている空襲(戦闘機/敵弾)を一掃(艦の手前に居残るゴミ防止)。 */
         if (cam <= SC_CAM_SHIP) {   /* 戦艦出現後は空襲を退かせる: 初回に戦闘機＋敵弾を一掃、以後は戦闘機のみ毎フレーム掃除 */
-            if (!raided) { raided = 1; ent_clear_enemies(); } else ent_clear_fighters();
+            if (!raided) { raided = 1; ent_clear_enemies(); sea_set_ship(curstage); } else ent_clear_fighters();
         }
         if (cam <= SC_CAM_STERN) { phase = 1; camdir = -1; }
     } else {

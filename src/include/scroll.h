@@ -26,8 +26,9 @@
 
 /* 海テンプレート(512)を構築(ノイズ入り)。艦を描く前に呼ぶ(艦がこれを下地にタイルする)。 */
 void scroll_build_sea(void);
-/* SEA13 の帯選択＋位相リセット(面ごと)。stage=0..(艦種)。 */
+/* SEA13 初期化(イントロ=全幅アニメ)。艦が出たら sea_set_ship で艦回避帯へ切替。 */
 void sea_init(u8 stage);
+void sea_set_ship(u8 stage);
 /* SEA13 毎フレーム: 1stripの海コラムを位相流し(vdp_frame/scroll_to の後に呼ぶ)。 */
 void sea_frame(void);
 

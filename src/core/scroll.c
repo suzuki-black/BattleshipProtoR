@@ -36,17 +36,25 @@ static const u8 sea_bb[4] = { 0, 72, 196, 60 };            /* ビスマルク/�
 static const u8 sea_cv[4] = { 0, 66, 190, 66 };            /* 空母(半幅58,対称影) */
 static const u8 sea_hd[4] = { 0, 80, 190, 66 };            /* フッド(半幅46) */
 static const u8 sea_tw[6] = { 0, 50, 116, 38, 220, 36 };   /* 双子: 左/船間/右の3帯 */
-static const u8 *sea_ranges = sea_bb;
+static const u8 sea_full[4] = { 0, 128, 128, 128 };        /* イントロ=全幅(艦がまだ無い→中央も流す) */
+static const u8 *sea_ranges = sea_full;
 static u8 sea_nranges = 2;
 
+/* イントロ(艦未出現)は全幅アニメで初期化。艦が出たら sea_set_ship で艦回避帯へ切替える。 */
 void sea_init(u8 stage) {
+    (void)stage;
+    sea_ranges = sea_full; sea_nranges = 2;
+    sea_phase = 0; sea_acc = 0; sea_strip = 0;
+}
+
+/* 艦出現後: 艦とその影を避けた海コラム帯へ切替(艦のx範囲を塗り潰さない)。 */
+void sea_set_ship(u8 stage) {
     switch (stage) {
         case 2:  sea_ranges = sea_cv; sea_nranges = 2; break;   /* 空母 */
         case 3:  sea_ranges = sea_hd; sea_nranges = 2; break;   /* フッド */
         case 4:  sea_ranges = sea_tw; sea_nranges = 3; break;   /* 双子(3帯) */
         default: sea_ranges = sea_bb; sea_nranges = 2; break;   /* 0=BB / 1=Iowa */
     }
-    sea_phase = 0; sea_acc = 0; sea_strip = 0;
 }
 
 /* 1帯を16px周期wrapでテンプレから塗る(上[p..16]＋下[0..p])。source X=dest X=YMMM相当。 */
