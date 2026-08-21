@@ -178,12 +178,24 @@ static void bh_combo(Entity *e) {
     e->active = 0;
 }
 
-/* 撃破エフェクト: 寿命を ftimer で数え、色を変えながら消滅。 */
-static const u8 exp_col[6] = { 15, 15, 12, 11, 7, 7 };   /* 白→橙→赤→暗(旧パレットの火色) */
+/* 撃破エフェクト: 4コマの火球アニメ(核→炸裂→大輪→残火)を進めつつ 白→橙→赤→暗 と冷めて消滅。
+   spawn 時 ftimer=16。elapsed=16-ftimer を >>2 でコマ(0..3)に。 */
+static const u8 exp_pat[4]  = { SPR_EXP0, SPR_EXP1, SPR_EXP2, SPR_EXP3 };
+static const u8 exp_fcol[4] = { 15, 12, 11, 7 };            /* 白→橙→赤→暗 */
 static void bh_explosion(Entity *e) {
+    u8 f;
     if (e->ftimer == 0) { e->active = 0; return; }
     e->ftimer--;
-    e->color = exp_col[(e->ftimer >> 1) % 6];
+    f = (u8)((16 - e->ftimer) >> 2); if (f > 3) f = 3;
+    e->pat = exp_pat[f]; e->color = exp_fcol[f];
+}
+
+/* 火花(被弾ヒット/マズルフラッシュ): SPR_FLASH を短時間 白→淡→橙 と明滅して消滅。 */
+static const u8 spark_col[4] = { 15, 14, 12, 11 };
+static void bh_spark(Entity *e) {
+    if (e->ftimer == 0) { e->active = 0; return; }
+    e->ftimer--;
+    e->color = spark_col[(e->ftimer >> 1) & 3];
 }
 
 extern void bh_player(Entity *e);   /* player.c(入力/発砲を持つのでゲーム側モジュールへ) */
@@ -202,6 +214,7 @@ static const Behavior behaviors[ET_COUNT] = {
     bh_pursuer,   /* ET_PURSUER(艦載機の8方向追尾) */
     bh_smissile,  /* ET_SMISSILE(潜水艦ミサイル4相) */
     bh_combo,     /* ET_COMBO(双子艦の合体弾予告) */
+    bh_spark,     /* ET_SPARK(火花) */
 };
 
 u8 ent_count(u8 type) {
@@ -212,7 +225,11 @@ u8 ent_count(u8 type) {
 
 void ent_spawn_explosion(s16 x, s16 y) {
     Entity *e = ent_spawn(ET_EXPLOSION);
-    if (e) { e->x = x; e->y = y; e->pat = SPR_BLOCK; e->color = 15; e->ftimer = 14; }
+    if (e) { e->x = x; e->y = y; e->pat = SPR_EXP0; e->color = 15; e->ftimer = 16; }
+}
+void ent_spawn_spark(s16 x, s16 y) {
+    Entity *e = ent_spawn(ET_SPARK);
+    if (e) { e->x = x; e->y = y; e->pat = SPR_FLASH; e->color = 15; e->ftimer = 6; }
 }
 
 /* ---- 当たり判定 ---- */
@@ -248,6 +265,7 @@ void ent_resolve_collisions(void) {
             if (t->type == ET_TURRET && overlap(b, t)) {
                 b->active = 0;
                 if (--t->hp == 0) { t->active = 0; g_gun_kills++; g_score += 50; ent_spawn_explosion(t->x, t->y); }
+                else ent_spawn_spark(b->x, b->y);   /* 非撃破のヒット=火花フィードバック */
                 break;
             }
         }

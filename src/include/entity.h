@@ -22,6 +22,7 @@ enum {
     ET_PURSUER,   /* 艦載機(空母F6F/アイオワF4U): ホバー→8方向で自機を大回り追尾(旧版移植)。ax=向き/ay=旋回冷却/ftimer=展開 */
     ET_SMISSILE,  /* 潜水艦ミサイル(フッド): 舷側発進→浮上→弱誘導→8方向炸裂。ax=相(1..3)/ay=舷(±1)/ftimer=相タイマ。撃墜不可 */
     ET_COMBO,     /* 合体弾の予告(双子艦): 左右2発が中心へ収束→合体して自機狙いの大弾を発射。ay=中心x/y=中心y/x=半間隔off/ftimer=収束 */
+    ET_SPARK,     /* 火花(被弾ヒット/マズルフラッシュ): SPR_FLASHを数フレーム明滅して消滅 */
     ET_COUNT
 };
 
@@ -64,6 +65,7 @@ Entity *ent_spawn(u8 type);         /* 空きを1つ確保(既定値で初期化
 void    ent_update_all(void);       /* 全 active の behavior update を回す */
 void    ent_draw_all(void);         /* active をスプライトへ(hidden除く) */
 u8      ent_count(u8 type);         /* active な type の数(撃破判定用) */
-void    ent_spawn_explosion(s16 x, s16 y);  /* 撃破エフェクトを1つ */
+void    ent_spawn_explosion(s16 x, s16 y);  /* 撃破エフェクト(火球アニメ)を1つ */
+void    ent_spawn_spark(s16 x, s16 y);      /* 小さな火花(被弾ヒット/発砲)を1つ */
 
 #endif /* ENTITY_H */

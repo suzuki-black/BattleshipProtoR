@@ -24,6 +24,11 @@
 #define SPR_ZERO2   80   /* 零戦 コマB(プロペラ太=回転ブラー) */
 #define SPR_PBULLET 84   /* 自機弾=赤い縦ストリーク(旧pat44) */
 #define SPR_EBSHELL 88   /* 敵の時限信管弾=太いカプセル(旧pat100)。通常敵弾より大きく予告的 */
+#define SPR_EXP0    92   /* 爆発アニメ4コマ(核→炸裂→輪→残火)。撃破/被弾で使用 */
+#define SPR_EXP1    96
+#define SPR_EXP2    100
+#define SPR_EXP3    104
+#define SPR_FLASH   108  /* マズルフラッシュ(自機発砲時の一瞬の光) */
 extern const u8 zcol[16];   /* 零戦の16行カラーテーブル(緑系+ハイライト) */
 
 void sprites_load(void);   /* 全パターンを VRAM(0x7800)へ投入 */
