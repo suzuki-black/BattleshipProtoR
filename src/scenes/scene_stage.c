@@ -181,6 +181,18 @@ static void special_update(void) {
             sfx(1, SFX_EFIRE);
             spc_timer = 120;                     /* 次の射出まで(旧版 ep_launch) */
         } else spc_timer = 30;                   /* 満杯なら短く再試行 */
+    } else if (curstage == 2) {                   /* 3面 フッド: 舷側から潜水艦ミサイル(浮上→弱誘導→8方向炸裂) */
+        if (ent_count(ET_SMISSILE) < 3) {
+            Entity *e = ent_spawn(ET_SMISSILE);
+            if (e) {
+                s8 side = (rnd() & 1) ? 1 : -1;
+                e->x = (s16)(128 + g_meander) + (s16)side * 46;   /* 舷側 */
+                e->y = (s16)(40 + (rnd() % 120));
+                e->ax = 1; e->ay = side; e->ftimer = 24;
+            }
+            sfx(1, SFX_EFIRE);
+            spc_timer = 90;
+        } else spc_timer = 30;
     }
 }
 

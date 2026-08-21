@@ -129,6 +129,37 @@ static void bh_pursuer(Entity *e) {
     if (e->x < -18 || e->x > 274 || e->y < -18 || e->y > 226) e->active = 0;
 }
 
+/* 潜水艦ミサイル(フッド固有): 舷側から発進(ph1)→浮上し弱誘導(ph2)→点火点滅→8方向炸裂(ph3)。
+   ph>=2(浮上後)は体自体が危険。撃墜不可(ライフサイクル完遂)。旧版4相を3相にコンパクト移植。 */
+static void bh_smissile(Entity *e) {
+    u8 ph = (u8)e->ax;
+    if (ph == 1) {                              /* 発進: 舷側から外へ、水中(暗青の小弾) */
+        e->x += (s16)e->ay * 2;
+        if (e->x < 6) e->x = 6; else if (e->x > 250) e->x = 250;
+        e->pat = SPR_BULLET; e->color = 7;
+        if (e->ftimer) e->ftimer--; else { e->ax = 2; e->ftimer = 40; }
+    } else if (ph == 2) {                        /* 浮上→弱誘導(自機へ1px。舷側の外に留まる) */
+        s16 shipC = 128 + g_meander, wantx = (s16)g_player_x;
+        if (e->ay < 0) { if (wantx > shipC - 52) wantx = shipC - 52; }
+        else           { if (wantx < shipC + 52) wantx = shipC + 52; }
+        if (e->x < wantx) e->x++; else if (e->x > wantx) e->x--;
+        if (e->y < (s16)g_player_y) e->y++; else if (e->y > (s16)g_player_y) e->y--;
+        e->pat = SPR_EBSHELL; e->color = 11;    /* 浮上=赤い誘導弾頭(艦の白/AA橙と区別) */
+        if (e->ftimer) e->ftimer--; else { e->ax = 3; e->ftimer = 16; }
+    } else {                                     /* 点火(点滅)→8方向炸裂 */
+        e->color = 12; e->hidden = (e->ftimer & 2) ? 1 : 0;
+        if (e->ftimer) { e->ftimer--; return; }
+        e->hidden = 0;
+        { u8 k; for (k = 0; k < 8; k++) {
+            Entity *b = ent_spawn(ET_BULLET);
+            if (b) { b->team = TEAM_ENEMY; b->x = e->x; b->y = e->y;
+                     b->vx = (s16)dirdx8[k] * 2; b->vy = (s16)dirdy8[k] * 2;
+                     b->color = 12; b->pat = SPR_BULLET; } } }
+        ent_spawn_explosion(e->x, e->y); sfx(2, SFX_HIT);
+        e->active = 0;
+    }
+}
+
 /* 撃破エフェクト: 寿命を ftimer で数え、色を変えながら消滅。 */
 static const u8 exp_col[6] = { 15, 15, 12, 11, 7, 7 };   /* 白→橙→赤→暗(旧パレットの火色) */
 static void bh_explosion(Entity *e) {
@@ -151,6 +182,7 @@ static const Behavior behaviors[ET_COUNT] = {
     bh_explosion, /* ET_EXPLOSION */
     bh_aaburst,   /* ET_AABURST(時限信管弾→下向き3破片へ炸裂) */
     bh_pursuer,   /* ET_PURSUER(艦載機の8方向追尾) */
+    bh_smissile,  /* ET_SMISSILE(潜水艦ミサイル4相) */
 };
 
 u8 ent_count(u8 type) {
@@ -209,7 +241,8 @@ void ent_resolve_collisions(void) {
             Entity *e = &pool[j];
             if (!e->active) continue;
             if ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_FIGHTER
-                || e->type == ET_AABURST || e->type == ET_PURSUER) {
+                || e->type == ET_AABURST || e->type == ET_PURSUER
+                || (e->type == ET_SMISSILE && e->ax >= 2)) {   /* ミサイルは浮上後のみ危険 */
                 if (overlap(e, p)) {
                     e->active = 0;                 /* 敵/敵弾は消す(すり抜け防止) */
                     if (g_pinv == 0 && !g_invinc) {/* 被弾直後の無敵中/設定無敵 は無傷 */
