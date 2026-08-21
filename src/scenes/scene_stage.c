@@ -193,6 +193,18 @@ static void special_update(void) {
             sfx(1, SFX_EFIRE);
             spc_timer = 90;
         } else spc_timer = 30;
+    } else if (curstage == 4) {                   /* 5面 アイオワ: 画面端から連続空襲(F4U)。ホバー無し即追尾=総攻撃 */
+        if (ent_count(ET_PURSUER) < 4) {
+            Entity *e = ent_spawn(ET_PURSUER);
+            if (e) {
+                e->x = (rnd() & 1) ? -16 : 268;          /* 左右端 交互 */
+                e->y = (s16)(16 + (rnd() % 168));
+                e->ax = 4; e->ftimer = 0;                /* 展開無し=即追尾 */
+                e->pat = SPR_CORSAIR; e->coltab = fighter_ctab[1]; e->shadow = 1;  /* F4U(橙)＋落ち影 */
+            }
+            sfx(1, SFX_EFIRE);
+            spc_timer = 45;                              /* 総攻撃=短間隔 */
+        } else spc_timer = 20;
     }
 }
 
