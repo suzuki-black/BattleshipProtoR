@@ -224,6 +224,7 @@ Entity *ent_spawn(u8 type) {
             e->hidden = 0; e->hp = 1; e->team = TEAM_ENEMY;
             e->fire = (const u8 *)0; e->ftimer = 0;
             e->coltab = (const u8 *)0;
+            e->shadow = 0;
             return e;
         }
     }
@@ -253,6 +254,15 @@ static u8 draw1(u8 slot, const Entity *e) {   /* 1体を slot へ描画し、次
     vdp_sprite_pos(slot, (u8)e->x, (u8)e->y, e->pat);
     return (u8)(slot + 1);
 }
+
+/* 落ち影: 自身のパターンを暗色13で右下へオフセット描画(海面に落ちた影)。 */
+#define SHADOW_DX 5
+#define SHADOW_DY 6
+static u8 draw_shadow(u8 slot, const Entity *e) {
+    vdp_sprite_color(slot, 13);   /* ほぼ黒(1,1,1) */
+    vdp_sprite_pos(slot, (u8)(e->x + SHADOW_DX), (u8)(e->y + SHADOW_DY), e->pat);
+    return (u8)(slot + 1);
+}
 static u8 visible(const Entity *e, u8 skip_player) {
     if (!e->active || e->hidden) return 0;
     if (skip_player ? (e->type == ET_PLAYER) : (e->type != ET_PLAYER)) return 0;
@@ -278,6 +288,13 @@ void ent_draw_all(void) {
             i = (u8)(start + j); if (i >= n) i -= n;
             slot = draw1(slot, &pool[vis[i]]);
         }
+    }
+    /* 落ち影パス: 影は最後=最も高いslot=最低優先で描く(混雑ラインではゲーム弾/敵機に譲って先に落ちる)。 */
+    for (i = 0; i < ENT_MAX && slot < 32; i++) {
+        const Entity *e = &pool[i];
+        if (e->active && !e->hidden && e->shadow &&
+            e->x >= 0 && e->x < 256 && e->y > -16 && e->y < 212)
+            slot = draw_shadow(slot, e);
     }
     vdp_sprite_hide_from(slot);
     rot++;

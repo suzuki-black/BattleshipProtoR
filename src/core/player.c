@@ -31,11 +31,14 @@ void bh_player(Entity *e) {
             b->x = e->x; b->y = e->y - 10;
             b->vx = 0; b->vy = -6;
             b->team = TEAM_PLAYER;
-            b->pat = SPR_BULLET; b->color = 7;   /* シアン */
+            b->pat = SPR_PBULLET; b->color = 11;   /* 赤い縦ストリーク(旧pat44) */
         }
         e->ftimer = PCOOLDN;
         sfx(0, SFX_SHOT);
     }
+
+    /* プロペラ回転: 先頭2行(細/太)を交互にしてブラー。被弾点滅中(hidden)は下で上書き。 */
+    { static u8 prop; prop++; e->pat = (prop & 2) ? SPR_ZERO2 : SPR_ZERO; }
 
     /* 被弾直後の無敵: カウントを減らしつつ点滅(4フレーム周期で明滅) */
     if (g_pinv) { g_pinv--; e->hidden = (g_pinv & 4) ? 1 : 0; }

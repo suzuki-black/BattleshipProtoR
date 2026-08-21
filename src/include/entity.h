@@ -41,6 +41,7 @@ typedef struct Entity {
     const u8 *fire;     /* fire スクリプト(ET_SHOOTER/一部FIGHTER)。無ければ NULL */
     u8  ftimer;         /* 次発火/クールダウンの残りフレーム */
     const u8 *coltab;   /* 行別スプライト色表16B(mode2の陰影)。NULLなら単色 color */
+    u8  shadow;         /* 1=海面へ落ち影を投げる(自機/敵機。低優先の別スプライト) */
 } Entity;
 
 /* 当たり判定を解決(自機弾×敵戦闘機、敵弾/戦闘機×自機)。撃破/被弾数を計上。 */

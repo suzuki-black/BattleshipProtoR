@@ -177,7 +177,7 @@ static void stage_build(void) {
     weaveX = 0; wdir = 1; camdir = -1; g_meander = 0; rng = 0x1234;
 
     e = ent_spawn(ET_PLAYER);
-    if (e) { e->x = 120; e->y = 176; e->color = 15; e->pat = SPR_BLOCK; }
+    if (e) { e->x = 120; e->y = 176; e->pat = SPR_ZERO; e->coltab = zcol; e->shadow = 1; }  /* 零戦＋行別陰影＋落ち影 */
 
     g_php = g_durability ? g_durability : 1;   /* 1機あたりの耐久HP(設定) */
     g_pinv = 0;

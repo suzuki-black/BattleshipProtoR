@@ -19,6 +19,12 @@
 #define SPR_FW190    68  /* 独: Fw190 = 幅広翼＋太い機首 */
 #define SPR_HELLCAT  72  /* 米: F6F = 幅広角形の直線翼(ずんぐり) */
 
+/* 自機=零戦(A6M, 機首上向き)。プロペラ回転の2コマ(先頭行を交互)。色は zcol の行別陰影。 */
+#define SPR_ZERO    76   /* 零戦 コマA(プロペラ細) */
+#define SPR_ZERO2   80   /* 零戦 コマB(プロペラ太=回転ブラー) */
+#define SPR_PBULLET 84   /* 自機弾=赤い縦ストリーク(旧pat44) */
+extern const u8 zcol[16];   /* 零戦の16行カラーテーブル(緑系+ハイライト) */
+
 void sprites_load(void);   /* 全パターンを VRAM(0x7800)へ投入 */
 
 #endif /* SPRITES_H */
