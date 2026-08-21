@@ -53,7 +53,7 @@ static void bh_aaburst(Entity *e) {
                     f->team = TEAM_ENEMY;
                     f->x = e->x; f->y = (s16)(e->y + k * 3);   /* Yを少しずらし同一走査線回避 */
                     f->vx = (s16)(dirdx8[shdir[k]] * 3); f->vy = (s16)(dirdy8[shdir[k]] * 3);
-                    f->color = 11; f->pat = SPR_BULLET;
+                    f->color = 12; f->pat = SPR_BULLET;   /* 破片=橙(敵弾統一色) */
                 }
             }
             ent_spawn_explosion(e->x, e->y);    /* 炸裂の見た目 */

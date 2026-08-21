@@ -23,6 +23,7 @@
 #define SPR_ZERO    76   /* 零戦 コマA(プロペラ細) */
 #define SPR_ZERO2   80   /* 零戦 コマB(プロペラ太=回転ブラー) */
 #define SPR_PBULLET 84   /* 自機弾=赤い縦ストリーク(旧pat44) */
+#define SPR_EBSHELL 88   /* 敵の時限信管弾=太いカプセル(旧pat100)。通常敵弾より大きく予告的 */
 extern const u8 zcol[16];   /* 零戦の16行カラーテーブル(緑系+ハイライト) */
 
 void sprites_load(void);   /* 全パターンを VRAM(0x7800)へ投入 */

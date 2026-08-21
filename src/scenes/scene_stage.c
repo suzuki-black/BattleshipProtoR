@@ -149,8 +149,8 @@ static void aa_update(void) {
         if (aa_fire[i]) { aa_fire[i]--; continue; }
         sx = gx + g_meander;                                /* 画面X(蛇行に追従) */
         { u8 dir = aim_dir(sx, sy, (s16)g_player_x, (s16)g_player_y);
-          if (i < 14) { emit_burst(sx, sy, dir, 2, 42); }    /* 大型=時限信管エアバースト(橙, fuze42) */
-          else { Entity *b = emit(sx, sy, dir, 0, 2); if (b) b->color = 11; }  /* 小型=通常小弾(赤) */
+          if (i < 14) { emit_burst(sx, sy, dir, 2, 42); }    /* 大型=時限信管エアバースト(橙カプセル, fuze42) */
+          else { emit(sx, sy, dir, 0, 2); }                  /* 小型=通常小弾(橙ペレット) */
         }
         aa_fire[i] = (u8)(aafire_iv[curstage] + i * 6);
         sfx(1, SFX_EFIRE);

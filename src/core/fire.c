@@ -4,8 +4,9 @@
 #include "fire.h"
 #include "player.h"      /* g_player_x/y(自機狙い) */
 #include "gamestate.h"   /* g_difficulty(抑え込み半径の難易度補正) */
+#include "sprites.h"     /* SPR_BULLET/SPR_EBSHELL(敵弾パターン) */
 
-#define BULLET_PAT 4   /* 弾スプライトのパターン番号(scene 側で投入) */
+#define BULLET_PAT SPR_BULLET   /* 敵の通常弾=小ペレット */
 
 /* ゼロ距離抑え込み半径の難易度補正(EASY=広くて易/HARD=狭くて難)。実効=base+adj(下限8)。 */
 static const s8 supp_adj[3] = { +12, 0, -8 };
@@ -20,8 +21,9 @@ static const s8 dvy[32] = {
     8,  8,  7,  7,  6,  4,  3,  2,  0, -2, -3, -4, -6, -7, -7, -8
 };
 
-/* 弾種→色(0-15)。 */
-static const u8 kind_col[4] = { 15, 10, 9, 7 };
+/* 敵弾の色(0-15)。旧版準拠で全敵弾を橙(12)=危険色に統一(自機弾は player 側で赤を直接指定)。
+   種別差は色でなくパターン/大きさで付ける(通常=小ペレット / 信管弾=太カプセル)。 */
+static const u8 kind_col[4] = { 12, 12, 12, 12 };
 
 /* 発砲用の簡易PRNG(LCG)。散らしに使う。 */
 static u16 fr = 0x2B7D;
@@ -48,7 +50,7 @@ Entity *emit_burst(s16 x, s16 y, u8 dir, u8 spd, u8 fuze) {
     b->vx = (s16)dvx[dir] * spd / 8;
     b->vy = (s16)dvy[dir] * spd / 8;
     b->ftimer = fuze;
-    b->color = 12; b->pat = BULLET_PAT;   /* 太い信管弾=橙(視認性) */
+    b->color = 12; b->pat = SPR_EBSHELL;   /* 太い信管弾=橙の大カプセル(予告的) */
     return b;
 }
 
