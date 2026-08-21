@@ -89,6 +89,14 @@ const TRACKS = [
     bas: [2,2,14,2,2,2,14,2,9,9,21,9,9,9,21,9,2,2,14,2,5,5,17,5,9,9,21,9,9,9,21,2],
     basStep:8, melPeak:14, melSus:11, melVib:1, basPeak:11, basSus:8, drum:1,
   },
+  { // 7: 海イントロ共通(インターバル/渋。ニ短調・スロー foreboding のメロディ＋ロックマン風シンセドラム)
+    //     メロディ: 下降 D-C-Bb-A → 半音階 C#で戻し → 高A4(属音)で解決させず「激戦の予感」を宙吊り。
+    //     ベース(chB)=シンセドラム: D3刻み＋A3/D4のトム(各打撃で1oct上→基音へ急降下)。音量は他曲並みに。
+    mel: [26,24,22,21,255, 21,22,24,26,25,26,255, 33,29,26,255],
+    mln: [48,32,32,64,32, 48,32,32,48,32,64,32, 64,48,96,48],
+    bas: [14,21,14,255, 14,26,21,255],   // D3 A3 D3 (休) / D3 D4 A3 (休)=間のある渋いシンセドラム(刻みすぎ回避)
+    basStep:16, melPeak:14, melSus:11, melVib:1, basPeak:14, basSus:0, drum:0, bassSweep:1,
+  },
 ];
 
 function packTrack(t) {
@@ -97,6 +105,7 @@ function packTrack(t) {
   return Buffer.from([
     t.mel.length, t.bas.length, t.basStep,
     t.melPeak, t.melSus, t.melVib, t.basPeak, t.basSus, t.drum,
+    t.bassSweep ?? 0,   /* 1=chBをシンセドラム(ピッチ急降下＋打撃減衰) */
     ...t.mel, ...t.mln, ...t.bas,
   ]);
 }

@@ -42,6 +42,9 @@ static const u8 fighter_pat[STAGE_COUNT]  = { SPR_BF109, SPR_CORSAIR, SPR_SPITFI
 static const u8 fighter_col[STAGE_COUNT]  = { 3, 12, 9, 14, 11 };  /* 独緑/米橙/英オリーブ/独灰/米赤(単色fallback) */
 static const u8 fighter_arch[STAGE_COUNT] = { 0, 2, 1, 0, 2 };     /* 挙動: 独=急降下/米=直進/英=蛇行 */
 static const u8 fighter_iv[STAGE_COUNT]   = { 40, 28, 40, 40, 28 };/* 出現間隔(米面は数で押す=短い) */
+
+/* ★海イントロ共通BGM(gen_assets track7=スロー渋・予感)。海(敵艦未出現)の間だけ鳴らし、敵艦が見えたら面別へ切替。 */
+#define BGM_SEA_INTRO 7
 /* mode2の1ライン1色で陰影(row0=上/尾〜row15=下/機首)。国籍ベース色＋主翼ハイライト／尾翼・機首シャドウ。 */
 static const u8 fighter_ctab[STAGE_COUNT][16] = {
     { 3, 3, 3, 3, 3, 3, 8,10, 8, 3, 3, 3, 3, 3, 3, 3},  /* Bf109 独緑: 翼r6-8を明緑 */
@@ -201,13 +204,14 @@ static void stage_begin_display(void) {
     vdp_set_hscroll(0, 0);
 }
 
-/* ミス再挑戦: 開始カード/ファンファーレ無しで即再構築(BGMは鳴りっぱなしのまま面最初から)。 */
+/* ミス再挑戦: 開始カード/ファンファーレ無しで即再構築。海(phase0)から再開なので海イントロ共通BGMへ戻す。 */
 static void stage_setup(void) {
     stage_build();
+    bgm_play(BGM_SEA_INTRO);
     stage_begin_display();
 }
 
-/* 面別BGM(gen_assets のトラック順: 0=title/1=BBマーチ/2=ED/3=空母/4=フッド哀歌/5=双子/6=Iowa)。
+/* 面別BGM(gen_assets のトラック順: 0=title/1=BBマーチ/2=ED/3=空母/4=フッド哀歌/5=双子/6=Iowa/7=海イントロ)。
    順=BB/Carrier/Hood/Twins/Iowa。 */
 static const u8 stage_bgm[STAGE_COUNT] = { 1, 3, 4, 5, 6 };
 
@@ -244,7 +248,7 @@ static void stage_intro(void) {
     play_fanfare_open();                    /* 開始ファンファーレ(BGM無音でこれだけ鳴る) */
     for (f = 0; f < 40; f++) vdp_wait_frame();     /* 少し余韻(旧版と同じ40フレーム) */
 
-    bgm_play(stage_bgm[curstage]);           /* 面別メインBGM開始 */
+    bgm_play(BGM_SEA_INTRO);                 /* まず海イントロ共通BGM(敵艦が見えたら面別へ切替) */
     stage_begin_display();                   /* 地形を表示=ゲーム開始 */
 }
 
@@ -333,7 +337,9 @@ u8 stage_update(void) {
         }
         /* 戦艦が出現した瞬間に、残っている空襲(戦闘機/敵弾)を一掃(艦の手前に居残るゴミ防止)。 */
         if (cam <= SC_CAM_SHIP) {   /* 戦艦出現後は空襲を退かせる: 初回に戦闘機＋敵弾を一掃、以後は戦闘機のみ毎フレーム掃除 */
-            if (!raided) { raided = 1; ent_clear_enemies(); sea_set_ship(curstage); } else ent_clear_fighters();
+            if (!raided) { raided = 1; ent_clear_enemies(); sea_set_ship(curstage);
+                           bgm_play(stage_bgm[curstage]); }   /* ★敵艦が見えた=海イントロ共通→面別BGMへ切替 */
+            else ent_clear_fighters();
         }
         if (cam <= SC_CAM_STERN) { phase = 1; camdir = -1; }
     } else {

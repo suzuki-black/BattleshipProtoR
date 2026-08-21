@@ -92,6 +92,7 @@ static const u8 bgm_drmDec[4] = { 0, 3, 2, 3 };    /* 毎フレーム減衰 */
 static u8  bgm_ram[BGM_RAM_MAX];
 static u8 *mel_n, *mel_l, *bas_n;
 static u8  nMel, nBas, basStep, melPeak, melSus, melVib, basPeak, basSus, drumOn;
+static u8  bassSweep;   /* 1=ベース(chB)をロックマン風シンセドラムに(立上り1oct上→基音へ急降下＋速い減衰) */
 static u8  mIdx, mTrem, mCl;    /* melody: index / 残フレーム / 発音長 */
 static u8  bIdx, bTrem, bCl;    /* bass */
 static u8  drmIdx, drmT, drmType, drmVol;
@@ -105,10 +106,10 @@ void bgm_play(u8 track) {
     p = bgm_ram;
     nMel = p[0]; nBas = p[1]; basStep = p[2];
     melPeak = p[3]; melSus = p[4]; melVib = p[5];
-    basPeak = p[6]; basSus = p[7]; drumOn = p[8];
-    mel_n = p + 9;
-    mel_l = p + 9 + nMel;
-    bas_n = p + 9 + nMel + nMel;
+    basPeak = p[6]; basSus = p[7]; drumOn = p[8]; bassSweep = p[9];
+    mel_n = p + 10;
+    mel_l = p + 10 + nMel;
+    bas_n = p + 10 + nMel + nMel;
     /* ★idx は n-1 で初期化する。bgm_voice/bgm_drum は「trem/drmT==0 なら *先に* idx を進めて
        から鳴らす」実装のため、0 始まりだと最初のtickで idx が 0→1 に進み 1音目(index0)を飛ばし
        2音目から鳴る=「曲が途中から始まる」。n-1 始まりなら最初の前進で 0 に戻り 1音目から正しく
@@ -130,7 +131,7 @@ void bgm_stop(void) {
 /* 1声を進める。busy(SFXがこのchを使用中)なら PSG 書込を譲る。ch: 0=toneA / 1=toneB。 */
 static void bgm_voice(u8 *idx, u8 *trem, u8 *curlen,
                       const u8 *notes, const u8 *lens, u8 n,
-                      u8 fixed, u8 ch, u8 peak, u8 sustain, u8 vib, u8 busy) {
+                      u8 fixed, u8 ch, u8 peak, u8 sustain, u8 vib, u8 sweep, u8 busy) {
     u8 note, el, vol;
     u16 p;
     if (*trem == 0) {
@@ -143,9 +144,15 @@ static void bgm_voice(u8 *idx, u8 *trem, u8 *curlen,
     note = notes[*idx];
     if (note == BGM_REST || *trem < 2) { psg((u8)(8 + ch), 0); return; }   /* 休符/末尾=無音 */
     el  = (u8)(*curlen - *trem);
-    vol = (el <= (u8)(peak - sustain)) ? (u8)(peak - (el - 1)) : sustain;
     p = bgm_notetp[note];
-    if (vib && el > 8) p = (u16)((s16)p + bgm_vibt[(el >> 1) & 7]);
+    if (sweep) {
+        /* ロックマン風シンセドラム: 立上り(el 1..4)で約1oct上→基音へ急降下グライド＋2倍速の打撃減衰。 */
+        if (el <= 4) p = (u16)(p - (u16)(((u16)(p >> 1) * (u8)(5 - el)) >> 2));
+        { u8 d = (u8)((el - 1) << 1); vol = (d < peak) ? (u8)(peak - d) : 0; }
+    } else {
+        vol = (el <= (u8)(peak - sustain)) ? (u8)(peak - (el - 1)) : sustain;
+        if (vib && el > 8) p = (u16)((s16)p + bgm_vibt[(el >> 1) & 7]);
+    }
     psg((u8)(ch * 2), (u8)(p & 0xFF));
     psg((u8)(ch * 2 + 1), (u8)((p >> 8) & 0x0F));
     psg((u8)(8 + ch), vol);
@@ -170,8 +177,8 @@ static void bgm_drum(u8 busy) {
 /* ISR から毎フレーム(sfx_update の後)。SFX が使う ch は譲る。 */
 void bgm_update(void) {
     if (!bgmOn) return;
-    bgm_voice(&mIdx, &mTrem, &mCl, mel_n, mel_l, nMel, 0,       0, melPeak, melSus, melVib, sfx_busy_a);
-    bgm_voice(&bIdx, &bTrem, &bCl, bas_n, (const u8 *)0, nBas, basStep, 1, basPeak, basSus, 0, 0);
+    bgm_voice(&mIdx, &mTrem, &mCl, mel_n, mel_l, nMel, 0,       0, melPeak, melSus, melVib, 0,         sfx_busy_a);
+    bgm_voice(&bIdx, &bTrem, &bCl, bas_n, (const u8 *)0, nBas, basStep, 1, basPeak, basSus, 0, bassSweep, 0);
     if (drumOn) bgm_drum(sfx_busy_c);
 }
 
