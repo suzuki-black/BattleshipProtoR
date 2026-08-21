@@ -160,6 +160,30 @@ static void aa_update(void) {
     }
 }
 
+/* ===== 艦種別固有兵装(旧版移植) =====
+   ボス(戦艦)交戦=phase1 の間だけ、各面のボス艦に固有の攻撃を出す(空母=艦載機射出 等)。
+   AA/主砲に上乗せする「その艦らしさ」。面順=BB/Carrier/Hood/Twins/Iowa。 */
+static u8 spc_timer;
+static void special_reset(void) { spc_timer = 100; }
+static void special_update(void) {
+    if (phase != 1) return;                    /* 戦艦が出てからのみ */
+    if (spc_timer) { spc_timer--; return; }
+    if (curstage == 1) {                        /* 2面 空母: F6Fヘルキャットを甲板から射出→8方向追尾 */
+        if (ent_count(ET_PURSUER) < 3) {        /* 同時最大3機(旧版 NPLANE) */
+            Entity *e = ent_spawn(ET_PURSUER);
+            if (e) {
+                e->x = (s16)(120 + g_meander) + (s16)(rnd() % 50) - 25;  /* 甲板中央付近 */
+                e->y = (s16)(30 + (rnd() % 50));                          /* 見えている甲板上 */
+                e->ax = 4;                       /* 初期=下向き */
+                e->ftimer = 34;                  /* ホバー(展開) */
+                e->pat = SPR_HELLCAT; e->coltab = fighter_ctab[4]; e->shadow = 1;  /* F6F(赤=甲板で視認性)＋翼光沢＋落ち影 */
+            }
+            sfx(1, SFX_EFIRE);
+            spc_timer = 120;                     /* 次の射出まで(旧版 ep_launch) */
+        } else spc_timer = 30;                   /* 満杯なら短く再試行 */
+    }
+}
+
 /* 設定の残機初期値(config g_lives_idx→2/3/5)。 */
 static u8 lives_init(void) {
     static const u8 t[3] = { 2, 3, 5 };
@@ -191,6 +215,7 @@ static void stage_build(void) {
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
     g_gun_kills = 0;
     aa_reset();            /* 対空砲の発射タイマ初期化 */
+    special_reset();       /* 艦種別固有兵装のタイマ初期化 */
     spawn_turret(gun_x[curstage][0], gun_y[curstage][0], 30);
     spawn_turret(gun_x[curstage][1], gun_y[curstage][1], 45);
     spawn_turret(gun_x[curstage][2], gun_y[curstage][2], 60);
@@ -367,7 +392,8 @@ u8 stage_update(void) {
     hud_draw(g_score, g_lives);
 
     ent_update_all();
-    aa_update();    /* 対空砲23基の発砲(画面内のみ。エアバースト/小弾) */
+    aa_update();       /* 対空砲23基の発砲(画面内のみ。エアバースト/小弾) */
+    special_update();  /* 艦種別固有兵装(空母=艦載機射出 等) */
     ent_resolve_collisions();
     ent_draw_all();
     sea_frame();   /* SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール */

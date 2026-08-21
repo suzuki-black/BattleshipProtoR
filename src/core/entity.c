@@ -8,6 +8,7 @@
 #include "scroll.h"     /* g_cam(砲塔の世界→画面Y変換) */
 #include "gamestate.h"  /* g_score(撃破で加算) */
 #include "sound.h"      /* sfx(被弾音 SFX_PHIT) */
+#include "player.h"     /* g_player_x/y(艦載機の自機追尾) */
 
 u8 g_spr_base;          /* エンティティ描画の開始スプライトスロット(先頭はHUDが確保) */
 
@@ -98,6 +99,36 @@ static void bh_fighter(Entity *e) {
     if (e->y > SCR_H + 8) e->active = 0;                  /* 下へ抜けたら消滅 */
 }
 
+/* (dx,dy)に最も近い8方向index(0=上,時計回り)。旧版 dir8 移植。 */
+static u8 dir8(s16 dx, s16 dy) {
+    s16 ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+    if (ax > ay * 2) return dx > 0 ? 2 : 6;    /* 右/左 */
+    if (ay > ax * 2) return dy > 0 ? 4 : 0;    /* 下/上 */
+    if (dx > 0) return dy > 0 ? 3 : 1;         /* 右下/右上 */
+    return dy > 0 ? 5 : 7;                      /* 左下/左上 */
+}
+/* cur から tgt へ8方向を短い方に1歩(旧版 step_dir)。 */
+static u8 step_dir(u8 cur, u8 tgt) {
+    u8 d = (u8)((tgt - cur) & 7);
+    if (d == 0) return cur;
+    return (u8)((d <= 4) ? (cur + 1) & 7 : (cur + 7) & 7);
+}
+
+/* 艦載機(F6F/F4U): ホバー(展開)→8方向で自機を大回り追尾。20fに1歩だけ向き直り speed2 で直進。
+   旧版の空母/アイオワ機を移植。HP1(弾/体当りで消滅)。画面外(±18マージン)で消滅。 */
+static void bh_pursuer(Entity *e) {
+    if (e->ftimer) {                           /* ホバー/展開: 動かず常時自機を向く */
+        e->ftimer--;
+        e->ax = (s16)dir8((s16)g_player_x - e->x, (s16)g_player_y - e->y);
+    } else {                                   /* 追尾: 20fに1歩向き直り(大回り), speed2直進 */
+        if (e->ay) e->ay--;
+        else { e->ax = (s16)step_dir((u8)e->ax, dir8((s16)g_player_x - e->x, (s16)g_player_y - e->y)); e->ay = 20; }
+        e->x += (s16)dirdx8[e->ax & 7] * 2;
+        e->y += (s16)dirdy8[e->ax & 7] * 2;
+    }
+    if (e->x < -18 || e->x > 274 || e->y < -18 || e->y > 226) e->active = 0;
+}
+
 /* 撃破エフェクト: 寿命を ftimer で数え、色を変えながら消滅。 */
 static const u8 exp_col[6] = { 15, 15, 12, 11, 7, 7 };   /* 白→橙→赤→暗(旧パレットの火色) */
 static void bh_explosion(Entity *e) {
@@ -119,6 +150,7 @@ static const Behavior behaviors[ET_COUNT] = {
     bh_turret,    /* ET_TURRET(蛇行追従＋発砲。破壊可能) */
     bh_explosion, /* ET_EXPLOSION */
     bh_aaburst,   /* ET_AABURST(時限信管弾→下向き3破片へ炸裂) */
+    bh_pursuer,   /* ET_PURSUER(艦載機の8方向追尾) */
 };
 
 u8 ent_count(u8 type) {
@@ -156,8 +188,9 @@ void ent_resolve_collisions(void) {
         for (j = 0; j < ENT_MAX; j++) {
             Entity *t = &pool[j];
             if (!t->active) continue;
-            if (t->type == ET_FIGHTER && overlap(b, t)) {
-                b->active = 0; t->active = 0; g_kills++; g_score += 10;
+            if ((t->type == ET_FIGHTER || t->type == ET_PURSUER) && overlap(b, t)) {
+                b->active = 0; t->active = 0; g_kills++;
+                g_score += (t->type == ET_PURSUER) ? 20 : 10;   /* 艦載機は高得点 */
                 ent_spawn_explosion(t->x, t->y);
                 break;
             }
@@ -175,7 +208,8 @@ void ent_resolve_collisions(void) {
         for (j = 0; j < ENT_MAX; j++) {
             Entity *e = &pool[j];
             if (!e->active) continue;
-            if ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_FIGHTER || e->type == ET_AABURST) {
+            if ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_FIGHTER
+                || e->type == ET_AABURST || e->type == ET_PURSUER) {
                 if (overlap(e, p)) {
                     e->active = 0;                 /* 敵/敵弾は消す(すり抜け防止) */
                     if (g_pinv == 0 && !g_invinc) {/* 被弾直後の無敵中/設定無敵 は無傷 */
