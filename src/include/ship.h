@@ -23,13 +23,31 @@
 #define HULL_BISMARCK 0
 #define HULL_IOWA     3
 
-/* 艦を バッファB へ描画。kind=0単艦(BB/Iowa/Hood) / 1双子(2隻) / 2空母(飛行甲板+2パス)。
-   海タイル→(艦種別に船体/艦首/甲板)→OPS(→ops2は空母のみ)→対空砲23基。
+/* ★艦の重い描画は「冷たいバンク」へ(常駐圧迫回避)。ship_render は常駐の薄いラッパで、
+   引数を g_shipargs に退避して bcall。実体(ship_render_impl＋描画ヘルパ群)は banked/ship_render.c。
+   ship_aag_pos＋対空砲座標表は毎フレーム参照(aa_update)なので常駐(ship_aag.c)に残す。 */
+#define SHIP_RENDER_BANK 16   /* banked/ship_render.ihx を置くROMバンク */
+
+#define SHIP_NAAG 23   /* 対空砲マウント数 */
+
+/* ship_render の引数退避(常駐→バンク)。banked_entry がこれを読んで描画する。 */
+typedef struct {
+    u8 kind, hull, bow_cnt;
+    u16 bow_yb;
+    u8 aag_tbl;
+    const u8 *aagp, *ops, *ops2;
+} ShipArgs;
+extern ShipArgs g_shipargs;
+
+/* 対空砲23基の艦内座標表(常駐 ship_aag.c で定義)。バンク側 draw_aag と常駐 ship_aag_pos が参照。 */
+extern const u8  aag_x_bb[SHIP_NAAG], aag_x_cv[SHIP_NAAG], aag_x_hd[SHIP_NAAG], aag_x_nl[SHIP_NAAG];
+extern const u16 aag_y_bb[SHIP_NAAG], aag_y_cv[SHIP_NAAG], aag_y_hd[SHIP_NAAG], aag_y_nl[SHIP_NAAG];
+
+/* 艦を バッファB へ描画(kind=0単艦/1双子/2空母)。常駐ラッパ→bcall→banked ship_render_impl。
    ops/ops2 = data_read でRAMへ読んだ艦OPS(7B/レコード, op=0終端)。aagp=[gb,gs,ab,as]。 */
 void ship_render(u8 kind, u8 hull, u8 bow_cnt, u16 bow_yb, u8 aag_tbl, const u8 *aagp, const u8 *ops, const u8 *ops2);
 
-#define SHIP_NAAG 23   /* 対空砲マウント数 */
-/* 対空砲 i(0..22)の艦内座標(艦種tbl)。発砲システム(scene_stage)が使う。 */
+/* 対空砲 i(0..22)の艦内座標(艦種tbl)。発砲システム(scene_stage)が毎フレーム使う=常駐。 */
 void ship_aag_pos(u8 tbl, u8 i, s16 *px, u16 *py);
 
 #endif /* SHIP_H */

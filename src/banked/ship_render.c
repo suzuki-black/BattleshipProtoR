@@ -1,0 +1,317 @@
+/* banked/ship_render.c — 艦の重い事前描画レンダラ「本体」(冷たいバンク SHIP_RENDER_BANK)。
+   常駐 ship_render ラッパが g_shipargs を埋めて bcall → ここの banked_entry が描画する。
+   バッファB(=SC_SHIPBUF_Y)へ上面視の艦を一度だけ描く。艦高496px。中心x=128。
+   ★このバンク内からは data窓を差替えない(vdp_copy は常駐/窓非差替なので呼んでよい)。
+   対空砲座標表(aag_*)と g_shipargs は常駐(ship_aag.c)にあり extern 参照。 */
+#include "ship.h"
+#include "scroll.h"  /* SC_SHIPBUF_Y / SC_SEATMPL_Y / SC_SHIP_ROWS */
+#include "vdp.h"     /* vdp_copy(常駐。海テンプレのタイル) */
+
+__sfr __at(0x98) SH_DAT;     /* VRAM データ */
+__sfr __at(0x99) SH_CTRL;    /* VDP アドレス/レジスタ */
+__sfr __at(0x9B) SH_IDAT;    /* R#17 間接オートインクリメント */
+
+#define B         SC_SHIPBUF_Y   /* 528 */
+#define SHADOWC   7              /* 船体ドロップシャドウ(暗青) */
+#define NAAG      SHIP_NAAG
+
+static u8 g_hull;   /* hull_w プロファイル選択 */
+
+/* ---- 高速VDPコマンド完了待ち(S#2 タイトポール) ---- */
+static void swait(void) {
+    __asm
+        di
+        ld   a, #2
+        out  (0x99), a
+        ld   a, #0x8F
+        out  (0x99), a
+    00011$:
+        in   a, (0x99)
+        rra
+        jr   c, 00011$
+        ld   a, #0
+        out  (0x99), a
+        ld   a, #0x8F
+        out  (0x99), a
+        ei
+    __endasm;
+}
+
+/* ---- 高速矩形塗り(LMMV, R#17間接)。dy は絶対VRAM Y。 ---- */
+static void sfill(u16 dx, u16 dy, u16 nx, u16 ny, u8 c) {
+    swait();
+    __asm di __endasm;
+    SH_CTRL = 36; SH_CTRL = 0x80 | 17;
+    SH_IDAT = (u8)(dx & 0xFF); SH_IDAT = (u8)(dx >> 8);
+    SH_IDAT = (u8)(dy & 0xFF); SH_IDAT = (u8)(dy >> 8);
+    SH_IDAT = (u8)(nx & 0xFF); SH_IDAT = (u8)(nx >> 8);
+    SH_IDAT = (u8)(ny & 0xFF); SH_IDAT = (u8)(ny >> 8);
+    SH_IDAT = c; SH_IDAT = 0; SH_IDAT = 0x80;
+    __asm ei __endasm;
+}
+
+/* ---- 直接1画素(read-modify-write)。dy=絶対VRAM Y(17bit)。 ---- */
+static void vpset(u16 dy, u16 x, u8 c) {
+    u8 r14  = (u8)((dy >> 7) & 7);
+    u8 alo  = (u8)(((dy & 1) << 7) | (x >> 1));
+    u8 amid = (u8)((dy >> 1) & 0x3F);
+    u8 b;
+    __asm di __endasm;
+    SH_CTRL = r14;  SH_CTRL = 0x80 | 14;
+    SH_CTRL = alo;  SH_CTRL = amid;
+    b = SH_DAT;
+    if (x & 1) b = (u8)((b & 0xF0) | c); else b = (u8)((b & 0x0F) | (u8)(c << 4));
+    SH_CTRL = r14;  SH_CTRL = 0x80 | 14;
+    SH_CTRL = alo;  SH_CTRL = (u8)(amid | 0x40);
+    SH_DAT = b;
+    __asm ei __endasm;
+}
+static void spset(u16 x, u16 dy, u8 c) { vpset(dy, x, c); }
+
+/* ---- 疑似乱数(旧版と同一LCG。呼び順も一致=斑点再現)。初期化は ship_render_impl 冒頭で行う
+   (宣言時 =12345 の初期化子は .ihx にデータレコードを生む=バンク配置不可なので付けない)。 ---- */
+static u16 rng;
+static u8 rnd(void) { rng = (u16)(rng * 25173 + 13849); return (u8)(rng >> 8); }
+
+/* ---- 整数sqrt ---- */
+static u8 isqrt(u16 n) { u8 r = 0; u16 sq = 1; while (sq <= n) { r++; sq += (u16)(2 * r + 1); } return r; }
+
+/* ---- 塗り円(cy はship-local) ---- */
+static void disk(s16 cx, s16 cy, s16 rr, u8 c) {
+    s16 dy, w;
+    for (dy = -rr; dy <= rr; dy++) {
+        w = (s16)isqrt((u16)(rr * rr - dy * dy)) * 2;
+        if (w > 0) sfill((u16)(cx - w / 2), (u16)(B + cy + dy), (u16)w, 1, c);
+    }
+}
+
+/* ---- 陰影ドーム(左上光源) ---- */
+static void dome(s16 cx, s16 cy, s16 rr) {
+    s16 t;
+    disk(cx, cy, rr, 13);
+    disk(cx, cy, rr - 1, 5);
+    disk(cx - 1, cy - 1, rr - 2, 4);
+    disk(cx - 1, cy - 1, rr - 4, 14);
+    t = rr - 6; if (t < 1) t = 1;
+    disk(cx - 2, cy - 2, t, 15);
+}
+
+static void mainGun(s16 cx, s16 cy, s16 rr) {
+    disk(cx, cy, rr + 2, 13);
+    disk(cx, cy, rr + 1, 5);
+    dome(cx, cy, rr);
+}
+static void aaGun(s16 x, s16 cy, s16 rr) { disk(x, cy, rr + 1, 13); dome(x, cy, rr); }
+static void ground(s16 cx, s16 cy, s16 rr) { disk(cx + 4, cy + 6, rr, 13); }
+
+/* ---- 円筒陰影の砲身 ---- */
+static void barrel(s16 cx, s16 y, s16 L, s16 w) {
+    s16 i, dd, t; u8 c;
+    for (i = 0; i < w; i++) {
+        dd = i - (w - 1) / 2; if (dd < 0) dd = -dd;
+        t = (s16)(dd * 100 / ((w + 1) / 2));
+        c = (t < 30) ? 15 : (t < 60) ? 14 : (t < 85) ? 4 : 5;
+        sfill((u16)(cx - w / 2 + i), (u16)(B + y), 1, (u16)L, c);
+    }
+}
+
+/* ---- 金属斑点 ---- */
+static void metalNoise(s16 x, s16 y, s16 w, s16 h) {
+    s16 nx, ny; u8 r;
+    for (ny = y; ny < y + h; ny += 2)
+        for (nx = x; nx < x + w; nx += 2) { r = rnd(); if (r < 55) spset((u16)nx, (u16)(B + ny), (u8)((r & 1) ? 4 : 13)); }
+}
+
+/* ---- 3D金属ボックス ---- */
+static void deckBox(s16 x, s16 y, s16 w, s16 h, u8 fill) {
+    sfill((u16)(x + 3), (u16)(B + y + 4), (u16)w, (u16)h, 13);
+    sfill((u16)x, (u16)(B + y), (u16)w, (u16)h, fill);
+    metalNoise(x + 1, y + 1, w - 2, h - 2);
+    sfill((u16)x, (u16)(B + y), (u16)w, 1, 15);
+    sfill((u16)x, (u16)(B + y), 1, (u16)h, 14);
+    sfill((u16)x, (u16)(B + y + h - 1), (u16)w, 1, 13);
+    sfill((u16)(x + w - 1), (u16)(B + y), 1, (u16)h, 13);
+}
+
+/* ---- 船体半幅プロファイル ---- */
+static s16 hull_w(s16 y) {
+    if (g_hull == 1) {
+        if (y < 44)  return (s16)(5 + (41 * y) / 44);
+        if (y < 436) return 46;
+        if (y < 474) return (s16)(46 - (16 * (y - 436)) / 38);
+        return (s16)(30 - (5 * (y - 474)) / 22);
+    }
+    if (g_hull == 2) {
+        if (y < 28)  return (s16)(6 + (18 * y) / 28);
+        if (y < 440) return 24;
+        if (y < 476) return (s16)(24 - (10 * (y - 440)) / 36);
+        return (s16)(14 - (3 * (y - 476)) / 20);
+    }
+    if (g_hull == HULL_IOWA) {
+        if (y < 50)  return (s16)(5 + (45 * y) / 50);
+        if (y < 448) return 50;
+        if (y < 486) return (s16)(50 - (20 * (y - 448)) / 38);
+        return (s16)(30 - (4 * (y - 486)) / 9);
+    }
+    if (y < 36)  return (s16)(9 + (45 * y) / 36);
+    if (y < 400) return 54;
+    if (y < 462) return (s16)(54 - (21 * (y - 400)) / 62);
+    return (s16)(33 - (3 * (y - 462)) / 34);
+}
+
+/* ---- 空母の飛行甲板プロファイル ---- */
+static s16 carrier_w(s16 y) {
+    if (y < 28)  return (s16)(20 + (38 * y) / 28);
+    if (y < 452) return 58;
+    if (y < 490) return (s16)(58 - (26 * (y - 452)) / 38);
+    return 32;
+}
+
+/* ---- 船体本体 ---- */
+static void paint_hull_at(s16 cx) {
+    s16 y, y2, h, w, i, ys, ws, nx, ny; u8 r;
+    y = 0;
+    while (y < 496) {
+        ys = y - 10; ws = (ys < 0) ? -1 : hull_w(ys);
+        y2 = y + 1;
+        while (y2 < 496) { s16 w2 = ((y2 - 10) < 0) ? -1 : hull_w(y2 - 10); if (w2 != ws) break; y2++; }
+        if (ws >= 0) sfill((u16)(cx - ws + 14), (u16)(B + y), (u16)(ws * 2), (u16)(y2 - y), SHADOWC);
+        y = y2;
+    }
+    y = 0;
+    while (y < 496) {
+        w = hull_w(y);
+        y2 = y + 1;
+        while (y2 < 496 && hull_w(y2) == w) y2++;
+        h = y2 - y;
+        sfill((u16)(cx - w), (u16)(B + y), (u16)(w * 2), (u16)h, 6);
+        sfill((u16)(cx - w), (u16)(B + y), 1, (u16)h, 14);
+        sfill((u16)(cx - w + 1), (u16)(B + y), 2, (u16)h, 12);
+        sfill((u16)(cx + w - 3), (u16)(B + y), 2, (u16)h, 9);
+        sfill((u16)(cx + w - 1), (u16)(B + y), 1, (u16)h, 13);
+        y = y2;
+    }
+    for (i = -8; i <= 8; i++) {
+        w = i * 6; if (w < 0) w = -w;
+        ys = -1; ws = 0;
+        for (y = 6; y < 490; y++) if (hull_w(y) - 3 > w) { if (ys < 0) ys = y; ws = y; }
+        if (ys >= 0) sfill((u16)(cx + i * 6), (u16)(B + ys), 1, (u16)(ws - ys + 1), 9);
+    }
+    for (ny = 8; ny < 488; ny += 2) {
+        w = hull_w(ny);
+        if (w < 14) continue;
+        for (nx = (s16)(cx - w + 4); nx < (s16)(cx + w - 4); nx += 2) {
+            r = rnd();
+            if (r < 80) spset((u16)nx, (u16)(B + ny), (u8)((r & 1) ? 12 : 9));
+        }
+    }
+    for (y = 44; y < 466; y += 5) {
+        ws = hull_w(y);
+        sfill((u16)(cx - ws + 3), (u16)(B + y), 2, 1, 13);
+        sfill((u16)(cx + ws - 5), (u16)(B + y), 2, 1, 13);
+    }
+}
+
+/* ---- 波切り艦首シェブロン ---- */
+static void draw_bow(s16 cx, u8 cnt, u16 yb) {
+    u8 i;
+    for (i = 0; i <= cnt; i++) {
+        sfill((u16)(cx - i), (u16)(B + yb + i / 2), 1, 2, 13);
+        sfill((u16)(cx + i), (u16)(B + yb + i / 2), 1, 2, 13);
+    }
+}
+
+/* ---- 対空砲23基(座標表は常駐 ship_aag.c を extern 参照) ---- */
+static void draw_aag(u8 tbl, u8 gb, u8 gs, u8 ab, u8 as) {
+    const u8 *ax; const u16 *ay; u8 i;
+    switch (tbl) {
+        case 1:  ax = aag_x_cv; ay = aag_y_cv; break;
+        case 2:  ax = aag_x_hd; ay = aag_y_hd; break;
+        case 3:  ax = aag_x_nl; ay = aag_y_nl; break;
+        default: ax = aag_x_bb; ay = aag_y_bb; break;
+    }
+    for (i = 0; i < NAAG; i++) {
+        ground((s16)ax[i], (s16)ay[i], (i < 14) ? gb : gs);
+        aaGun ((s16)ax[i], (s16)ay[i], (i < 14) ? ab : as);
+    }
+}
+
+/* ---- 艦OPS(7B/レコード)を解釈 ---- */
+static void run_ship_ops(const u8 *d) {
+    for (;;) {
+        u8 op = d[0], p1, p2, p3; s16 x; u16 y;
+        if (op == SOP_END) break;
+        x = (s16)d[1]; y = (u16)(d[2] | (d[3] << 8)); p1 = d[4]; p2 = d[5]; p3 = d[6]; d += 7;
+        switch (op) {
+            case SOP_GROUND:  ground(x, (s16)y, p1);                 break;
+            case SOP_MAINGUN: mainGun(x, (s16)y, p1);                break;
+            case SOP_DOME:    dome(x, (s16)y, p1);                   break;
+            case SOP_DISK:    disk(x, (s16)y, p1, p2);               break;
+            case SOP_DECKBOX: deckBox(x, (s16)y, p1, p2, p3);        break;
+            case SOP_AAGUN:   aaGun(x, (s16)y, p1);                  break;
+            case SOP_LMMV:    sfill((u16)x, (u16)(B + y), p1, p2, p3); break;
+            case SOP_BARREL:  barrel(x, (s16)y, p1, p2);             break;
+        }
+    }
+}
+
+/* ---- 空母の飛行甲板 ---- */
+static void carrier_deck(void) {
+    s16 y, y2, w, i, nx, ny; u16 h; u8 r;
+    y = 4;
+    while (y < 494) {
+        w = carrier_w(y - 4);
+        y2 = y + 1; while (y2 < 494 && carrier_w(y2 - 4) == w) y2++;
+        sfill((u16)(128 - w - 2), (u16)(B + y), (u16)((w + 2) * 2), (u16)(y2 - y), SHADOWC);
+        y = y2;
+    }
+    y = 0;
+    while (y < 496) {
+        w = carrier_w(y);
+        y2 = y + 1; while (y2 < 496 && carrier_w(y2) == w) y2++;
+        h = (u16)(y2 - y);
+        sfill((u16)(128 - w), (u16)(B + y), (u16)(w * 2), h, 6);
+        sfill((u16)(128 - w), (u16)(B + y), 1, h, 14);
+        sfill((u16)(128 - w + 1), (u16)(B + y), 1, h, 15);
+        sfill((u16)(128 + w - 1), (u16)(B + y), 1, h, 13);
+        sfill((u16)(128 + w - 2), (u16)(B + y), 1, h, 9);
+        y = y2;
+    }
+    for (i = -3; i <= 3; i++) if (i) sfill((u16)(128 + i * 15), (u16)(B + 28), 1, 424, 9);
+    for (ny = 8; ny < 488; ny += 2) {
+        w = carrier_w(ny); if (w < 14) continue;
+        for (nx = (s16)(128 - w + 3); nx < (s16)(128 + w - 3); nx += 2)
+            { r = rnd(); if (r < 70) spset((u16)nx, (u16)(B + ny), (u8)((r & 1) ? 9 : 14)); }
+    }
+    for (y = 34; y < 452; y += 14) sfill(127, (u16)(B + y), 2, 8, 15);
+}
+
+/* ---- 描画本体(旧 ship_render)。banked_entry から g_shipargs 経由で呼ぶ。 ---- */
+static void ship_render_impl(u8 kind, u8 hull, u8 bow_cnt, u16 bow_yb, u8 aag_tbl,
+                             const u8 *aagp, const u8 *ops, const u8 *ops2) {
+    u8 r;
+    g_hull = hull;
+    rng = 12345;
+    for (r = 0; r < SC_SHIP_ROWS; r++)
+        vdp_copy(0, SC_SEATMPL_Y, 0, (u16)(B + (u16)r * 16), 256, 16);
+    if (kind == 2) {
+        carrier_deck();
+        run_ship_ops(ops);
+        metalNoise(140, 150, 36, 42);
+        run_ship_ops(ops2);
+    } else if (kind == 1) {
+        paint_hull_at(76);  draw_bow(76, bow_cnt, bow_yb);
+        paint_hull_at(180); draw_bow(180, bow_cnt, bow_yb);
+        run_ship_ops(ops);
+    } else {
+        paint_hull_at(128); draw_bow(128, bow_cnt, bow_yb);
+        run_ship_ops(ops);
+    }
+    draw_aag(aag_tbl, aagp[0], aagp[1], aagp[2], aagp[3]);
+}
+
+/* ---- バンク単一エントリ。常駐 ship_render ラッパが埋めた g_shipargs を読んで描画。 ---- */
+void banked_entry(void) {
+    ship_render_impl(g_shipargs.kind, g_shipargs.hull, g_shipargs.bow_cnt, g_shipargs.bow_yb,
+                     g_shipargs.aag_tbl, g_shipargs.aagp, g_shipargs.ops, g_shipargs.ops2);
+}

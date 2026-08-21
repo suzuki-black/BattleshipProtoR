@@ -37,7 +37,7 @@ RESIDENT_RELS = \
   $(BUILD)/fire.rel \
   $(BUILD)/ops.rel \
   $(BUILD)/scroll.rel \
-  $(BUILD)/ship.rel \
+  $(BUILD)/ship_aag.rel \
   $(BUILD)/hud.rel \
   $(BUILD)/scene.rel \
   $(BUILD)/scene_stage.rel \
@@ -53,6 +53,7 @@ ROMPACK_BANKS = --bank 4 assets/cards.bin \
                 --bank 6 $(BUILD)/scene_config.ihx \
                 --bank 7 $(BUILD)/scene_ending.ihx \
                 --bank 8 $(BUILD)/assets.bin \
+                --bank 16 $(BUILD)/ship_render.ihx \
                 --asset 9 assets/title.yjk
 
 .PHONY: all rom clean run
@@ -100,8 +101,15 @@ $(BUILD)/scene_%.ihx: $(SCENES)/scene_%.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/scene_$*.rel $(BUILD)/resident_syms.rel -o $@
 
+# バンク化した冷たいコード(シーン以外)。艦の重い描画本体 banked/ship_render.c → bank16。
+# 常駐の ship_aag が薄いラッパで bcall、こちらの banked_entry が g_shipargs を読んで描画。
+$(BUILD)/ship_render.ihx: $(SRC)/banked/ship_render.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/ship_render.c -o $(BUILD)/ship_render.rel
+	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
+	     $(BUILD)/bankhead.rel $(BUILD)/ship_render.rel $(BUILD)/resident_syms.rel -o $@
+
 BANK_IHX = $(BUILD)/scene_title.ihx \
-           $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx
+           $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx
 
 GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk assets/cards.bin
 	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS)

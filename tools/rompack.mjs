@@ -15,7 +15,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
-const ROM_SIZE    = 0x20000;   // 128KB
+const ROM_SIZE    = 0x40000;   // 256KB(32バンク)。title.yjk が bank9-15、冷たいコードを bank16+ へ置く余地を確保。
 const BANK_SIZE   = 0x2000;    // 8KB
 const CODE_BASE   = 0x4000;    // 常駐コードのリンク基準アドレス
 const CODE_LIMIT  = 0x6000;    // 常駐コード ROM オフセット上限(=24KB=bank0-2)。bank3 はスワップ窓に温存
@@ -123,11 +123,11 @@ writeFileSync(outRom, rom);
 
 // ---- 空き容量レポート ----
 const KB = (b) => (b / 1024).toFixed(1);
-console.log(`ROM: ${outRom}  (MegaROM ASCII8, 128KB / 16 banks)`);
+console.log(`ROM: ${outRom}  (MegaROM ASCII8, 256KB / 32 banks)`);
 console.log(`  常駐コード(bank0-2): ${codeLen}B / 24576B  残り ${CODE_LIMIT - codeLen}B (${KB(CODE_LIMIT - codeLen)}KB)`);
 console.log(`  bank3(スワップ窓)  : 予約(既定 0xFF)`);
 for (let n = ASSET_FIRST; n < used.length; n++) {
   if (used[n] > 0) console.log(`  bank${String(n).padStart(2)}          : ${used[n]}B / 8192B  残り ${BANK_SIZE - used[n]}B`);
 }
 const freeBanks = used.slice(ASSET_FIRST).filter((u) => u === 0).length;
-console.log(`  空きバンク(bank4-15): ${freeBanks} / ${16 - ASSET_FIRST}  (= ${KB(freeBanks * BANK_SIZE)}KB 未使用)`);
+console.log(`  空きバンク: ${freeBanks} / ${used.length - ASSET_FIRST}  (= ${KB(freeBanks * BANK_SIZE)}KB 未使用)`);
