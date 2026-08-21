@@ -193,6 +193,19 @@ static void special_update(void) {
             sfx(1, SFX_EFIRE);
             spc_timer = 90;
         } else spc_timer = 30;
+    } else if (curstage == 3) {                   /* 4面 双子: 左右の艦から弾が中心へ収束→合体して自機狙いの高速大弾 */
+        if (ent_count(ET_COMBO) < 2) {
+            Entity *e = ent_spawn(ET_COMBO);
+            if (e) {
+                e->ay = (s16)(128 + g_meander);          /* 合体中心x(2隻の中間) */
+                e->y  = (s16)(40 + (rnd() % 80));        /* 発射帯 */
+                e->x  = 52;                              /* 初期 off = CB_GAP(左右の艦) */
+                e->ftimer = 24;                          /* 収束フレーム */
+                e->hidden = 1;                           /* 実体は非表示(合体パスで2発描画) */
+            }
+            sfx(1, SFX_EFIRE);
+            spc_timer = 80;
+        } else spc_timer = 30;
     } else if (curstage == 4) {                   /* 5面 アイオワ: 画面端から連続空襲(F4U)。ホバー無し即追尾=総攻撃 */
         if (ent_count(ET_PURSUER) < 4) {
             Entity *e = ent_spawn(ET_PURSUER);

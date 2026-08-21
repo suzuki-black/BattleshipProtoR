@@ -160,6 +160,24 @@ static void bh_smissile(Entity *e) {
     }
 }
 
+/* 合体弾の予告(双子艦): 左右2発(cx±off)が中心へ収束(off→0)。合体で自機狙いの高速大弾を発射。
+   ay=中心x, y=中心y, x=半間隔off(収束), ftimer=残収束フレーム。実体は hidden=1(描画は ent_draw_all の合体パス)。 */
+#define CB_GAP      52    /* 収束開始の半間隔(左右の艦=中心±52) */
+#define CB_CONVERGE 24    /* 収束フレーム数 */
+static void bh_combo(Entity *e) {
+    if (e->ftimer) {                                   /* 収束中: off を 0 へ */
+        e->ftimer--;
+        e->x = (s16)((u16)e->ftimer * CB_GAP / CB_CONVERGE);
+        return;
+    }
+    { s16 cx = e->ay, cy = e->y;                        /* 合体→自機狙いの高速大弾 */
+      u8 dir = aim_dir(cx, cy, (s16)g_player_x, (s16)g_player_y);
+      Entity *b = emit(cx, cy, dir, 0, 9);             /* kind0=橙, spd9=速い */
+      if (b) b->pat = SPR_EBSHELL;                     /* 太い合体弾 */
+      ent_spawn_explosion(cx, cy); sfx(2, SFX_HIT); }
+    e->active = 0;
+}
+
 /* 撃破エフェクト: 寿命を ftimer で数え、色を変えながら消滅。 */
 static const u8 exp_col[6] = { 15, 15, 12, 11, 7, 7 };   /* 白→橙→赤→暗(旧パレットの火色) */
 static void bh_explosion(Entity *e) {
@@ -183,6 +201,7 @@ static const Behavior behaviors[ET_COUNT] = {
     bh_aaburst,   /* ET_AABURST(時限信管弾→下向き3破片へ炸裂) */
     bh_pursuer,   /* ET_PURSUER(艦載機の8方向追尾) */
     bh_smissile,  /* ET_SMISSILE(潜水艦ミサイル4相) */
+    bh_combo,     /* ET_COMBO(双子艦の合体弾予告) */
 };
 
 u8 ent_count(u8 type) {
@@ -354,6 +373,15 @@ void ent_draw_all(void) {
         for (j = 0; j < n && slot < 32; j++) {
             i = (u8)(start + j); if (i >= n) i -= n;
             slot = draw1(slot, &pool[vis[i]]);
+        }
+    }
+    /* 合体弾パス(双子艦): hidden な ET_COMBO を「中心±off の2発」として描く。 */
+    for (i = 0; i < ENT_MAX && slot < 31; i++) {
+        const Entity *e = &pool[i];
+        if (e->active && e->type == ET_COMBO && e->y > -16 && e->y < 212) {
+            s16 cx = e->ay, cy = e->y, off = e->x, lx = cx - off, rx = cx + off;
+            if (lx >= 0 && lx < 256) { vdp_sprite_color(slot, 12); vdp_sprite_pos(slot, (u8)lx, (u8)cy, SPR_EBSHELL); slot++; }
+            if (slot < 32 && rx >= 0 && rx < 256) { vdp_sprite_color(slot, 12); vdp_sprite_pos(slot, (u8)rx, (u8)cy, SPR_EBSHELL); slot++; }
         }
     }
     /* 落ち影パス: 影は最後=最も高いslot=最低優先で描く(混雑ラインではゲーム弾/敵機に譲って先に落ちる)。 */
