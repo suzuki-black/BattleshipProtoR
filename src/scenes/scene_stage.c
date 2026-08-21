@@ -326,6 +326,7 @@ u8 stage_update(void) {
                 else                { f->vx = (rnd() & 1) ? 1 : -1; f->vy = 2 + (rnd() % 2); }/* 米 直進 */
                 f->color = fighter_col[curstage]; f->pat = fighter_pat[curstage];
                 f->coltab = fighter_ctab[curstage];   /* 行別色=陰影 */
+                f->shadow = 1;                        /* 海面へ落ち影(旧版に無い新規) */
                 if (rnd() & 1) { f->fire = fd_faim; f->ftimer = 20 + (rnd() % 30); }
             }
             sfx(1, SFX_HIT);
