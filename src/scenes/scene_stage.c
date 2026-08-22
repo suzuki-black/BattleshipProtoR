@@ -487,10 +487,13 @@ static void results_and_fanfare(void) {
     vdp_text(120, 152, 14, 0, scorebuf);
     play_fanfare();                     /* 勝ちどき(BGM停止・前景同期) */
     vdp_text(88, 176, 14, 0, "PUSH SPACE");
-    for (f = 0; f < 180; f++) {         /* 約3秒 or トリガで次へ */
-        input_poll();
-        if (g_input_edge & INP_TRIG) break;
-        vdp_wait_frame();
+    { u8 armed = 0;                     /* ★連射ホールドで一瞬で飛ばされないよう「一度離してから押す」を要求 */
+      for (f = 0; f < 240; f++) {       /* 約4秒 or 新規トリガ押下で次へ */
+          input_poll();
+          if (!(g_input & INP_TRIG)) armed = 1;
+          if (armed && (g_input_edge & INP_TRIG)) break;
+          vdp_wait_frame();
+      }
     }
 }
 
