@@ -196,6 +196,19 @@ static void fanfare_seq(const u8 *mel, const u8 *har, const u8 *len, u8 n) {
     }
 }
 
+/* 沈没音(自機撃墜/ゲームオーバー): 44フレームの下降音(周期上昇=音程降下)。旧版移植。前景同期。 */
+void play_sink(void) {
+    u8 t;
+    bgmOn = 0;
+    for (t = 0; t < 44; t++) {
+        u16 p = (u16)(240 + (u16)t * 14);
+        psg(0, (u8)(p & 0xFF)); psg(1, (u8)((p >> 8) & 0x0F));
+        psg(8, (t < 34) ? 12 : 0);          /* 音量12、最後10フレームでフェード */
+        vdp_wait_frame();
+    }
+    psg(8, 0); psg(10, 0);
+}
+
 /* 勝ちどきファンファーレ(撃破演出で使用)。 */
 void play_fanfare(void) {
     static const u8 fmel[8] = { 31,31,31, 36,40,43, 40,43 };   /* G4 G4 G4 C5 E5 G5 E5 G5 */
