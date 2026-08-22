@@ -69,13 +69,13 @@ const TRACKS = [
     mel: [26,33,34,33,31,29,31,33,26, 33,38,36,34,33,31,29,28,26,25, 26,29,33,34,33,31,29,28, 29,33,38,36,34,33,31,29,26,255],
     mln: [32,32,32,16,16,32,16,16,64, 32,32,32,16,16,32,16,16,48,16, 32,32,48,16,32,16,16,64, 32,32,32,16,16,32,16,16,48,16],
     bas: [2,2,14,2,2,2,14,2,10,10,22,10,9,9,21,9, 2,2,14,2,2,2,14,2,5,5,17,5,9,9,21,9, 2,2,14,2,2,2,14,2,10,10,22,10,9,9,21,9, 2,2,14,2,2,2,14,2,10,10,22,9,9,9,21,2],
-    basStep:8, melPeak:14, melSus:11, melVib:1, basPeak:11, basSus:8, drum:1,
+    basStep:8, melPeak:14, melSus:11, melVib:1, basPeak:11, basSus:8, drum:2,
   },
   { // 4: 3面 フッド(哀歌, ニ短調, ドラム無し・長音長)
     mel: [33,29,26,29,28,26,25,26,33,34,33,31,29,28,29,26,22,21,26, 33,34,33,31,29,28,26,25,26,255],
     mln: [16,16,48,16,16,16,48,24,24,16,32,16,16,32,16,16,16,48,32, 16,16,16,16,16,16,48,24,48,32],
     bas: [2,14,2,14,1,13,1,13,0,12,0,12,10,22,10,22,9,21,9,21,9,21,9,21,2,14,2,14,10,22,9,21],
-    basStep:16, melPeak:11, melSus:9, melVib:1, basPeak:8, basSus:6, drum:0,
+    basStep:16, melPeak:11, melSus:9, melVib:1, basPeak:8, basSus:6, drum:3,
   },
   { // 5: 4面 双子(勇壮 fife&drum マーチ, MEL48)。ベースは空母のマーチ低音を流用。
     mel: [45,45,38,41,40,38,38,41,45,46,45,43,41,41,45,40,40,38, 45,46,45,43,41,40,38,45,45,38,41,40,38, 43,45,46,45,43,41,40,38,45,38,45,41,40,38,37,38,255],
@@ -87,7 +87,7 @@ const TRACKS = [
     mel: [26,26,33,26,29,29,38,29,37,38,40,41,40,38,37,33,38,45,41,45,40,41,43,45,46,45,43,41,40,38,37,38,33,34,33,29,28,26,26,255],
     mln: [8,8,8,16,8,8,8,16,8,8,8,16,8,8,8,16,8,8,8,8,8,8,8,16,8,8,8,8,8,8,8,16,16,8,8,16,8,16,32,16],
     bas: [2,2,14,2,2,2,14,2,9,9,21,9,9,9,21,9,2,2,14,2,5,5,17,5,9,9,21,9,9,9,21,2],
-    basStep:8, melPeak:14, melSus:11, melVib:1, basPeak:11, basSus:8, drum:1,
+    basStep:8, melPeak:14, melSus:11, melVib:1, basPeak:11, basSus:8, drum:3,
   },
   { // 7: 海イントロ共通(インターバル/渋。ニ短調・スロー foreboding のメロディ＋ロックマン風シンセドラム)
     //     メロディ: 下降 D-C-Bb-A → 半音階 C#で戻し → 高A4(属音)で解決させず「激戦の予感」を宙吊り。
@@ -268,6 +268,32 @@ function fireballBmp(box) {
 const FB_BOXES = [24, 16, 12];                       // 大(主砲)/中(大型AA)/小(極小AA)
 const fbBlobs = FB_BOXES.map(fireballBmp);
 
+// ---- 面別ドラム(旧版 drmPat/drmPat2/drmPat3 移植)。各スタイル=[pat16, v0(4), tempo] の21B。 ----
+// スタイル1=標準マーチ / 2=重い戦闘(空母) / 3=激しい刻み(フッド/アイオワ, テンポ速)。常駐節約でバンクへ。
+// 1=キック/2=スネア/3=ハット。v0[type]=初期音量, tempo=1ステップのフレーム数。
+const DRUM_STYLES = [
+  { pat:[1,3,2,3, 1,3,2,3, 1,3,2,3, 1,2,2,3], v0:[0,14,13,6], tempo:8 },  // 1 標準マーチ
+  { pat:[1,3,2,3, 1,1,2,3, 1,3,2,3, 2,2,1,3], v0:[0,15,15,8], tempo:8 },  // 2 重い戦闘(空母)
+  { pat:[1,2,1,2, 1,2,1,2, 1,2,1,2, 1,2,2,2], v0:[0,10, 9,4], tempo:6 },  // 3 激しい刻み(フッド/アイオワ)
+];
+// 各style を 32B ストライドにパディング(オフセット計算を *21→<<5 にして常駐のmul回避)。
+const drumBlob = Buffer.from(DRUM_STYLES.flatMap((s) => {
+  const blk = [...s.pat, ...s.v0, s.tempo];
+  while (blk.length < 32) blk.push(0);
+  return blk;
+}));
+
+// ---- 面名/撃沈メッセージを常駐から追い出す: 各16Bスロット(NUL終端)でデータバンクへ。 ----
+// stagename=開始カード用, sunk_msg=結果画面用(旧版 g_L[10..14])。stage_build で当該面をRAMへ。
+const STAGE_NAMES = ['BISMARCK', 'CARRIER', 'HOOD', 'TWINS', 'IOWA'];
+const SUNK_MSGS   = ['BISMARCK SUNK', 'ESSEX SUNK', 'HMS HOOD SUNK', 'SISTERS SUNK', 'USS IOWA SUNK'];
+function str16(arr) {
+  const b = Buffer.alloc(arr.length * 16);   // 0埋め=NUL終端
+  arr.forEach((s, i) => b.write(s, i * 16, 'ascii'));
+  return b;
+}
+const strBlob = Buffer.concat([str16(STAGE_NAMES), str16(SUNK_MSGS)]);
+
 // ---- 撃破!! パネル(1bpp)を常駐から追い出す: 既存ヘッダのバイト列を読み、データバンクへ ----
 const panelSrc = readFileSync(new URL('../src/include/panel_gekiha.h', import.meta.url), 'utf8');
 const panelW  = +(panelSrc.match(/#define\s+PANEL_W\s+(\d+)/)[1]);
@@ -282,7 +308,7 @@ const panelBlob = Buffer.from(panelBytes);
 const emptyops = shipops([]);   // ops2 が無い艦(1バイト END)
 const bgmBlobs = TRACKS.map(packTrack);
 const shipBlobs = SHIPS.flatMap((s) => [s.ops, s.ops2 || emptyops]);   // 艦ごとに ops, ops2 の2枚
-const parts = [...bgmBlobs, ...shipBlobs, ...fbBlobs, panelBlob];
+const parts = [...bgmBlobs, ...shipBlobs, ...fbBlobs, panelBlob, drumBlob, strBlob];
 const offAll = [];
 let cur = 0;
 for (const b of parts) { offAll.push(cur); cur += b.length; }
@@ -292,6 +318,8 @@ const shipOps2Off = SHIPS.map((_, i) => offAll[bgmBlobs.length + i * 2 + 1]);
 const fbBase = bgmBlobs.length + shipBlobs.length;
 const fbOff = fbBlobs.map((_, i) => offAll[fbBase + i]);
 const panelOff = offAll[fbBase + fbBlobs.length];
+const drumOff = offAll[fbBase + fbBlobs.length + 1];
+const strOff  = offAll[fbBase + fbBlobs.length + 2];
 const bin = Buffer.concat(parts);
 if (bin.length > 0x2000) throw new Error(`assets ${bin.length}B > 8KB bank`);
 writeFileSync(binOut, bin);
@@ -333,6 +361,13 @@ const h = [
   `#define PANEL_H ${panelH}`,
   `#define PANEL_LEN ${panelBlob.length}`,
   `static const unsigned int panel_off = ${panelOff};`,
+  '/* --- 面別ドラム(スタイル1-3)。各21B=[pat16,v0(4),tempo]。bgm_play が p[8]=style で当該21BをRAMへ。 --- */',
+  `#define DRUM_STYLE_BYTES 21`,
+  `#define DRUM_STYLE_STRIDE 32`,
+  `static const unsigned int drum_off = ${drumOff};`,
+  '/* --- 面名(開始カード)/撃沈メッセージ(結果画面)。各16Bスロット。stage_build で当該面をRAMへ。 --- */',
+  `static const unsigned int stagename_off = ${strOff};`,
+  `static const unsigned int sunk_off = ${strOff + 5 * 16};`,
   '/* --- 開始カードの事前ベイク艦画像(64x48=48行x32byte)。bank4(旧demo跡)に5艦連結(assets/cards.bin)。 --- */',
   '#define SHIP_CARD_BANK 4',
   '#define SHIP_CARD_LEN 1536',

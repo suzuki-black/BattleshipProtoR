@@ -84,10 +84,10 @@ void sfx_update(void) {
    エンベロープ: 発音開始 peak → 毎フレーム-1 → sustain、末尾2フレーム無音。vib で伸ばし音に揺れ。 */
 #define BGM_REST 255
 static const s8 bgm_vibt[8]   = { 0, 1, 2, 1, 0, -1, -2, -1 };
-static const u8 bgm_drmPat[16]= { 1,3,2,3, 1,3,2,3, 1,3,2,3, 1,2,2,3 };  /* 1=キック/2=スネア/3=ハット */
-static const u8 bgm_drmNP[4]  = { 0, 20, 7, 3 };   /* noise周期 */
-static const u8 bgm_drmV0[4]  = { 0, 14, 13, 6 };  /* 初期音量 */
-static const u8 bgm_drmDec[4] = { 0, 3, 2, 3 };    /* 毎フレーム減衰 */
+static const u8 bgm_drmNP[4]  = { 0, 20, 7, 3 };   /* noise周期(全style共通) 1=キック/2=スネア/3=ハット */
+static const u8 bgm_drmDec[4] = { 0, 3, 2, 3 };    /* 毎フレーム減衰(全style共通) */
+/* ★面別ドラム: スタイル別の [pat16, v0(4), tempo] はデータバンク(drum_off)に置き、bgm_play で当該21BをRAMへ。 */
+static u8 drm_blk[DRUM_STYLE_BYTES];   /* [0..15]=pattern / [16..19]=v0 / [20]=tempo */
 
 static u8  bgm_ram[BGM_RAM_MAX];
 static u8 *mel_n, *mel_l, *bas_n;
@@ -107,6 +107,8 @@ void bgm_play(u8 track) {
     nMel = p[0]; nBas = p[1]; basStep = p[2];
     melPeak = p[3]; melSus = p[4]; melVib = p[5];
     basPeak = p[6]; basSus = p[7]; drumOn = p[8]; bassSweep = p[9];
+    if (drumOn) { u16 doff = (u16)(drum_off + ((drumOn - 1) << 5));   /* style別21B(32Bストライド)をRAMへ */
+                  data_read(BGM_BANK, doff, drm_blk, DRUM_STYLE_BYTES); }
     mel_n = p + 10;
     mel_l = p + 10 + nMel;
     bas_n = p + 10 + nMel + nMel;
@@ -158,13 +160,13 @@ static void bgm_voice(u8 *idx, u8 *trem, u8 *curlen,
     psg((u8)(8 + ch), vol);
 }
 
-/* ドラム(noise ch=2)。8フレーム毎に次ステップ。busy(SFX命中/破壊)中は譲る。 */
+/* ドラム(noise ch=2)。tempo(style別)毎に次ステップ。busy(SFX命中/破壊)中は譲る。 */
 static void bgm_drum(u8 busy) {
     if (drmT == 0) {
         drmIdx  = (u8)((drmIdx + 1 >= 16) ? 0 : drmIdx + 1);
-        drmT    = 8;
-        drmType = bgm_drmPat[drmIdx];
-        drmVol  = bgm_drmV0[drmType];
+        drmT    = drm_blk[20];              /* テンポ(style: 標準/重い=8, 激しい=6) */
+        drmType = drm_blk[drmIdx];          /* パターン(style別) */
+        drmVol  = drm_blk[16 + drmType];    /* 初期音量 v0[type](style別) */
     }
     drmT--;
     if (busy) return;

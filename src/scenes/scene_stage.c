@@ -59,12 +59,10 @@ static u16 rng;
 static u8  rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }
 
 static u8 curstage;   /* 現在の面(0..STAGE_COUNT-1)。stage_init が g_stage_sel から設定 */
-/* 面ごとの艦名(結果画面用)。艦体OPS/長さは assets_data.h の ship_*_off/len[curstage]。 */
-static const char *const stagename[STAGE_COUNT] = { "BISMARCK", "CARRIER", "HOOD", "TWINS", "IOWA" };
-/* 撃破結果の英文メッセージ(旧版 g_L[10..14] を忠実移植)。艦名+SUNK。 */
-static const char *const sunk_msg[STAGE_COUNT] = {
-    "BISMARCK SUNK", "ESSEX SUNK", "HMS HOOD SUNK", "SISTERS SUNK", "USS IOWA SUNK"
-};
+/* 面名(開始カード)/撃沈メッセージ(結果画面)はデータバンク(stagename_off/sunk_off, 各16Bスロット)に置き、
+   stage_build で当該面の16BをRAMへ読む(常駐節約)。旧版 g_L[10..14] の撃沈メッセージ相当。 */
+static char cur_name[16];   /* 現在面の艦名(NUL終端) */
+static char cur_sunk[16];   /* 現在面の「[艦名] SUNK」(NUL終端) */
 
 /* 主砲塔(破壊可能)を艦上の世界座標に配置。艦中心 x=120(sprite左上→中心128)。世界Y=艦頭(SC_SHIP_R0*16)+艦内y。
    hp=5(旧版準拠): 抑え込み(肉薄で撃たせない)で安全に連射しないと落としにくい=「ゼロ距離抑え込み=最速撃破」を要求。
@@ -98,6 +96,8 @@ static void prerender_ship(void) {
     scroll_build_sea();                        /* 海テンプレート(512) */
     data_read(ASSET_BANK, ship_ops_off[curstage],  ship_ram,  ship_ops_len[curstage]);
     data_read(ASSET_BANK, ship_ops2_off[curstage], ship_ram2, ship_ops2_len[curstage]);
+    data_read(ASSET_BANK, (u16)(stagename_off + ((u16)curstage << 4)), (u8 *)cur_name, 16);
+    data_read(ASSET_BANK, (u16)(sunk_off + ((u16)curstage << 4)), (u8 *)cur_sunk, 16);
     ship_render(ship_kind[curstage], ship_hull[curstage], ship_bowcnt[curstage], ship_bowyb[curstage],
                 ship_aagtbl[curstage], ship_aagp[curstage], ship_ram, ship_ram2);
     rendered_stage = (s8)curstage;
@@ -397,7 +397,7 @@ static const u8 stage_bgm[STAGE_COUNT] = { 1, 3, 4, 5, 6 };
         → メインBGM開始 → 地形を表示(stage_begin_display)＝ゲーム開始。
    艦名は可変長なので中央寄せ(8px/char)。 */
 static void stage_intro(void) {
-    const char *nm = stagename[curstage];
+    const char *nm = cur_name;
     u8 f, n = 0;
     char num[2];
     while (nm[n]) n++;                       /* 艦名の長さ(中央寄せ用) */
@@ -475,7 +475,7 @@ static void results_and_fanfare(void) {
     blit_panel(76, 44, 11, 0);          /* 撃破!! の影(赤, +4/+4) */
     blit_panel(72, 40, 15, 0);          /* 撃破!! 本体(白)。中央 x72(=(256-112)/2) */
     /* [艦名] SUNK を赤・2倍角で中央(旧版: draw_text_center g_L[10+stage], 赤)。 */
-    { const char *m = sunk_msg[curstage]; u8 n = 0;
+    { const char *m = cur_sunk; u8 n = 0;
       while (m[n]) n++;
       vdp_text_s((u8)((256 - (u16)n * 16) / 2), 100, 11, 0, 2, m); }
     if (g_score > g_hiscore) g_hiscore = g_score;
@@ -483,7 +483,7 @@ static void results_and_fanfare(void) {
     vdp_text(72, 132, 15, 0, "SCORE");
     vdp_text(120, 132, 11, 0, scorebuf);
     fmt_score(g_hiscore);
-    vdp_text(72, 152, 14, 0, "HI  ");
+    vdp_text(72, 152, 14, 0, "HI");
     vdp_text(120, 152, 14, 0, scorebuf);
     play_fanfare();                     /* 勝ちどき(BGM停止・前景同期) */
     vdp_text(88, 176, 14, 0, "PUSH SPACE");
@@ -527,7 +527,7 @@ static u8 game_over_screen(void) {
     vdp_text(84, 96, 15, 0, "SCORE");
     vdp_text(132, 96, 11, 0, scorebuf);
     fmt_score(g_hiscore);
-    vdp_text(84, 116, 14, 0, "HI  ");
+    vdp_text(84, 116, 14, 0, "HI");
     vdp_text(132, 116, 14, 0, scorebuf);
     if (!g_continue) {                  /* 継続OFF: PUSH SPACE → タイトル */
         vdp_text(88, 160, 14, 0, "PUSH SPACE");
