@@ -545,6 +545,19 @@ static u8 defeat_update(void) {
     iv = (dtimer < 50) ? 1 : 3;         /* クライマックス(残り<50)で爆発を倍密に */
     if ((dtimer & iv) == 0) ent_spawn_explosion((s16)(80 + (rnd() % 96)), (s16)(20 + (rnd() % 172)));  /* 艦の全幅に降らす */
     if ((dtimer % 12) == 0) sfx(2, SFX_BOOM);
+    /* ★旧版の撃破スペクタクル: BG火球を艦全体へ escalating に撒き、炎で覆い尽くす(スプライト枠不使用)。
+       数は時間と共に増加(3→16)。cam凍結なので毎フレーム撒くと蓄積して艦が炎まみれになる。 */
+    { u8 q, qmax = (u8)(3 + (150 - dtimer) / 8);
+      if (qmax > 16) qmax = 16;
+      for (q = 0; q < qmax; q++) {
+          s16 sx = (s16)(88 + (rnd() % 84));            /* 艦のX帯 */
+          s16 sy = (s16)(12 + (rnd() % 180));           /* 画面Y */
+          u8  fs = (u8)(rnd() % 3), box = fb_box[fs];
+          s16 left = (s16)(sx - box / 2);
+          if (left < 0) left = 0; else if (left > (s16)(256 - box)) left = (s16)(256 - box);
+          ring_blit_t(fb_x[fs], FB_PAGE0_Y, (u16)left, (u16)((s16)cam + sy - box / 2), box, box);
+      }
+    }
     ent_update_all();                   /* 爆発アニメを進める(炎上残骸はB/リングに焼済=cam凍結で維持) */
     ent_draw_all();
     if (dtimer) dtimer--;
@@ -647,6 +660,7 @@ u8 stage_update(void) {
     /* 全エンプレ(主砲＋対空砲)撃破でクリア → 撃破演出へ(炎上→撃破!!→スコア→ファンファーレ→エンディング) */
     if (phase == 1 && ent_live_turrets() == 0 && aa_alive() == 0) {
         dmode = 1; dtimer = 150;   /* 約2.5秒の炎上スペクタクル */
+        vdp_set_hscroll(0, 0);     /* 蛇行(横HW)を0に=撒く火球のX基準を艦アートへ揃える(旧版準拠) */
         bgm_stop();
         return SCENE_NONE;
     }
