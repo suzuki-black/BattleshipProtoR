@@ -7,7 +7,7 @@
 
 #include "types.h"
 
-#define HUD_SLOTS 6   /* スコア5桁(0-4)＋残機(5)。ent_draw_all は slot6 以降を使う */
+#define HUD_SLOTS 7   /* スコア5桁(0-4)＋残機アイコン(5=零戦シルエット)＋残機数(6)。ent_draw_all は slot7 以降 */
 
 void hud_init(void);                 /* 数字パターン投入＋HUD色＋g_spr_base 確保 */
 void hud_draw(u16 score, u8 lives);  /* スコア5桁＋残機を HUD スロットへ(毎フレーム) */
