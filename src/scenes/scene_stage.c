@@ -509,6 +509,7 @@ u8 stage_update(void) {
        ラスタが既に上端を通過→R#23とズレて1px上下振動する(旧版で残っていた不具合)。 */
     hud_draw(g_score, g_lives);
 
+    g_rage = (phase == 1 && ent_count(ET_TURRET) <= 1) ? 1 : 0;   /* ★最後の砲台=レイジ(全発砲が速射) */
     ent_update_all();
     aa_update();       /* 対空砲23基の発砲(画面内のみ。エアバースト/小弾) */
     special_update();  /* 艦種別固有兵装(空母=艦載機射出 等) */

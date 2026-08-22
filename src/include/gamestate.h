@@ -15,7 +15,10 @@ extern u16 g_hiscore;      /* ハイスコア(セッション内。将来SRAM保
 extern u8  g_lives;        /* 現在の残機(面開始で g_lives_idx から設定) */
 extern u8  g_php;          /* 現在の耐久HP(面開始/ミスで g_durability から補充) */
 
-/* 難易度で発火/出現間隔をスケール(EASY=遅い/HARD=速い)。base×{5,4,3}/4、下限1。全系統の発砲・出現に適用。 */
+extern u8  g_rage;         /* 1=レイジ(ボス最後の砲台=速射の最終抵抗)。diff_interval が更に短縮 */
+
+/* 難易度で発火/出現間隔をスケール(EASY=遅い/HARD=速い)。base×{5,4,3}/4、下限1。全系統の発砲・出現に適用。
+   レイジ中は更に×2/3。 */
 u8 diff_interval(u8 base);
 
 #endif /* GAMESTATE_H */

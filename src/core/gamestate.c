@@ -11,11 +11,13 @@ u16 g_score;
 u16 g_hiscore;
 u8  g_lives;
 u8  g_php;
+u8  g_rage;
 
-/* 難易度で間隔をスケール(EASY=1.25倍遅い/NORMAL=等倍/HARD=0.75倍速い)。下限1。 */
+/* 難易度で間隔をスケール(EASY=1.25倍遅い/NORMAL=等倍/HARD=0.75倍速い)。レイジ中は更に×2/3。下限1。 */
 u8 diff_interval(u8 base) {
     static const u8 m[3] = { 5, 4, 3 };
     u16 v = (u16)base * m[(g_difficulty < 3) ? g_difficulty : 1] / 4;
+    if (g_rage) v = v * 2 / 3;    /* ボス最後の砲台=最終抵抗の速射 */
     if (v < 1) v = 1;
     return (v > 255) ? 255 : (u8)v;
 }
