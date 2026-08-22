@@ -222,6 +222,25 @@ static void draw_bow(s16 cx, u8 cnt, u16 yb) {
 }
 
 /* ---- 対空砲23基(座標表は常駐 ship_aag.c を extern 参照) ---- */
+/* 甲板の停泊F6F(旧版 draw_bg_hellcat 移植)。上面視の小さな艦載機をBGで焼き込む(スクロールで艦と流れる)。 */
+static void bg_hellcat(s16 cx, s16 cy) {
+    sfill((u16)(cx - 5), (u16)(B + cy + 4), 11, 7, 13);   /* 落ち影(接地感) */
+    sfill((u16)(cx - 5), (u16)(B + cy - 1), 11, 3, 14);   /* 主翼(明灰) */
+    sfill((u16)(cx - 5), (u16)(B + cy - 1), 11, 1, 15);   /* 翼前縁(白) */
+    sfill((u16)(cx - 1), (u16)(B + cy - 6),  2, 13, 14);  /* 胴体 */
+    sfill((u16)(cx - 1), (u16)(B + cy - 3),  2, 3, 15);   /* 風防(白sheen) */
+    sfill((u16)(cx - 3), (u16)(B + cy + 4),  5, 2, 4);    /* 水平尾翼 */
+    sfill((u16)(cx - 1), (u16)(B + cy - 7),  2, 2, 4);    /* エンジンカウル */
+    sfill((u16)(cx - 4), (u16)(B + cy), 1, 2, 15);
+    sfill((u16)(cx + 3), (u16)(B + cy), 1, 2, 15);        /* 両翼の白星 */
+}
+/* 空母甲板の駐機9機(旧版 pk_x/pk_y): 中央列x120に5機＋左列x98に4機。 */
+static void carrier_planes(void) {
+    u8 i;
+    for (i = 0; i < 5; i++) bg_hellcat(120, (s16)(130 + i * 40));
+    for (i = 0; i < 4; i++) bg_hellcat(98,  (s16)(150 + i * 40));
+}
+
 static void draw_aag(u8 tbl, u8 gb, u8 gs, u8 ab, u8 as) {
     const u8 *ax; const u16 *ay; u8 i;
     switch (tbl) {
@@ -299,6 +318,7 @@ static void ship_render_impl(u8 kind, u8 hull, u8 bow_cnt, u16 bow_yb, u8 aag_tb
         run_ship_ops(ops);
         metalNoise(140, 150, 36, 42);
         run_ship_ops(ops2);
+        carrier_planes();      /* 甲板の駐機9機(旧版復活) */
     } else if (kind == 1) {
         paint_hull_at(76);  draw_bow(76, bow_cnt, bow_yb);
         paint_hull_at(180); draw_bow(180, bow_cnt, bow_yb);
