@@ -216,20 +216,21 @@ static void aa_collide(void) {
 static const u8  fb_box[3] = { 24, 16, 12 };            /* 0=大(主砲) 1=中(大型AA) 2=小(極小AA) */
 static const u16 fb_x[3] = { 0, 64, 112 };              /* 各サイズのベイクX(page0上端に横並び) */
 
-/* 火球1枚を (bx,FB_PAGE0_Y) の box×box に焼く。赤→橙→白芯の同心＋十字で角を丸めた炎塊。
-   frameで芯/十字を微揺れ(燃焼感)。塗りは vdp_fill 数枚のみ(ベイク時1回だけ=軽量)。 */
-static void bake_one(u16 bx, u8 box, u8 frame) {
-    u16 x0 = bx, y0 = FB_PAGE0_Y;
-    u8 j = frame ? 1 : 0, o = (u8)(box / 4), c = (u8)(box / 3);
-    vdp_fill(x0, y0, box, box, 0);                                       /* 透明で下地クリア */
-    vdp_fill((u16)(x0 + 1), (u16)(y0 + 2), (u16)(box - 2), (u16)(box - 4), 11);   /* 赤(横広) */
-    vdp_fill((u16)(x0 + 2), (u16)(y0 + 1), (u16)(box - 4), (u16)(box - 2), 11);   /* 赤(縦長)=十字で角丸 */
-    vdp_fill((u16)(x0 + o + j), (u16)(y0 + o), (u16)(box - 2 * o), (u16)(box - 2 * o), 12);   /* 橙 */
-    vdp_fill((u16)(x0 + c), (u16)(y0 + c + j), (u16)(box - 2 * c), (u16)(box - 2 * c), 15);   /* 白熱の芯 */
-}
+/* 火球3枚(丸: gen_assets が旧版render_fireball相当をビルド時ベイク)を バンク→RAM→page0非表示域 へ展開。
+   円形の塗りはNode側で計算済み=常駐コードは data_read＋VRAM書込ループのみ(四角fillをやめ丸に=旧版準拠)。 */
+static u8 fb_ram[FB_RAM_MAX];
 static void bake_fireballs(void) {
     u8 s;
-    for (s = 0; s < 3; s++) bake_one(fb_x[s], fb_box[s], 0);   /* 1コマのみ(静止炎=艦Bへ焼き込む) */
+    for (s = 0; s < 3; s++) {
+        u8 box = fb_box[s], bytes = (u8)(box / 2), row;
+        data_read(ASSET_BANK, fb_off[s], fb_ram, (u16)((u16)box * bytes));
+        for (row = 0; row < box; row++) {
+            const u8 *p = &fb_ram[(u16)row * bytes];
+            u8 cbyte;
+            vdp_write_addr((u16)((u16)(FB_PAGE0_Y + row) * 128 + fb_x[s] / 2));
+            for (cbyte = 0; cbyte < bytes; cbyte++) vdp_data(p[cbyte]);
+        }
+    }
 }
 
 /* linear元(page0)→page1リングへ box透過転送。リングの256px境界を跨ぐぶんは分割。 */

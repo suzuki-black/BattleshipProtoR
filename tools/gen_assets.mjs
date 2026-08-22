@@ -241,17 +241,46 @@ const SHIPS = [
   },
 ];
 
-// ---- バンク配置(bank8): BGM曲 → 各艦の [ops, ops2] を連結 ----
+// ---- 撃破エンプレの炎上火球(旧版 render_fireball 移植: 丸い火球=赤本体＋橙＋白芯＋ギザギザ舌) ----
+// SCREEN5(2px/byte)の box×box ビットマップを生成。色0=透明(コピー時に艦BGを透かす)。四角ではなく円。
+function fbDisk(px, box, cx, cy, r, col) {
+  const rr = r * r;
+  for (let y = 0; y < box; y++) for (let x = 0; x < box; x++) {
+    const dx = x - cx, dy = y - cy;
+    if (dx * dx + dy * dy <= rr) px[y * box + x] = col;
+  }
+}
+function fireballBmp(box) {
+  const px = new Uint8Array(box * box);            // 0=透明
+  const c = (box - 1) / 2, r = box / 2 - 1;
+  for (let t = 0; t < 12; t++) {                    // ギザギザの赤い舌(炎らしさ)
+    const a = (t / 12) * Math.PI * 2;
+    fbDisk(px, box, c + Math.cos(a) * (r - 1), c + Math.sin(a) * (r - 1), 1.6 + (t % 2), 11);
+  }
+  fbDisk(px, box, c, c, r - 1, 11);                 // 赤い本体
+  fbDisk(px, box, c, c, Math.max(1, (r * 3 / 5) | 0), 12);   // 橙
+  fbDisk(px, box, c, c, Math.max(1, (r * 3 / 10) | 0), 15);  // 白熱の芯
+  const bytes = box / 2, out = Buffer.alloc(box * bytes);    // 2px/byte へパック
+  for (let y = 0; y < box; y++) for (let b = 0; b < bytes; b++)
+    out[y * bytes + b] = (px[y * box + b * 2] << 4) | px[y * box + b * 2 + 1];
+  return out;
+}
+const FB_BOXES = [24, 16, 12];                       // 大(主砲)/中(大型AA)/小(極小AA)
+const fbBlobs = FB_BOXES.map(fireballBmp);
+
+// ---- バンク配置(bank8): BGM曲 → 各艦の [ops, ops2] → 火球3枚 を連結 ----
 const emptyops = shipops([]);   // ops2 が無い艦(1バイト END)
 const bgmBlobs = TRACKS.map(packTrack);
 const shipBlobs = SHIPS.flatMap((s) => [s.ops, s.ops2 || emptyops]);   // 艦ごとに ops, ops2 の2枚
-const parts = [...bgmBlobs, ...shipBlobs];
+const parts = [...bgmBlobs, ...shipBlobs, ...fbBlobs];
 const offAll = [];
 let cur = 0;
 for (const b of parts) { offAll.push(cur); cur += b.length; }
 const bgmOff = offAll.slice(0, bgmBlobs.length);
 const shipOpsOff  = SHIPS.map((_, i) => offAll[bgmBlobs.length + i * 2]);
 const shipOps2Off = SHIPS.map((_, i) => offAll[bgmBlobs.length + i * 2 + 1]);
+const fbBase = bgmBlobs.length + shipBlobs.length;
+const fbOff = fbBlobs.map((_, i) => offAll[fbBase + i]);
 const bin = Buffer.concat(parts);
 if (bin.length > 0x2000) throw new Error(`assets ${bin.length}B > 8KB bank`);
 writeFileSync(binOut, bin);
@@ -282,6 +311,11 @@ const h = [
   `static const unsigned int ship_bowyb[STAGE_COUNT]   = { ${SHIPS.map((s) => s.bowYb).join(',')} };`,
   `static const unsigned char ship_aagtbl[STAGE_COUNT] = { ${SHIPS.map((s) => s.aagTbl).join(',')} };`,
   `static const unsigned char ship_aagp[STAGE_COUNT][4] = { ${SHIPS.map((s) => `{${s.aagP.join(',')}}`).join(', ')} };`,
+  '/* --- 撃破エンプレの炎上火球(丸。box×box/2 byte, 色0=透明)。bake_fireballs が page0非表示域へ展開。 --- */',
+  `#define FB_COUNT ${fbBlobs.length}`,
+  `#define FB_RAM_MAX ${Math.max(...fbBlobs.map((b) => b.length))}`,
+  `static const unsigned char fb_box_gen[FB_COUNT] = { ${FB_BOXES.join(',')} };`,
+  `static const unsigned int fb_off[FB_COUNT] = { ${fbOff.join(',')} };`,
   '/* --- 開始カードの事前ベイク艦画像(64x48=48行x32byte)。bank4(旧demo跡)に5艦連結(assets/cards.bin)。 --- */',
   '#define SHIP_CARD_BANK 4',
   '#define SHIP_CARD_LEN 1536',
