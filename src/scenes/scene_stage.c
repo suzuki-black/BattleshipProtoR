@@ -16,7 +16,7 @@
 #include "player.h"        /* g_player_x/y(対空砲の自機狙い) */
 #include "bank.h"          /* data_read(艦体OPSをバンク→RAM) */
 #include "assets_data.h"   /* 自動生成: ship_ops_off/len, ship_hull/bowcnt/bowyb, SHIP_OPS_RAM_MAX, ASSET_BANK */
-#include "panel_gekiha.h"  /* 撃破!! の1bppビットマップ(撃破演出パネル) */
+/* 撃破!! パネル(1bpp)は常駐節約のためデータバンク(bank8)へ。PANEL_* / panel_off は assets_data.h。 */
 
 /* ★艦(上面視, 496px)は旧版 BattleshipProto の艦システムを忠実移植(ship.c)。海テンプレを下地に
    paint_hull＋波切り艦首＋主砲/艦橋/煙突OPS＋対空砲23基を バッファB(SC_SHIPBUF_Y=528)へ事前描画。
@@ -440,13 +440,15 @@ static void fmt_score(u16 v) {
     scorebuf[5] = 0;
 }
 
+/* 撃破!! パネルの1bppデータをバンク→RAMへ(結果画面の直前に1回)。 */
+static u8 panel_ram[PANEL_WB * PANEL_H];
 /* 撃破!! パネルを page0 の (dstx,dsty) へ blit(1bpp→SCREEN5, 2px/byte)。on=oncol/off=offcol。dstxは偶数。 */
 static void blit_panel(u16 dstx, u16 dsty, u8 oncol, u8 offcol) {
     u8 y, b, i;
     for (y = 0; y < PANEL_H; y++) {
         vdp_write_addr((u16)((u16)(dsty + y) * 128 + (dstx >> 1)));
         for (b = 0; b < PANEL_WB; b++) {
-            u8 bits = panel_gekiha[(u16)y * PANEL_WB + b];
+            u8 bits = panel_ram[(u16)y * PANEL_WB + b];
             for (i = 0; i < 8; i += 2) {
                 u8 p0 = (bits & (u8)(0x80 >> i)) ? oncol : offcol;
                 u8 p1 = (bits & (u8)(0x80 >> (i + 1))) ? oncol : offcol;
@@ -463,6 +465,7 @@ static void results_and_fanfare(void) {
     vdp_sprite_hide_from(0);            /* スプライト全消し(停止マーカを slot0 へ) */
     vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
     vdp_fill(0, 0, 256, 212, 1);        /* 黒地 */
+    data_read(ASSET_BANK, panel_off, panel_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */
     blit_panel(76, 44, 11, 1);          /* 撃破!! の影(赤, +4/+4) */
     blit_panel(72, 40, 15, 1);          /* 撃破!! 本体(白)。中央 x72(=(256-112)/2) */
     vdp_text(96,  96, 15, 1, stagename[curstage]);

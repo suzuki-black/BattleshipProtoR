@@ -268,11 +268,21 @@ function fireballBmp(box) {
 const FB_BOXES = [24, 16, 12];                       // 大(主砲)/中(大型AA)/小(極小AA)
 const fbBlobs = FB_BOXES.map(fireballBmp);
 
+// ---- 撃破!! パネル(1bpp)を常駐から追い出す: 既存ヘッダのバイト列を読み、データバンクへ ----
+const panelSrc = readFileSync(new URL('../src/include/panel_gekiha.h', import.meta.url), 'utf8');
+const panelW  = +(panelSrc.match(/#define\s+PANEL_W\s+(\d+)/)[1]);
+const panelWB = +(panelSrc.match(/#define\s+PANEL_WB\s+(\d+)/)[1]);
+const panelH  = +(panelSrc.match(/#define\s+PANEL_H\s+(\d+)/)[1]);
+const panelBytes = (panelSrc.match(/panel_gekiha\[[^\]]*\]\s*=\s*\{([\s\S]*?)\}/)[1]
+  .match(/0x[0-9a-fA-F]+|\d+/g) || []).map((n) => Number(n) & 0xFF);
+if (panelBytes.length !== panelWB * panelH) throw new Error(`panel bytes ${panelBytes.length} != ${panelWB * panelH}`);
+const panelBlob = Buffer.from(panelBytes);
+
 // ---- バンク配置(bank8): BGM曲 → 各艦の [ops, ops2] → 火球3枚 を連結 ----
 const emptyops = shipops([]);   // ops2 が無い艦(1バイト END)
 const bgmBlobs = TRACKS.map(packTrack);
 const shipBlobs = SHIPS.flatMap((s) => [s.ops, s.ops2 || emptyops]);   // 艦ごとに ops, ops2 の2枚
-const parts = [...bgmBlobs, ...shipBlobs, ...fbBlobs];
+const parts = [...bgmBlobs, ...shipBlobs, ...fbBlobs, panelBlob];
 const offAll = [];
 let cur = 0;
 for (const b of parts) { offAll.push(cur); cur += b.length; }
@@ -281,6 +291,7 @@ const shipOpsOff  = SHIPS.map((_, i) => offAll[bgmBlobs.length + i * 2]);
 const shipOps2Off = SHIPS.map((_, i) => offAll[bgmBlobs.length + i * 2 + 1]);
 const fbBase = bgmBlobs.length + shipBlobs.length;
 const fbOff = fbBlobs.map((_, i) => offAll[fbBase + i]);
+const panelOff = offAll[fbBase + fbBlobs.length];
 const bin = Buffer.concat(parts);
 if (bin.length > 0x2000) throw new Error(`assets ${bin.length}B > 8KB bank`);
 writeFileSync(binOut, bin);
@@ -316,6 +327,12 @@ const h = [
   `#define FB_RAM_MAX ${Math.max(...fbBlobs.map((b) => b.length))}`,
   `static const unsigned char fb_box_gen[FB_COUNT] = { ${FB_BOXES.join(',')} };`,
   `static const unsigned int fb_off[FB_COUNT] = { ${fbOff.join(',')} };`,
+  '/* --- 撃破!! パネル(1bpp)。常駐節約のためデータバンクへ。results_and_fanfare が data_read して blit。 --- */',
+  `#define PANEL_W ${panelW}`,
+  `#define PANEL_WB ${panelWB}`,
+  `#define PANEL_H ${panelH}`,
+  `#define PANEL_LEN ${panelBlob.length}`,
+  `static const unsigned int panel_off = ${panelOff};`,
   '/* --- 開始カードの事前ベイク艦画像(64x48=48行x32byte)。bank4(旧demo跡)に5艦連結(assets/cards.bin)。 --- */',
   '#define SHIP_CARD_BANK 4',
   '#define SHIP_CARD_LEN 1536',
