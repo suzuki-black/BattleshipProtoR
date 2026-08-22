@@ -303,7 +303,12 @@ void ent_resolve_collisions(void) {
             if ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_FIGHTER
                 || e->type == ET_AABURST || e->type == ET_PURSUER
                 || (e->type == ET_SMISSILE && e->ax >= 2)) {   /* ミサイルは浮上後のみ危険 */
-                if (overlap(e, p)) {
+                /* ★自機の当たりは旧版準拠でタイト: 弾/破片=±6(旧±5)、体当り系=±9(旧±8-10)。
+                   共通overlap(±14)のままだと自機が大きすぎて理不尽=避けても被弾する。 */
+                u8 tol = (e->type == ET_BULLET || e->type == ET_AABURST) ? 6 : 9;
+                s16 dx = e->x - p->x, dy = e->y - p->y;
+                if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
+                if (dx < tol && dy < tol) {
                     e->active = 0;                 /* 敵/敵弾は消す(すり抜け防止) */
                     if (g_pinv == 0 && !g_invinc) {/* 被弾直後の無敵中/設定無敵 は無傷 */
                         g_playerhit++;
