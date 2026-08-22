@@ -211,10 +211,11 @@ void play_sink(void) {
 
 /* 勝ちどきファンファーレ(撃破演出で使用)。 */
 void play_fanfare(void) {
-    static const u8 fmel[8] = { 31,31,31, 36,40,43, 40,43 };   /* G4 G4 G4 C5 E5 G5 E5 G5 */
-    static const u8 fhar[8] = { 19,19,19, 24,28,31, 28,31 };   /* 1オクターブ下で厚み */
-    static const u8 flen[8] = {  8, 8, 8, 12,12,12,  8,40 };
-    fanfare_seq(fmel, fhar, flen, 8);
+    /* 勝ちどきファンファーレ(旧版 fanVicMel/Har/Len を忠実移植=13音)。8音版より高揚・確定感。 */
+    static const u8 fmel[13] = { 33,38,42,45,45,42,45,47,45,42,38,45,45 };
+    static const u8 fhar[13] = { 26,30,33,38,38,33,38,42,38,33,30,38,38 };
+    static const u8 flen[13] = {  8, 8, 8,16, 8, 8,16, 8,24, 8, 8,16,48 };
+    fanfare_seq(fmel, fhar, flen, 13);
 }
 
 /* 開始ファンファーレ(ステージ開始カードで使用。旧版 fanOp を移植)。BGM無音でこれだけ鳴らす。 */
