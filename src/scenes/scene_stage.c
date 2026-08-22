@@ -358,9 +358,13 @@ static void results_and_fanfare(void) {
     blit_panel(76, 44, 11, 1);          /* 撃破!! の影(赤, +4/+4) */
     blit_panel(72, 40, 15, 1);          /* 撃破!! 本体(白)。中央 x72(=(256-112)/2) */
     vdp_text(96,  96, 15, 1, stagename[curstage]);
+    if (g_score > g_hiscore) g_hiscore = g_score;
     fmt_score(g_score);
-    vdp_text(72, 124, 15, 1, "SCORE");
-    vdp_text(120, 124, 11, 1, scorebuf);
+    vdp_text(72, 120, 15, 1, "SCORE");
+    vdp_text(120, 120, 11, 1, scorebuf);
+    fmt_score(g_hiscore);
+    vdp_text(72, 140, 14, 1, "HI  ");
+    vdp_text(120, 140, 14, 1, scorebuf);
     play_fanfare();                     /* 勝ちどき(BGM停止・前景同期) */
     vdp_text(88, 168, 14, 1, "PUSH SPACE");
     for (f = 0; f < 180; f++) {         /* 約3秒 or トリガで次へ */
@@ -395,9 +399,13 @@ static u8 game_over_screen(void) {
     vdp_set_vscroll(0); vdp_sprite_hide_from(0); vdp_set_display_page(0);
     vdp_fill(0, 0, 256, 212, 1);
     vdp_text_s(56, 44, 11, 1, 2, "GAME OVER");   /* 赤・2倍角(9字×16=144→x56中央) */
+    if (g_score > g_hiscore) g_hiscore = g_score;
     fmt_score(g_score);
-    vdp_text(84, 100, 15, 1, "SCORE");
-    vdp_text(132, 100, 11, 1, scorebuf);
+    vdp_text(84, 96, 15, 1, "SCORE");
+    vdp_text(132, 96, 11, 1, scorebuf);
+    fmt_score(g_hiscore);
+    vdp_text(84, 116, 14, 1, "HI  ");
+    vdp_text(132, 116, 14, 1, scorebuf);
     if (!g_continue) {                  /* 継続OFF: PUSH SPACE → タイトル */
         vdp_text(88, 160, 14, 1, "PUSH SPACE");
         for (;;) { input_poll(); if (g_input_edge & INP_TRIG) break; vdp_wait_frame(); }
