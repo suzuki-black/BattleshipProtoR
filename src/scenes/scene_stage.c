@@ -70,6 +70,7 @@ static void spawn_turret(u8 shipX, u16 shipY, u8 delay) {
         e->ax = (s16)shipX - 8;                /* 砲塔中心x→スプライト左上 */
         e->ay = (s16)(SC_SHIP_R0 * 16 + shipY);
         e->color = 5; e->pat = SPR_TURRET; e->hp = 3; e->fire = fd_gun_stage[curstage]; e->ftimer = delay;
+        e->hidden = 1;   /* 砲台の見た目はBG(ドーム＋砲身)。これは破壊用の不可視当たり判定 */
     }
 }
 /* 各面の主砲4基の艦内(x,y)=OPSの主砲位置。順=BB/Carrier/Hood/Twins/Iowa。空母/双子はx左右に分かれる。 */
