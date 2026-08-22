@@ -63,7 +63,8 @@ static u8 curstage;   /* 現在の面(0..STAGE_COUNT-1)。stage_init が g_stage
 static const char *const stagename[STAGE_COUNT] = { "BISMARCK", "CARRIER", "HOOD", "TWINS", "IOWA" };
 
 /* 主砲塔(破壊可能)を艦上の世界座標に配置。艦中心 x=120(sprite左上→中心128)。世界Y=艦頭(SC_SHIP_R0*16)+艦内y。
-   hp=3: 抑え込み(肉薄で撃たせない)で安全に連射しないと落としにくい=「ゼロ距離抑え込み=最速撃破」を要求。 */
+   hp=5(旧版準拠): 抑え込み(肉薄で撃たせない)で安全に連射しないと落としにくい=「ゼロ距離抑え込み=最速撃破」を要求。
+   撃破後は active維持のまま hidden(砲身消失)＝scene が炎上残骸をBGへ焼付ける(burn_new_turrets)。 */
 static void spawn_turret(u8 shipX, u16 shipY, u8 delay) {
     Entity *e = ent_spawn(ET_TURRET);
     if (e) {
@@ -144,12 +145,23 @@ static void apply_weave(void) {
    画面帯[8,200]に居るものだけ自機狙いで撃つ。前14=大型→時限信管エアバースト / 後9=小型→通常小弾。
    面別間隔 aafire_iv[](小=激しい)＋砲ごとの位相ずらし。艦が画面に居る時(sy帯内)だけ発砲。 */
 static u8 aa_fire[SHIP_NAAG];
+static u8 aa_hp[SHIP_NAAG];     /* 対空砲の耐久(大型=前14基:2 / 小型=後9基:1)。0で aa_dead */
+static u8 aa_dead[SHIP_NAAG];   /* 1=破壊(発砲停止・炎上) */
 static const u8 aafire_iv[STAGE_COUNT] = { 140, 132, 84, 64, 40 };
-static void aa_reset(void) { u8 i; for (i = 0; i < SHIP_NAAG; i++) aa_fire[i] = (u8)(60 + i * 11); }
+static void aa_reset(void) {
+    u8 i;
+    for (i = 0; i < SHIP_NAAG; i++) {
+        aa_fire[i] = (u8)(60 + i * 11);
+        aa_hp[i]   = (i < 14) ? 2 : 1;   /* 旧版準拠: 大型HP2 / 極小HP1 */
+        aa_dead[i] = 0;
+    }
+}
+static u8 aa_alive(void) { u8 i, n = 0; for (i = 0; i < SHIP_NAAG; i++) if (!aa_dead[i]) n++; return n; }
 static void aa_update(void) {
     u8 tbl = ship_aagtbl[curstage], i;
     for (i = 0; i < SHIP_NAAG; i++) {
         s16 gx, sy, sx; u16 gy;
+        if (aa_dead[i]) continue;                           /* 破壊済みは撃たない */
         ship_aag_pos(tbl, i, &gx, &gy);
         sy = (s16)(SC_SHIP_R0 * 16 + (s16)gy) - (s16)cam;   /* 画面Y */
         if (sy < 8 || sy > 200) continue;                   /* 画面帯外は撃たない(=艦が視界に無い間も含む) */
@@ -161,6 +173,97 @@ static void aa_update(void) {
         }
         aa_fire[i] = diff_interval((u8)(aafire_iv[curstage] + i * 6));   /* ★難易度スケール */
         sfx(1, SFX_EFIRE);
+    }
+}
+
+static void burn_bake(s16 cx, u16 worldY, u8 s);   /* 前方宣言(aa_collide が撃破時に使う。定義は下) */
+
+/* 自機弾 × 対空砲(座標当たり)。命中でHP減、0で破壊(炎上フラグ＋得点＋爆発)。旧版のarray方式移植。
+   AAは実体を持たない(BG描画)ので、プールの自機弾を走査して座標距離で判定する。 */
+static void aa_collide(void) {
+    u8 tbl = ship_aagtbl[curstage], i, k;
+    for (i = 0; i < SHIP_NAAG; i++) {
+        s16 gx, sy, sx; u16 gy;
+        if (aa_dead[i]) continue;
+        ship_aag_pos(tbl, i, &gx, &gy);
+        sy = (s16)(SC_SHIP_R0 * 16 + (s16)gy) - (s16)cam;
+        if (sy < -8 || sy > 216) continue;                  /* 視界外は当たらない */
+        sx = gx + g_meander;
+        for (k = 0; k < ENT_MAX; k++) {
+            Entity *b = ent_at(k);
+            if (!b->active || b->type != ET_BULLET || b->team != TEAM_PLAYER) continue;
+            { s16 dx = (s16)(b->x + 8) - sx, dy = (s16)(b->y + 8) - sy;
+              if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
+              if (dx < 10 && dy < 10) {
+                  b->active = 0;
+                  if (aa_hp[i]) aa_hp[i]--;
+                  if (aa_hp[i] == 0) {
+                      aa_dead[i] = 1; g_score += (i < 14) ? 30 : 20;
+                      ent_spawn_explosion(sx, sy); sfx(2, SFX_BOOM); g_shake = 6;
+                      burn_bake(gx, (u16)(SC_SHIP_R0 * 16 + gy), (u8)((i < 14) ? 1 : 2));  /* 炎上残骸を焼付け */
+                  } else { ent_spawn_spark(b->x, b->y); sfx(2, SFX_HIT); }
+                  break;
+              }
+            }
+        }
+    }
+}
+
+/* ===== 破壊した砲台/対空砲の常時炎上(BG火球ブリット。旧版 fireball 移植) =====
+   スプライト枠(32/8perline)を使わず、事前ベイクした火球を page1リングへ透過コピーで毎フレーム重ねる。
+   → 全27エンプレを同時炎上でき、破壊済みか一目で分かる(小炎が消える時間帯が無い)。 */
+#define FB_PAGE0_Y 0             /* 火球ベイク先(page0の非表示域 上端。ゲーム中は表示page1) */
+static const u8  fb_box[3] = { 24, 16, 12 };            /* 0=大(主砲) 1=中(大型AA) 2=小(極小AA) */
+static const u16 fb_x[3] = { 0, 64, 112 };              /* 各サイズのベイクX(page0上端に横並び) */
+
+/* 火球1枚を (bx,FB_PAGE0_Y) の box×box に焼く。赤→橙→白芯の同心＋十字で角を丸めた炎塊。
+   frameで芯/十字を微揺れ(燃焼感)。塗りは vdp_fill 数枚のみ(ベイク時1回だけ=軽量)。 */
+static void bake_one(u16 bx, u8 box, u8 frame) {
+    u16 x0 = bx, y0 = FB_PAGE0_Y;
+    u8 j = frame ? 1 : 0, o = (u8)(box / 4), c = (u8)(box / 3);
+    vdp_fill(x0, y0, box, box, 0);                                       /* 透明で下地クリア */
+    vdp_fill((u16)(x0 + 1), (u16)(y0 + 2), (u16)(box - 2), (u16)(box - 4), 11);   /* 赤(横広) */
+    vdp_fill((u16)(x0 + 2), (u16)(y0 + 1), (u16)(box - 4), (u16)(box - 2), 11);   /* 赤(縦長)=十字で角丸 */
+    vdp_fill((u16)(x0 + o + j), (u16)(y0 + o), (u16)(box - 2 * o), (u16)(box - 2 * o), 12);   /* 橙 */
+    vdp_fill((u16)(x0 + c), (u16)(y0 + c + j), (u16)(box - 2 * c), (u16)(box - 2 * c), 15);   /* 白熱の芯 */
+}
+static void bake_fireballs(void) {
+    u8 s;
+    for (s = 0; s < 3; s++) bake_one(fb_x[s], fb_box[s], 0);   /* 1コマのみ(静止炎=艦Bへ焼き込む) */
+}
+
+/* linear元(page0)→page1リングへ box透過転送。リングの256px境界を跨ぐぶんは分割。 */
+static void ring_blit_t(u16 sx, u16 sy, u16 dx, u16 wtop, u16 w, u16 h) {
+    u8  off = (u8)(wtop & 0xFF);
+    u16 dy  = (u16)(256 + off);
+    if ((u16)off + h <= 256) vdp_copy_t(sx, sy, dx, dy, w, h);
+    else { u16 h1 = (u16)(256 - off);
+        vdp_copy_t(sx, sy, dx, dy, w, h1); vdp_copy_t(sx, (u16)(sy + h1), dx, 256, w, (u16)(h - h1)); }
+}
+/* 破壊エンプレ1基を「炎上する残骸」として焼き付ける(死亡時に1回だけ)。
+   艦バッファB(綺麗な艦アート)へ火球を透過焼込み=以後スクロールで自然に炎ごと流れる(旧版=毎フレーム描画より軽量)。
+   さらに現在の表示リングへも即1回重ねる=既に画面内で死んでも即座に炎が見える(小炎が消える時間帯を作らない)。
+   cx=艦アート中心x, worldY=世界Y(=SC_SHIP_R0*16+艦内y), s=火球サイズ。 */
+static void burn_bake(s16 cx, u16 worldY, u8 s) {
+    u8  box = fb_box[s];
+    s16 left = (s16)(cx - box / 2);
+    u16 wtop, bufY;
+    if (left < 0) left = 0; else if (left > (s16)(256 - box)) left = (s16)(256 - box);
+    wtop = (u16)((s16)worldY - box / 2);
+    bufY = (u16)((s16)SC_SHIPBUF_Y + (s16)wtop - SC_SHIP_R0 * 16);
+    vdp_copy_t(fb_x[s], FB_PAGE0_Y, (u16)left, bufY, box, box);   /* 艦Bへ永続焼込み */
+    ring_blit_t(fb_x[s], FB_PAGE0_Y, (u16)left, wtop, box, box);  /* 表示リングへ即時 */
+}
+/* この面で新たに撃破された主砲(実体hp==0)を検出し、まだ焼いていなければ炎上残骸を焼く。
+   撃破済み砲台は hidden で不描画=color未使用なので color を「焼済フラグ(0xFE)」に流用。 */
+static void burn_new_turrets(void) {
+    u8 i;
+    for (i = 0; i < ENT_MAX; i++) {
+        Entity *e = ent_at(i);
+        if (e->active && e->type == ET_TURRET && e->hp == 0 && e->color != 0xFE) {
+            e->color = 0xFE;
+            burn_bake((s16)(e->ax + 8), (u16)(e->ay + 8), 0);
+        }
     }
 }
 
@@ -265,7 +368,8 @@ static void stage_build(void) {
 
 /* 地形リングを表示(page1)＝ここでゲーム画面が現れる。scroll_init は prerender 済みが前提。 */
 static void stage_begin_display(void) {
-    scroll_init();
+    scroll_init();               /* display=page1(以降 page0 は非表示=火球ベイク用に空く) */
+    bake_fireballs();            /* 破壊エンプレ炎上用の火球6枚を page0(非表示域)へ事前ベイク */
     sea_init(curstage);          /* 艦種別の海コラム帯を選択 */
     vdp_set_hscroll(0, 0);
 }
@@ -437,7 +541,7 @@ static u8 defeat_update(void) {
     iv = (dtimer < 50) ? 1 : 3;         /* クライマックス(残り<50)で爆発を倍密に */
     if ((dtimer & iv) == 0) ent_spawn_explosion((s16)(80 + (rnd() % 96)), (s16)(20 + (rnd() % 172)));  /* 艦の全幅に降らす */
     if ((dtimer % 12) == 0) sfx(2, SFX_BOOM);
-    ent_update_all();                   /* 爆発アニメを進める */
+    ent_update_all();                   /* 爆発アニメを進める(炎上残骸はB/リングに焼済=cam凍結で維持) */
     ent_draw_all();
     if (dtimer) dtimer--;
     if (dtimer == 0) {
@@ -512,13 +616,15 @@ u8 stage_update(void) {
        ラスタが既に上端を通過→R#23とズレて1px上下振動する(旧版で残っていた不具合)。 */
     hud_draw(g_score, g_lives);
 
-    g_rage = (phase == 1 && ent_count(ET_TURRET) <= 1) ? 1 : 0;   /* ★最後の砲台=レイジ(全発砲が速射) */
+    g_rage = (phase == 1 && ent_live_turrets() <= 1) ? 1 : 0;   /* ★最後の主砲=レイジ(全発砲が速射) */
     ent_update_all();
     aa_update();       /* 対空砲23基の発砲(画面内のみ。エアバースト/小弾) */
     special_update();  /* 艦種別固有兵装(空母=艦載機射出 等) */
     ent_resolve_collisions();
+    aa_collide();      /* 自機弾×対空砲(座標判定=破壊可能) */
     ent_draw_all();
     sea_frame();   /* SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール */
+    burn_new_turrets();   /* 新たに撃破された主砲の炎上残骸を焼付け(AAはaa_collideで焼済) */
 
     /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。
        尽きたら 継続ONでコンティニュー(残機を初期値へ戻して再挑戦=無限) / OFFでタイトルへ。 */
@@ -534,8 +640,8 @@ u8 stage_update(void) {
         }
         return SCENE_NONE;
     }
-    /* 全砲台撃破でクリア → 撃破演出へ(炎上→撃破!!→スコア→ファンファーレ→エンディング) */
-    if (phase == 1 && ent_count(ET_TURRET) == 0) {
+    /* 全エンプレ(主砲＋対空砲)撃破でクリア → 撃破演出へ(炎上→撃破!!→スコア→ファンファーレ→エンディング) */
+    if (phase == 1 && ent_live_turrets() == 0 && aa_alive() == 0) {
         dmode = 1; dtimer = 150;   /* 約2.5秒の炎上スペクタクル */
         bgm_stop();
         return SCENE_NONE;

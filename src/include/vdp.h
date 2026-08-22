@@ -46,6 +46,8 @@ void vdp_fill(u16 dx, u16 dy, u16 nx, u16 ny, u8 color);
 /* VRAM→VRAM 矩形コピー(LMMM)。(sx,sy)→(dx,dy) を (nx,ny)。Yは0-1023(全4ページ)。
    縦スクロールの行流し込み(バッファB→表示ページ)に使う。 */
 void vdp_copy(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny);
+/* VRAM→VRAM 透過コピー(色0は転送しない)。炎/煙を艦BGへ重ねる用。 */
+void vdp_copy_t(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny);
 
 /* 文字列描画(BIOS 8x8フォント使用)。px は偶数、page0 のみ。fg=文字色/bg=地色。 */
 void vdp_text(u8 px, u8 py, u8 fg, u8 bg, const char *s);

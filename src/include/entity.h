@@ -67,6 +67,8 @@ Entity *ent_spawn(u8 type);         /* 空きを1つ確保(既定値で初期化
 void    ent_update_all(void);       /* 全 active の behavior update を回す */
 void    ent_draw_all(void);         /* active をスプライトへ(hidden除く) */
 u8      ent_count(u8 type);         /* active な type の数(撃破判定用) */
+Entity *ent_at(u8 i);               /* プールの i 番目(0..ENT_MAX-1)。active は呼び側で確認 */
+u8      ent_live_turrets(void);     /* 生存(hp>0)砲台の数。撃破済みは active のまま炎上させるため別カウント */
 void    ent_spawn_explosion(s16 x, s16 y);  /* 撃破エフェクト(火球アニメ)を1つ */
 void    ent_spawn_spark(s16 x, s16 y);      /* 小さな火花(被弾ヒット/発砲)を1つ */
 

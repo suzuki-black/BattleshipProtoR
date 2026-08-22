@@ -148,8 +148,8 @@ void vdp_fill(u16 dx, u16 dy, u16 nx, u16 ny, u8 color) {
     vdp_wreg(46, 0x80);                                        /* CMD = LMMV(論理IMP) */
 }
 
-/* LMMM: VRAM→VRAM 論理コピー。R#32-45 を設定し R#46=0x90。前コマンド完了を待つ。 */
-void vdp_copy(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny) {
+/* LMMM 本体: R#32-45 を設定し R#46=cmd(0x90=不透過/0x98=透過)。前コマンド完了を待つ。 */
+static void vdp_lmmm(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny, u8 cmd) {
     vdp_cmd_wait();
     vdp_wreg(32, sx & 0xFF);  vdp_wreg(33, (sx >> 8) & 0x01);   /* SX (9bit)  */
     vdp_wreg(34, sy & 0xFF);  vdp_wreg(35, (sy >> 8) & 0x03);   /* SY (10bit) */
@@ -158,7 +158,15 @@ void vdp_copy(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny) {
     vdp_wreg(40, nx & 0xFF);  vdp_wreg(41, (nx >> 8) & 0x01);   /* NX (9bit)  */
     vdp_wreg(42, ny & 0xFF);  vdp_wreg(43, (ny >> 8) & 0x03);   /* NY (10bit) */
     vdp_wreg(44, 0);          vdp_wreg(45, 0);                   /* CLR/ARG    */
-    vdp_wreg(46, 0x90);                                          /* CMD = LMMM */
+    vdp_wreg(46, cmd);
+}
+/* VRAM→VRAM 論理コピー(不透過)。 */
+void vdp_copy(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny) {
+    vdp_lmmm(sx, sy, dx, dy, nx, ny, 0x90);
+}
+/* 透過版: ソースの色0はコピーしない(炎/煙を艦の上へ重ね描き)。 */
+void vdp_copy_t(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny) {
+    vdp_lmmm(sx, sy, dx, dy, nx, ny, 0x98);
 }
 
 void vdp_wait_frame(void) {

@@ -78,6 +78,7 @@ static void bh_shooter(Entity *e) {
    ★可動砲身: 自機を狙って段階回転(vx=向き0-7, vy=旋回冷却)。命中フラッシュ(h=残フレーム, 白coltab)。 */
 s16 g_meander;
 static void bh_turret(Entity *e) {
+    if (e->hp == 0) { e->hidden = 1; return; }         /* 撃破済み: 砲身消失・不動(炎上はscene側BGで) */
     e->x = e->ax + g_meander;
     e->y = e->ay - (s16)g_cam;
     if (e->h) { e->h--; e->coltab = barrel_flash; }   /* 命中で白フラッシュ */
@@ -233,6 +234,15 @@ u8 ent_count(u8 type) {
     return n;
 }
 
+Entity *ent_at(u8 i) { return &pool[i]; }
+
+u8 ent_live_turrets(void) {
+    u8 i, n = 0;
+    for (i = 0; i < ENT_MAX; i++)
+        if (pool[i].active && pool[i].type == ET_TURRET && pool[i].hp) n++;
+    return n;
+}
+
 void ent_spawn_explosion(s16 x, s16 y) {
     Entity *e = ent_spawn(ET_EXPLOSION);
     if (e) { e->x = x; e->y = y; e->pat = SPR_EXP0; e->color = 15; e->ftimer = 16; }
@@ -274,10 +284,10 @@ void ent_resolve_collisions(void) {
                 ent_spawn_explosion(t->x, t->y);
                 break;
             }
-            if (t->type == ET_TURRET && overlap(b, t)) {
+            if (t->type == ET_TURRET && t->hp && overlap(b, t)) {
                 b->active = 0;
-                if (--t->hp == 0) { t->active = 0; g_gun_kills++; g_score += 50; ent_spawn_explosion(t->x, t->y);
-                                    g_hitstop = 4; g_shake = 8; }   /* 砲台撃破=手応え(凍結＋揺れ) */
+                if (--t->hp == 0) { t->hidden = 1; g_gun_kills++; g_score += 60; ent_spawn_explosion(t->x, t->y);
+                                    g_hitstop = 4; g_shake = 8; }   /* 撃破=手応え(凍結＋揺れ)。activeは維持し炎上させる */
                 else { t->h = 6; ent_spawn_spark(b->x, b->y); }   /* 非撃破=砲身が白フラッシュ(h)＋火花 */
                 break;
             }
