@@ -61,6 +61,10 @@ static u8  rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }
 static u8 curstage;   /* 現在の面(0..STAGE_COUNT-1)。stage_init が g_stage_sel から設定 */
 /* 面ごとの艦名(結果画面用)。艦体OPS/長さは assets_data.h の ship_*_off/len[curstage]。 */
 static const char *const stagename[STAGE_COUNT] = { "BISMARCK", "CARRIER", "HOOD", "TWINS", "IOWA" };
+/* 撃破結果の英文メッセージ(旧版 g_L[10..14] を忠実移植)。艦名+SUNK。 */
+static const char *const sunk_msg[STAGE_COUNT] = {
+    "BISMARCK SUNK", "ESSEX SUNK", "HMS HOOD SUNK", "SISTERS SUNK", "USS IOWA SUNK"
+};
 
 /* 主砲塔(破壊可能)を艦上の世界座標に配置。艦中心 x=120(sprite左上→中心128)。世界Y=艦頭(SC_SHIP_R0*16)+艦内y。
    hp=5(旧版準拠): 抑え込み(肉薄で撃たせない)で安全に連射しないと落としにくい=「ゼロ距離抑え込み=最速撃破」を要求。
@@ -465,19 +469,24 @@ static void results_and_fanfare(void) {
     vdp_sprite_hide_from(0);            /* スプライト全消し(停止マーカを slot0 へ) */
     vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
     vdp_fill(0, 0, 256, 212, 1);        /* 黒地 */
+    /* 撃破!! パネル+赤枠(旧版準拠)。赤ブロックを敷き、パネルの黒地(offcol=1)が中央を抜く=外周が赤枠に。 */
+    vdp_fill(66, 34, 124, 53, 11);      /* 赤ブロック(この外周だけが枠として残る) */
     data_read(ASSET_BANK, panel_off, panel_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */
     blit_panel(76, 44, 11, 1);          /* 撃破!! の影(赤, +4/+4) */
     blit_panel(72, 40, 15, 1);          /* 撃破!! 本体(白)。中央 x72(=(256-112)/2) */
-    vdp_text(96,  96, 15, 1, stagename[curstage]);
+    /* [艦名] SUNK を赤・2倍角で中央(旧版: draw_text_center g_L[10+stage], 赤)。 */
+    { const char *m = sunk_msg[curstage]; u8 n = 0;
+      while (m[n]) n++;
+      vdp_text_s((u8)((256 - (u16)n * 16) / 2), 100, 11, 1, 2, m); }
     if (g_score > g_hiscore) g_hiscore = g_score;
     fmt_score(g_score);
-    vdp_text(72, 120, 15, 1, "SCORE");
-    vdp_text(120, 120, 11, 1, scorebuf);
+    vdp_text(72, 132, 15, 1, "SCORE");
+    vdp_text(120, 132, 11, 1, scorebuf);
     fmt_score(g_hiscore);
-    vdp_text(72, 140, 14, 1, "HI  ");
-    vdp_text(120, 140, 14, 1, scorebuf);
+    vdp_text(72, 152, 14, 1, "HI  ");
+    vdp_text(120, 152, 14, 1, scorebuf);
     play_fanfare();                     /* 勝ちどき(BGM停止・前景同期) */
-    vdp_text(88, 168, 14, 1, "PUSH SPACE");
+    vdp_text(88, 176, 14, 1, "PUSH SPACE");
     for (f = 0; f < 180; f++) {         /* 約3秒 or トリガで次へ */
         input_poll();
         if (g_input_edge & INP_TRIG) break;
