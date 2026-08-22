@@ -156,7 +156,7 @@ static void aa_update(void) {
           if (i < 14) { emit_burst(sx, sy, dir, 2, 42); }    /* 大型=時限信管エアバースト(橙カプセル, fuze42) */
           else { emit(sx, sy, dir, 0, 2); }                  /* 小型=通常小弾(橙ペレット) */
         }
-        aa_fire[i] = (u8)(aafire_iv[curstage] + i * 6);
+        aa_fire[i] = diff_interval((u8)(aafire_iv[curstage] + i * 6));   /* ★難易度スケール */
         sfx(1, SFX_EFIRE);
     }
 }
@@ -180,7 +180,7 @@ static void special_update(void) {
                 e->pat = SPR_HELLCAT; e->coltab = fighter_ctab[4]; e->shadow = 1;  /* F6F(赤=甲板で視認性)＋翼光沢＋落ち影 */
             }
             sfx(1, SFX_EFIRE);
-            spc_timer = 120;                     /* 次の射出まで(旧版 ep_launch) */
+            spc_timer = diff_interval(120);                     /* 次の射出まで(旧版 ep_launch) */
         } else spc_timer = 30;                   /* 満杯なら短く再試行 */
     } else if (curstage == 2) {                   /* 3面 フッド: 舷側から潜水艦ミサイル(浮上→弱誘導→8方向炸裂) */
         if (ent_count(ET_SMISSILE) < 3) {
@@ -192,7 +192,7 @@ static void special_update(void) {
                 e->ax = 1; e->ay = side; e->ftimer = 24;
             }
             sfx(1, SFX_EFIRE);
-            spc_timer = 90;
+            spc_timer = diff_interval(90);
         } else spc_timer = 30;
     } else if (curstage == 3) {                   /* 4面 双子: 左右の艦から弾が中心へ収束→合体して自機狙いの高速大弾 */
         if (ent_count(ET_COMBO) < 2) {
@@ -205,7 +205,7 @@ static void special_update(void) {
                 e->hidden = 1;                           /* 実体は非表示(合体パスで2発描画) */
             }
             sfx(1, SFX_EFIRE);
-            spc_timer = 80;
+            spc_timer = diff_interval(80);
         } else spc_timer = 30;
     } else if (curstage == 4) {                   /* 5面 アイオワ: 画面端から連続空襲(F4U)。ホバー無し即追尾=総攻撃 */
         if (ent_count(ET_PURSUER) < 4) {
@@ -217,7 +217,7 @@ static void special_update(void) {
                 e->pat = SPR_CORSAIR; e->coltab = fighter_ctab[1]; e->shadow = 1;  /* F4U(橙)＋落ち影 */
             }
             sfx(1, SFX_EFIRE);
-            spc_timer = 45;                              /* 総攻撃=短間隔 */
+            spc_timer = diff_interval(45);                              /* 総攻撃=短間隔 */
         } else spc_timer = 20;
     }
 }
@@ -448,7 +448,7 @@ u8 stage_update(void) {
         scroll_to(cam);
         /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
            (でないと戦闘機が上端=艦の上に突然湧いてゴミに見える。HANDOFF §2: 空戦→戦艦)。 */
-        if (cam > SC_CAM_SHIP && (++ftick % fighter_iv[curstage]) == 0) {
+        if (cam > SC_CAM_SHIP && (++ftick % diff_interval(fighter_iv[curstage])) == 0) {
             Entity *f = ent_spawn(ET_FIGHTER);
             if (f) {
                 u8 arch = fighter_arch[curstage];

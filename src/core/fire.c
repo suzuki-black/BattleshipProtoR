@@ -84,7 +84,7 @@ void run_fire(Entity *e) {
 
     interval = p[0];
     supp     = p[1];
-    e->ftimer = interval;
+    e->ftimer = diff_interval(interval);   /* ★難易度で発火間隔をスケール(EASY遅/HARD速) */
     if (supp) {   /* ★ゼロ距離抑え込み: 実効半径内なら今回の発射をスキップ(次interval後に再判定) */
         s16 eff = (s16)supp + supp_adj[(g_difficulty < 3) ? g_difficulty : 1];
         if (eff < 8) eff = 8;

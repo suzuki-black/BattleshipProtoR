@@ -11,7 +11,11 @@ extern u8  g_stage_sel;    /* 開始ステージ(0基点。現状0のみ)。設�
 extern u8  g_continue;     /* 1=ゲームオーバーでコンティニュー可(既定1)。設定メニュー(継続) */
 extern u8  g_invinc;       /* 1=無敵(被弾しても残機/耐久を減らさない)。設定メニュー(無敵) */
 extern u16 g_score;        /* スコア(撃破で加算) */
+extern u16 g_hiscore;      /* ハイスコア(セッション内。将来SRAM保存) */
 extern u8  g_lives;        /* 現在の残機(面開始で g_lives_idx から設定) */
 extern u8  g_php;          /* 現在の耐久HP(面開始/ミスで g_durability から補充) */
+
+/* 難易度で発火/出現間隔をスケール(EASY=遅い/HARD=速い)。base×{5,4,3}/4、下限1。全系統の発砲・出現に適用。 */
+u8 diff_interval(u8 base);
 
 #endif /* GAMESTATE_H */
