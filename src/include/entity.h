@@ -56,6 +56,8 @@ extern u8 g_gun_kills;   /* 撃破した砲台の累計(撃破演出/クリア�
 extern u8 g_playerhit;   /* 自機が被弾した累計(プロト) */
 extern u8 g_pinv;        /* 自機の無敵フレーム残(被弾直後のみ>0。0で被弾可) */
 extern u8 g_miss;        /* 1=自機撃墜(耐久尽き)。シーンが残機減算＋面リスタート/ゲームオーバーを処理 */
+extern u8 g_hitstop;     /* >0: シーンが数フレーム更新を凍結=撃破の"手応え"(ヒットストップ) */
+extern u8 g_shake;       /* >0: 画面を数フレーム縦に揺らす(砲台撃破/被弾の迫力) */
 
 extern u8 g_spr_base;               /* エンティティ描画の開始スプライトslot(HUDが先頭を確保) */
 void    ent_reset(void);            /* プール全消去 */

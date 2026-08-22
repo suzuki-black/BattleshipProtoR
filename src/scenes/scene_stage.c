@@ -378,6 +378,7 @@ static void play_death_anim(void) {
     sfx(2, SFX_BOOM);
     for (t = 0; t < 84; t++) {          /* ~1.4s */
         scroll_to(cam);                 /* 死んだ場所を表示維持 */
+        vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % 9) - 4));   /* 沈没の揺れ: 縦±4px */
         if ((t & 7) == 0) ent_spawn_explosion(px + (s16)(rnd() % 14) - 7, py + (s16)(rnd() % 14) - 7);
         if ((t % 24) == 0) sfx(2, SFX_BOOM);
         ent_update_all();
@@ -421,6 +422,7 @@ static u8 game_over_screen(void) {
 static u8 defeat_update(void) {
     u8 iv;
     scroll_to(cam);                     /* 表示維持(cam凍結) */
+    vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % 7) - 3));   /* 撃破の迫力: 縦±3px揺れ */
     iv = (dtimer < 50) ? 1 : 3;         /* クライマックス(残り<50)で爆発を倍密に */
     if ((dtimer & iv) == 0) ent_spawn_explosion((s16)(80 + (rnd() % 96)), (s16)(20 + (rnd() % 172)));  /* 艦の全幅に降らす */
     if ((dtimer % 12) == 0) sfx(2, SFX_BOOM);
@@ -441,6 +443,7 @@ static u8 defeat_update(void) {
 
 u8 stage_update(void) {
     if (dmode) return defeat_update();  /* 撃破演出中は専用処理 */
+    if (g_hitstop) { g_hitstop--; return SCENE_NONE; }   /* ★ヒットストップ=数フレーム凍結(手応え) */
 
     if (phase == 0) {
         /* 海: 蛇行なしの直進。船尾が見えたら(=cam<=STERN)交戦フェーズへ地続きに移行 */
@@ -489,6 +492,9 @@ u8 stage_update(void) {
         }
         apply_weave();
     }
+
+    /* ★画面揺れ: 被弾/砲台撃破で数フレーム、R#23を縦±2pxジッタ(既存scroll上に上書き)。 */
+    if (g_shake) { g_shake--; vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % 5) - 2)); }
 
     /* HUD は R#23(縦スクロール)設定直後・エンティティ描画より前に確定させる。
        画面最上部のHUDは最もラスタ競合しやすく、重い ent_draw_all の後に書くと

@@ -238,6 +238,8 @@ u8 g_gun_kills;
 u8 g_playerhit;
 u8 g_pinv;
 u8 g_miss;
+u8 g_hitstop;
+u8 g_shake;
 
 /* 16x16 実体の AABB 重なり(やや甘めのマージン14)。 */
 static u8 overlap(const Entity *a, const Entity *b) {
@@ -264,7 +266,8 @@ void ent_resolve_collisions(void) {
             }
             if (t->type == ET_TURRET && overlap(b, t)) {
                 b->active = 0;
-                if (--t->hp == 0) { t->active = 0; g_gun_kills++; g_score += 50; ent_spawn_explosion(t->x, t->y); }
+                if (--t->hp == 0) { t->active = 0; g_gun_kills++; g_score += 50; ent_spawn_explosion(t->x, t->y);
+                                    g_hitstop = 4; g_shake = 8; }   /* 砲台撃破=手応え(凍結＋揺れ) */
                 else ent_spawn_spark(b->x, b->y);   /* 非撃破のヒット=火花フィードバック */
                 break;
             }
@@ -286,6 +289,7 @@ void ent_resolve_collisions(void) {
                         g_playerhit++;
                         sfx(0, SFX_PHIT);          /* 被弾の痛み音(tone A) */
                         ent_spawn_explosion(p->x, p->y);
+                        g_hitstop = 5; g_shake = 12;   /* 被弾=強い手応え(凍結＋大きめ揺れ) */
                         if (g_php > 1) { g_php--; g_pinv = 90; }  /* 耐久残=生存(1.5秒無敵点滅) */
                         else { g_php = 0; g_miss = 1; }           /* 耐久尽き=撃墜。残機/リスタートはシーンが処理 */
                     }
