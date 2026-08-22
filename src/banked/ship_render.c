@@ -244,11 +244,7 @@ static void run_ship_ops(const u8 *d) {
         x = (s16)d[1]; y = (u16)(d[2] | (d[3] << 8)); p1 = d[4]; p2 = d[5]; p3 = d[6]; d += 7;
         switch (op) {
             case SOP_GROUND:  ground(x, (s16)y, p1);                 break;
-            case SOP_MAINGUN: mainGun(x, (s16)y, p1);                       /* ドーム土台 */
-                { s16 bl = (s16)p1 + 12, off = (s16)(p1 >> 1);             /* ＋二連装の砲身(BG・陰影付き・下向き=自機方向) */
-                  barrel((s16)(x - off), (s16)y, bl, 4);
-                  barrel((s16)(x + off), (s16)y, bl, 4); }
-                break;
+            case SOP_MAINGUN: mainGun(x, (s16)y, p1);                break;   /* ドーム土台のみ(砲身は回転スプライト) */
             case SOP_DOME:    dome(x, (s16)y, p1);                   break;
             case SOP_DISK:    disk(x, (s16)y, p1, p2);               break;
             case SOP_DECKBOX: deckBox(x, (s16)y, p1, p2, p3);        break;

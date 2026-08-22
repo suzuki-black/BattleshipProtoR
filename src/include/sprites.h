@@ -29,7 +29,10 @@
 #define SPR_EXP2    100
 #define SPR_EXP3    104
 #define SPR_FLASH   108  /* マズルフラッシュ(自機発砲時の一瞬の光) */
-extern const u8 zcol[16];   /* 零戦の16行カラーテーブル(緑系+ハイライト) */
+#define SPR_BARREL0 112  /* 主砲の可動砲身(8方向, dir d = SPR_BARREL0 + d*4)。自機を狙って回転。112..140 */
+extern const u8 zcol[16];        /* 零戦の16行カラーテーブル(緑系+ハイライト) */
+extern const u8 barrel_col[16];  /* 砲身の行別シェード(金属感の多色) */
+extern const u8 barrel_flash[16];/* 砲身の命中フラッシュ(白) */
 
 void sprites_load(void);   /* 全パターンを VRAM(0x7800)へ投入 */
 

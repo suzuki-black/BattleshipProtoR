@@ -35,6 +35,8 @@ static void bh_bullet(Entity *e) {
 }
 
 /* 8方向単位ベクトル(0=上,1=右上,2=右,3=右下,4=下,5=左下,6=左,7=左上)。 */
+static u8 dir8(s16 dx, s16 dy);        /* 前方宣言(bh_turret が使う。定義は下) */
+static u8 step_dir(u8 cur, u8 tgt);
 static const s8 dirdx8[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 static const s8 dirdy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
@@ -72,13 +74,21 @@ static void bh_shooter(Entity *e) {
 }
 
 /* 砲塔: 艦上の世界座標(ax,ay)から画面座標へ。縦=ay-cam(艦と一緒にスクロール)、
-   横=ax+weaveX(蛇行の横揺れに追従)。画面内に居る時だけ発砲(動く的)。 */
+   横=ax+weaveX(蛇行の横揺れに追従)。画面内に居る時だけ発砲(動く的)。
+   ★可動砲身: 自機を狙って段階回転(vx=向き0-7, vy=旋回冷却)。命中フラッシュ(h=残フレーム, 白coltab)。 */
 s16 g_meander;
 static void bh_turret(Entity *e) {
     e->x = e->ax + g_meander;
     e->y = e->ay - (s16)g_cam;
-    if (e->y > -16 && e->y < 212) run_fire(e);   /* 画面内のみ発砲 */
-    else e->ftimer = 1;                          /* 画面外はチャージ据置(即撃ちさせない) */
+    if (e->h) { e->h--; e->coltab = barrel_flash; }   /* 命中で白フラッシュ */
+    else        e->coltab = barrel_col;               /* 通常=金属シェード */
+    if (e->y > -16 && e->y < 212) {
+        u8 tgt = dir8((s16)g_player_x - e->x, (s16)g_player_y - e->y);
+        if (e->vy) e->vy--;                            /* 旋回冷却 */
+        else { e->vx = (s16)step_dir((u8)e->vx, tgt); e->vy = 5; }   /* 5fごとに1段 */
+        run_fire(e);                                   /* 発砲(画面内のみ) */
+    } else e->ftimer = 1;                              /* 画面外はチャージ据置 */
+    e->pat = (u8)(SPR_BARREL0 + ((u8)e->vx & 7) * 4);  /* 向きに応じた砲身パターン */
 }
 
 /* 敵戦闘機(空戦): 下方向へ進み画面下で消滅。fireを持てば発砲も。
@@ -268,7 +278,7 @@ void ent_resolve_collisions(void) {
                 b->active = 0;
                 if (--t->hp == 0) { t->active = 0; g_gun_kills++; g_score += 50; ent_spawn_explosion(t->x, t->y);
                                     g_hitstop = 4; g_shake = 8; }   /* 砲台撃破=手応え(凍結＋揺れ) */
-                else ent_spawn_spark(b->x, b->y);   /* 非撃破のヒット=火花フィードバック */
+                else { t->h = 6; ent_spawn_spark(b->x, b->y); }   /* 非撃破=砲身が白フラッシュ(h)＋火花 */
                 break;
             }
         }

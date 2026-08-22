@@ -67,10 +67,12 @@ static const char *const stagename[STAGE_COUNT] = { "BISMARCK", "CARRIER", "HOOD
 static void spawn_turret(u8 shipX, u16 shipY, u8 delay) {
     Entity *e = ent_spawn(ET_TURRET);
     if (e) {
-        e->ax = (s16)shipX - 8;                /* 砲塔中心x→スプライト左上 */
-        e->ay = (s16)(SC_SHIP_R0 * 16 + shipY);
-        e->color = 5; e->pat = SPR_TURRET; e->hp = 3; e->fire = fd_gun_stage[curstage]; e->ftimer = delay;
-        e->hidden = 1;   /* 砲台の見た目はBG(ドーム＋砲身)。これは破壊用の不可視当たり判定 */
+        e->ax = (s16)shipX - 8;                /* 砲塔中心x→スプライト左上(中心x=shipX) */
+        e->ay = (s16)(SC_SHIP_R0 * 16 + shipY) - 8;   /* 砲身スプライト(旋回中心=8,8)をドーム中心に合わせる */
+        e->hp = 5; e->fire = fd_gun_stage[curstage]; e->ftimer = delay;   /* 耐久5(旧版) */
+        e->vx = 4; e->vy = 0; e->h = 0;        /* 砲身の向き=下 / 旋回冷却 / 命中フラッシュ残 */
+        e->pat = (u8)(SPR_BARREL0 + 4 * 4);    /* 可動砲身(下向き, BGドームに重なる) */
+        e->coltab = barrel_col;                /* 金属シェード(行別カラー) */
     }
 }
 /* 各面の主砲4基の艦内(x,y)=OPSの主砲位置。順=BB/Carrier/Hood/Twins/Iowa。空母/双子はx左右に分かれる。 */
