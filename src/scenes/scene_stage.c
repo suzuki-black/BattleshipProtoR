@@ -83,16 +83,20 @@ static u16 cur_gun_y[4];
 static u8 ship_ram[SHIP_OPS_RAM_MAX];
 static u8 ship_ram2[128];        /* ops2(空母のみ, max85) */
 static s8 rendered_stage = -1;   /* バッファBに描画済みの面(-1=未) */
+/* 面別テーブルを当該面ぶんRAMへ(艦名/撃沈文/敵機カラー/主砲座標)。★開始カードは stage_build より
+   先に艦名を描くので、prerender_ship の early-return とは独立に、カード描画前にも呼べるよう分離。 */
+static void load_stage_data(void) {
+    data_read(ASSET_BANK, (u16)(stagename_off + ((u16)curstage << 4)), (u8 *)cur_name, 16);
+    data_read(ASSET_BANK, (u16)(sunk_off + ((u16)curstage << 4)), (u8 *)cur_sunk, 16);
+    data_read(ASSET_BANK, (u16)(fighter_ctab_off + ((u16)curstage << 4)), cur_ctab, 16);
+    { u8 g[12], k; data_read(ASSET_BANK, (u16)(gun_off + (u16)curstage * 12), g, 12);   /* 主砲4基の艦内座標 */
+      for (k = 0; k < 4; k++) { cur_gun_x[k] = g[k]; cur_gun_y[k] = (u16)(g[4 + k * 2] | ((u16)g[5 + k * 2] << 8)); } }
+}
 static void prerender_ship(void) {
     if (rendered_stage == (s8)curstage) return;   /* 既に描画済み=再生成不要 */
     scroll_build_sea();                        /* 海テンプレート(512) */
     data_read(ASSET_BANK, ship_ops_off[curstage],  ship_ram,  ship_ops_len[curstage]);
     data_read(ASSET_BANK, ship_ops2_off[curstage], ship_ram2, ship_ops2_len[curstage]);
-    data_read(ASSET_BANK, (u16)(stagename_off + ((u16)curstage << 4)), (u8 *)cur_name, 16);
-    data_read(ASSET_BANK, (u16)(sunk_off + ((u16)curstage << 4)), (u8 *)cur_sunk, 16);
-    data_read(ASSET_BANK, (u16)(fighter_ctab_off + ((u16)curstage << 4)), cur_ctab, 16);  /* 敵機カラー */
-    { u8 g[12], k; data_read(ASSET_BANK, (u16)(gun_off + (u16)curstage * 12), g, 12);   /* 主砲4基の艦内座標 */
-      for (k = 0; k < 4; k++) { cur_gun_x[k] = g[k]; cur_gun_y[k] = (u16)(g[4 + k * 2] | ((u16)g[5 + k * 2] << 8)); } }
     ship_render(ship_kind[curstage], ship_hull[curstage], ship_bowcnt[curstage], ship_bowyb[curstage],
                 ship_aagtbl[curstage], ship_aagp[curstage], ship_ram, ship_ram2);
     rendered_stage = (s8)curstage;
@@ -346,6 +350,7 @@ static u8 lives_init(void) {
    スコア/残機は触らない(それらは新規ゲーム=stage_init が初期化)。 */
 static void stage_build(void) {
     Entity *e;
+    load_stage_data();    /* 艦名/撃沈文/敵機カラー/主砲座標を当該面ぶんRAMへ(ミス再開経路も網羅) */
     prerender_ship();     /* 艦をバッファB(オフスクリーン)へ。stage_begin_display の前に必須 */
     vdp_sprite_init();
     sprites_load();
@@ -403,6 +408,7 @@ static void stage_intro(void) {
     const char *nm = cur_name;
     u8 f, n = 0;
     char num[2];
+    load_stage_data();                      /* ★カードで艦名を描く前に当該面の艦名等をRAMへ(でない時対策) */
     while (nm[n]) n++;                       /* 艦名の長さ(中央寄せ用) */
 
     bgm_stop();                              /* カード中は無音(タイトル/前面のBGMを止める) */
@@ -471,25 +477,24 @@ static void results_and_fanfare(void) {
     vdp_set_vscroll(0);                 /* 縦スクロール解除(page0テキストのズレ＋上端ゴミを防ぐ) */
     vdp_sprite_hide_from(0);            /* スプライト全消し(停止マーカを slot0 へ) */
     vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
-    vdp_fill(0, 0, 256, 212, 1);        /* ★背景=エンディング/開始カードと同じ青(色1)。トーン統一 */
-    /* 撃破!! パネル+赤枠(旧版準拠)。赤ブロックを敷き、パネルの青地(offcol=1)が中央を抜く=外周が赤枠に。 */
-    vdp_fill(66, 34, 124, 53, 11);      /* 赤ブロック(この外周だけが枠として残る) */
-    data_read(ASSET_BANK, panel_off, panel_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM(魏碑の筆文字) */
-    blit_panel(76, 44, 11, 1);          /* 撃破!! の影(赤, +4/+4) */
-    blit_panel(72, 40, 15, 1);          /* 撃破!! 本体(白)。中央 x72(=(256-112)/2) */
-    /* [艦名] SUNK を赤・2倍角で中央(旧版: draw_text_center g_L[10+stage], 赤)。 */
+    vdp_fill(0, 0, 256, 212, 1);        /* 背景=エンディング/開始カードと同じ青(色1)。トーン統一 */
+    /* 撃破!! (魏碑の筆文字)。枠・赤は無し。黒の影(+4,+4)＋白本体を背景青の上に直接。 */
+    data_read(ASSET_BANK, panel_off, panel_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */
+    blit_panel(76, 44, 0, 1);           /* 影=黒(on=0), 地=背景青(off=1)。右下+4に覗く */
+    blit_panel(72, 40, 15, 1);          /* 本体=白(on=15), 地=背景青。中央 x72(=(256-112)/2) */
+    /* [艦名] SUNK を白・2倍角で中央。 */
     { const char *m = cur_sunk; u8 n = 0;
       while (m[n]) n++;
-      vdp_text_s((u8)((256 - (u16)n * 16) / 2), 100, 11, 1, 2, m); }
+      vdp_text_s((u8)((256 - (u16)n * 16) / 2), 100, 15, 1, 2, m); }
     if (g_score > g_hiscore) g_hiscore = g_score;
     fmt_score(g_score);
-    vdp_text(72, 132, 15, 1, "SCORE");
-    vdp_text(120, 132, 11, 1, scorebuf);
+    vdp_text(72, 132, 15, 1, "SCORE");         /* すべて白=青背景でも視認できる */
+    vdp_text(120, 132, 15, 1, scorebuf);
     fmt_score(g_hiscore);
-    vdp_text(72, 152, 14, 1, "HI");
-    vdp_text(120, 152, 14, 1, scorebuf);
+    vdp_text(72, 152, 15, 1, "HI");
+    vdp_text(120, 152, 15, 1, scorebuf);
     play_fanfare();                     /* 勝ちどき(BGM停止・前景同期) */
-    vdp_text(88, 176, 14, 1, "PUSH SPACE");
+    vdp_text(88, 176, 15, 1, "PUSH SPACE");
     { u8 armed = 0;                     /* ★連射ホールドで一瞬で飛ばされないよう「一度離してから押す」を要求 */
       for (f = 0; f < 240; f++) {       /* 約4秒 or 新規トリガ押下で次へ */
           input_poll();
