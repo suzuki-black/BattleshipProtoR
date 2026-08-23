@@ -331,7 +331,27 @@ static void ship_render_impl(u8 kind, u8 hull, u8 bow_cnt, u16 bow_yb, u8 aag_tb
 }
 
 /* ---- バンク単一エントリ。常駐 ship_render ラッパが埋めた g_shipargs を読んで描画。 ---- */
+/* 開始カード艦画像(g_card_ram, 64x48)を 縦横2倍(128x96)して page0 中央窓へ展開。
+   常駐 vdp_write_addr/vdp_data(窓非差替)を使う=バンク内で data窓を触らない。 */
+static u8 card_outrow[64];
+static void draw_card_impl(void) {
+    u8 r, sb, sv, b;
+    for (r = 0; r < 48; r++) {
+        const u8 *src = &g_card_ram[(u16)r * 32];
+        for (sb = 0; sb < 32; sb++) {
+            u8 sbyte = src[sb], a = (u8)(sbyte >> 4), lo = (u8)(sbyte & 0x0F);
+            card_outrow[(u16)sb * 2]     = (u8)((a << 4) | a);
+            card_outrow[(u16)sb * 2 + 1] = (u8)((lo << 4) | lo);
+        }
+        for (sv = 0; sv < 2; sv++) {
+            vdp_write_addr((u16)((u16)(70 + (u16)r * 2 + sv) * 128 + 32));   /* 窓 x64,y70(128x96) */
+            for (b = 0; b < 64; b++) vdp_data(card_outrow[b]);
+        }
+    }
+}
+
 void banked_entry(void) {
+    if (g_shipargs.mode) { draw_card_impl(); return; }
     ship_render_impl(g_shipargs.kind, g_shipargs.hull, g_shipargs.bow_cnt, g_shipargs.bow_yb,
                      g_shipargs.aag_tbl, g_shipargs.aagp, g_shipargs.ops, g_shipargs.ops2);
 }

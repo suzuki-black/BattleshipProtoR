@@ -309,6 +309,13 @@ const FIGHTER_CTAB = [
 ];
 const fctabBlob = Buffer.from(FIGHTER_CTAB.flat());
 
+// ---- 主砲4基の艦内(x,y)を常駐から追い出す: 面別 [x0..3(u8), y0..3(u16 LE)] = 12B×5 をバンクへ ----
+const GUN_X = [[128,128,128,128],[95,161,95,161],[128,128,128,128],[76,76,180,180],[128,128,128,128]];
+const GUN_Y = [[64,104,322,362],[100,100,300,300],[70,108,372,410],[80,360,80,360],[72,108,330,372]];
+const gunBlob = Buffer.alloc(5 * 12);
+{ let o = 0; for (let s = 0; s < 5; s++) { for (const x of GUN_X[s]) gunBlob[o++] = x;
+    for (const y of GUN_Y[s]) { gunBlob.writeUInt16LE(y, o); o += 2; } } }
+
 // ---- 撃破!! パネル(1bpp)を常駐から追い出す: 既存ヘッダのバイト列を読み、データバンクへ ----
 const panelSrc = readFileSync(new URL('../src/include/panel_gekiha.h', import.meta.url), 'utf8');
 const panelW  = +(panelSrc.match(/#define\s+PANEL_W\s+(\d+)/)[1]);
@@ -323,7 +330,7 @@ const panelBlob = Buffer.from(panelBytes);
 const emptyops = shipops([]);   // ops2 が無い艦(1バイト END)
 const bgmBlobs = TRACKS.map(packTrack);
 const shipBlobs = SHIPS.flatMap((s) => [s.ops, s.ops2 || emptyops]);   // 艦ごとに ops, ops2 の2枚
-const parts = [...bgmBlobs, ...shipBlobs, ...fbBlobs, panelBlob, drumBlob, strBlob, fctabBlob];
+const parts = [...bgmBlobs, ...shipBlobs, ...fbBlobs, panelBlob, drumBlob, strBlob, fctabBlob, gunBlob];
 const offAll = [];
 let cur = 0;
 for (const b of parts) { offAll.push(cur); cur += b.length; }
@@ -336,6 +343,7 @@ const panelOff = offAll[fbBase + fbBlobs.length];
 const drumOff = offAll[fbBase + fbBlobs.length + 1];
 const strOff  = offAll[fbBase + fbBlobs.length + 2];
 const fctabOff = offAll[fbBase + fbBlobs.length + 3];
+const gunOff = offAll[fbBase + fbBlobs.length + 4];
 const bin = Buffer.concat(parts);
 if (bin.length > 0x2000) throw new Error(`assets ${bin.length}B > 8KB bank`);
 writeFileSync(binOut, bin);
@@ -384,6 +392,7 @@ const h = [
   `static const unsigned int stagename_off = ${strOff};`,
   `static const unsigned int sunk_off = ${strOff + 5 * 16};`,
   `static const unsigned int fighter_ctab_off = ${fctabOff};`,
+  `static const unsigned int gun_off = ${gunOff};`,   /* 面別 [x0-3(u8),y0-3(u16)] = 12B */
   '/* --- 開始カードの事前ベイク艦画像(64x48=48行x32byte)。bank4(旧demo跡)に5艦連結(assets/cards.bin)。 --- */',
   '#define SHIP_CARD_BANK 4',
   '#define SHIP_CARD_LEN 1536',

@@ -18,6 +18,13 @@ const u8  aag_x_nl[SHIP_NAAG] = { 62,90,62,90,62,90,76,166,194,166,194,166,194,1
 const u16 aag_y_nl[SHIP_NAAG] = { 140,140,220,220,300,300,180,140,140,220,220,300,300,180,110,260,340,340,110,260,340,340,380 };
 
 ShipArgs g_shipargs;
+u8 g_card_ram[1536];   /* 開始カード艦画像(常駐RAM。scene が data_read→draw_card_banked が拡大) */
+
+/* 開始カード画像の2倍拡大を冷たいバンクで実行(常駐節約)。呼ぶ前に g_card_ram を data_read で満たす。 */
+void draw_card_banked(void) {
+    g_shipargs.mode = 1;
+    bcall_to(SHIP_RENDER_BANK);
+}
 
 /* 艦を バッファB へ描画(常駐ラッパ)。引数を退避して重い実体を SHIP_RENDER_BANK で実行。
    ★カード表示中(BGM停止)に一度だけ呼ばれる冷たい経路なので bcall のバンク差替コストは無視できる。 */
@@ -26,6 +33,7 @@ void ship_render(u8 kind, u8 hull, u8 bow_cnt, u16 bow_yb, u8 aag_tbl,
     g_shipargs.kind = kind; g_shipargs.hull = hull; g_shipargs.bow_cnt = bow_cnt;
     g_shipargs.bow_yb = bow_yb; g_shipargs.aag_tbl = aag_tbl;
     g_shipargs.aagp = aagp; g_shipargs.ops = ops; g_shipargs.ops2 = ops2;
+    g_shipargs.mode = 0;   /* 艦描画モード */
     bcall_to(SHIP_RENDER_BANK);
 }
 

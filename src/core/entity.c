@@ -235,6 +235,7 @@ u8 ent_count(u8 type) {
 }
 
 Entity *ent_at(u8 i) { return &pool[i]; }
+Entity *ent_pool(void) { return pool; }   /* 先頭ポインタ(ポインタ加算走査で乗算を避ける用) */
 
 u8 ent_live_turrets(void) {
     u8 i, n = 0;
@@ -271,12 +272,13 @@ static u8 overlap(const Entity *a, const Entity *b) {
 
 void ent_resolve_collisions(void) {
     u8 i, j;
+    Entity *b, *t, *p, *e;
+    /* ★ポインタ加算で走査(pool[j]の添字アクセスは毎回 j*sizeof(Entity) の乗算=Z80で重い。
+       ネスト576×2回で乗算1000回超=もっさりの主因だった。b++/t++ は定数加算で乗算を消す)。 */
     /* 自機弾(TEAM_PLAYER) × 敵戦闘機/砲台 → 弾消滅、戦闘機は即撃破、砲台は hp 減算 */
-    for (i = 0; i < ENT_MAX; i++) {
-        Entity *b = &pool[i];
+    for (i = 0, b = pool; i < ENT_MAX; i++, b++) {
         if (!b->active || b->type != ET_BULLET || b->team != TEAM_PLAYER) continue;
-        for (j = 0; j < ENT_MAX; j++) {
-            Entity *t = &pool[j];
+        for (j = 0, t = pool; j < ENT_MAX; j++, t++) {
             if (!t->active) continue;
             if ((t->type == ET_FIGHTER || t->type == ET_PURSUER) && overlap(b, t)) {
                 b->active = 0; t->active = 0; g_kills++;
@@ -295,11 +297,9 @@ void ent_resolve_collisions(void) {
         }
     }
     /* 敵弾(TEAM_ENEMY)/敵戦闘機 × 自機 → 敵を消し被弾+1 */
-    for (i = 0; i < ENT_MAX; i++) {
-        Entity *p = &pool[i];
+    for (i = 0, p = pool; i < ENT_MAX; i++, p++) {
         if (!p->active || p->type != ET_PLAYER) continue;
-        for (j = 0; j < ENT_MAX; j++) {
-            Entity *e = &pool[j];
+        for (j = 0, e = pool; j < ENT_MAX; j++, e++) {
             if (!e->active) continue;
             if ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_FIGHTER
                 || e->type == ET_AABURST || e->type == ET_PURSUER

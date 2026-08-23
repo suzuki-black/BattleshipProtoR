@@ -36,8 +36,14 @@ typedef struct {
     u16 bow_yb;
     u8 aag_tbl;
     const u8 *aagp, *ops, *ops2;
+    u8 mode;   /* 0=艦描画(ship_render) / 1=開始カード艦画像の2倍拡大(draw_card) */
 } ShipArgs;
 extern ShipArgs g_shipargs;
+
+/* 開始カードの艦画像(64x48, bank4)を data_read で入れる常駐RAM。バンク側 draw_card が2倍拡大して
+   page0へ展開(重い拡大ループを常駐から追い出す)。読み込みは常駐で済ませ、バンク内では窓を差替えない。 */
+extern u8 g_card_ram[1536];
+void draw_card_banked(void);   /* g_card_ram を2倍拡大して page0 へ(bcall)。事前に data_read 済のこと */
 
 /* 対空砲23基の艦内座標表(常駐 ship_aag.c で定義)。バンク側 draw_aag と常駐 ship_aag_pos が参照。 */
 extern const u8  aag_x_bb[SHIP_NAAG], aag_x_cv[SHIP_NAAG], aag_x_hd[SHIP_NAAG], aag_x_nl[SHIP_NAAG];
