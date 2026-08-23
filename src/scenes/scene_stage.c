@@ -26,16 +26,16 @@
    後半ほど 間隔↓(速い)・弾数↑(3→5-way)・弾速↑・suppress↓(安全半径が狭い=肉薄が難しい)。
    ★suppress: 半径内(≒ゼロ距離)に自機が居ると発射スキップ=肉薄で撃たせない教育メカ。1面ほど広い。
    面順=BB/Carrier/Hood/Twins/Iowa。 */
-static const u8 fd_gun_bb[]   = { 56, 26, FIRE_AIMFAN, 3, 2, 2, FIRE_END };  /* 1面: 遅い3-way(教育) */
-static const u8 fd_gun_cv[]   = { 50, 24, FIRE_AIMFAN, 4, 2, 3, FIRE_END };
-static const u8 fd_gun_hd[]   = { 44, 22, FIRE_AIMFAN, 4, 2, 3, FIRE_END };
-static const u8 fd_gun_tw[]   = { 38, 20, FIRE_AIMFAN, 5, 2, 3, FIRE_END };
-static const u8 fd_gun_iowa[] = { 32, 18, FIRE_AIMFAN, 5, 2, 4, FIRE_END };  /* 5面: 速い5-way高速弾 */
+static const u8 fd_gun_bb[]   = { 56, 26, FIRE_AIMFAN, 3, 2, 3, FIRE_END };  /* 1面: 遅い3-way(教育) */
+static const u8 fd_gun_cv[]   = { 50, 24, FIRE_AIMFAN, 4, 2, 4, FIRE_END };
+static const u8 fd_gun_hd[]   = { 44, 22, FIRE_AIMFAN, 4, 2, 4, FIRE_END };
+static const u8 fd_gun_tw[]   = { 38, 20, FIRE_AIMFAN, 5, 2, 4, FIRE_END };
+static const u8 fd_gun_iowa[] = { 32, 18, FIRE_AIMFAN, 5, 2, 5, FIRE_END };  /* 5面: 速い5-way高速弾 */
 static const u8 *const fd_gun_stage[STAGE_COUNT] = {
     fd_gun_bb, fd_gun_cv, fd_gun_hd, fd_gun_tw, fd_gun_iowa
 };
 /* 戦闘機の発砲: 45f毎に自機狙い＋散らし円錐(±3)。空中の的なので抑え込みは無し(suppress=0)。 */
-static const u8 fd_faim[] = { 45,  0, FIRE_AIMED, 3, 1, 2, FIRE_END };
+static const u8 fd_faim[] = { 40,  0, FIRE_AIMED, 3, 1, 3, FIRE_END };
 
 /* ★海イントロ敵機=各面ボス艦の所属国の典型機(主人公=零戦/日本なので敵は各国海軍)。
    面順=BB(独)/Carrier(米)/Hood(英)/Twins(独)/Iowa(米)。形(pat)＋視認性優先色(col)で識別。 */
@@ -46,14 +46,9 @@ static const u8 fighter_iv[STAGE_COUNT]   = { 40, 28, 40, 40, 28 };/* 出現間�
 
 /* ★海イントロ共通BGM(gen_assets track7=スロー渋・予感)。海(敵艦未出現)の間だけ鳴らし、敵艦が見えたら面別へ切替。 */
 #define BGM_SEA_INTRO 7
-/* mode2の1ライン1色で陰影(row0=上/尾〜row15=下/機首)。国籍ベース色＋主翼ハイライト／尾翼・機首シャドウ。 */
-static const u8 fighter_ctab[STAGE_COUNT][16] = {
-    { 3, 3, 3, 3, 3, 3, 8,10, 8, 3, 3, 3, 3, 3, 3, 3},  /* Bf109 独緑: 翼r6-8を明緑 */
-    {12,12,11,12,12,12,14,12,11,12,12,12,11,12,12,12},  /* Corsair 米橙: ガル翼端に光沢14/翼根影11 */
-    { 9, 3, 9, 9, 9, 9,10,10,10,10, 9, 9, 9, 9, 9, 9},  /* Spitfire 英: 楕円翼r6-9を明色 */
-    {14,14,13,14,14,14,15,15,14,14,14,14,13,14,13,14},  /* Fw190 独灰: 翼に白光沢/尾機首に暗灰 */
-    {11,11,11,11,11,11,12,15,12,11,11,11,11,11,11,11},  /* Hellcat 米赤: 翼peak r7に白光沢 */
-};
+/* 敵機の行別カラー(陰影16B)は面別にデータバンク(fighter_ctab_off)へ置き、stage_build で当該面の
+   16BをRAMへ読む(常駐節約)。海イントロ機／艦載機の coltab に使う。 */
+static u8 cur_ctab[16];
 
 static u16 rng;
 static u8  rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }
@@ -98,6 +93,7 @@ static void prerender_ship(void) {
     data_read(ASSET_BANK, ship_ops2_off[curstage], ship_ram2, ship_ops2_len[curstage]);
     data_read(ASSET_BANK, (u16)(stagename_off + ((u16)curstage << 4)), (u8 *)cur_name, 16);
     data_read(ASSET_BANK, (u16)(sunk_off + ((u16)curstage << 4)), (u8 *)cur_sunk, 16);
+    data_read(ASSET_BANK, (u16)(fighter_ctab_off + ((u16)curstage << 4)), cur_ctab, 16);  /* 敵機カラー */
     ship_render(ship_kind[curstage], ship_hull[curstage], ship_bowcnt[curstage], ship_bowyb[curstage],
                 ship_aagtbl[curstage], ship_aagp[curstage], ship_ram, ship_ram2);
     rendered_stage = (s8)curstage;
@@ -180,7 +176,7 @@ static void aa_update(void) {
     }
 }
 
-static void burn_bake(s16 cx, u16 worldY, u8 s);   /* 前方宣言(aa_collide が撃破時に使う。定義は下) */
+static void burn_add(s16 cx, u16 worldY, u8 s);   /* 前方宣言(aa_collide が撃破時に炎上サイト登録。定義は下) */
 
 /* 自機弾 × 対空砲(座標当たり)。命中でHP減、0で破壊(炎上フラグ＋得点＋爆発)。旧版のarray方式移植。
    AAは実体を持たない(BG描画)ので、プールの自機弾を走査して座標距離で判定する。 */
@@ -203,8 +199,8 @@ static void aa_collide(void) {
                   if (aa_hp[i]) aa_hp[i]--;
                   if (aa_hp[i] == 0) {
                       aa_dead[i] = 1; g_score += (i < 14) ? 30 : 20;
+                      burn_add(gx, (u16)(SC_SHIP_R0 * 16 + gy), (u8)((i < 14) ? 1 : 2));  /* 炎上サイト登録 */
                       ent_spawn_explosion(sx, sy); sfx(2, SFX_BOOM); g_shake = 6;
-                      burn_bake(gx, (u16)(SC_SHIP_R0 * 16 + gy), (u8)((i < 14) ? 1 : 2));  /* 炎上残骸を焼付け */
                   } else { ent_spawn_spark(b->x, b->y); sfx(2, SFX_HIT); }
                   break;
               }
@@ -217,27 +213,29 @@ static void aa_collide(void) {
    スプライト枠(32/8perline)を使わず、事前ベイクした火球を page1リングへ透過コピーで毎フレーム重ねる。
    → 全27エンプレを同時炎上でき、破壊済みか一目で分かる(小炎が消える時間帯が無い)。 */
 #define FB_PAGE0_Y 0             /* 火球ベイク先(page0の非表示域 上端。ゲーム中は表示page1) */
-static const u8  fb_box[3] = { 24, 16, 12 };            /* 0=大(主砲) 1=中(大型AA) 2=小(極小AA) */
-static const u16 fb_x[3] = { 0, 64, 112 };              /* 各サイズのベイクX(page0上端に横並び) */
+static const u8  fb_box[3] = { 32, 22, 16 };            /* 0=大(主砲=ドームを包む) 1=中(大型AA) 2=小(極小AA) */
+/* page0非表示域の各コマのベイクX(6枚: s0f0,s0f1,s1f0,s1f1,s2f0,s2f1)。1行内に横並び(<256px)。 */
+static const u8  fb_px[6] = { 0, 32, 64, 86, 108, 124 };
 
-/* 火球3枚(丸: gen_assets が旧版render_fireball相当をビルド時ベイク)を バンク→RAM→page0非表示域 へ展開。
-   円形の塗りはNode側で計算済み=常駐コードは data_read＋VRAM書込ループのみ(四角fillをやめ丸に=旧版準拠)。 */
+/* 火球6枚(丸・2コマ×3サイズ: gen_assetsがビルド時ベイク)を バンク→RAM→page0非表示域 へ展開。 */
 static u8 fb_ram[FB_RAM_MAX];
 static void bake_fireballs(void) {
-    u8 s;
-    for (s = 0; s < 3; s++) {
-        u8 box = fb_box[s], bytes = (u8)(box / 2), row;
-        data_read(ASSET_BANK, fb_off[s], fb_ram, (u16)((u16)box * bytes));
+    u8 k;
+    for (k = 0; k < 6; k++) {
+        u8 box = fb_box[k >> 1], bytes = (u8)(box / 2), row;
+        data_read(ASSET_BANK, fb_off[k], fb_ram, (u16)((u16)box * bytes));
         for (row = 0; row < box; row++) {
             const u8 *p = &fb_ram[(u16)row * bytes];
-            u8 cbyte;
-            vdp_write_addr((u16)((u16)(FB_PAGE0_Y + row) * 128 + fb_x[s] / 2));
-            for (cbyte = 0; cbyte < bytes; cbyte++) vdp_data(p[cbyte]);
+            u8 cb;
+            vdp_write_addr((u16)((u16)(FB_PAGE0_Y + row) * 128 + fb_px[k] / 2));
+            for (cb = 0; cb < bytes; cb++) vdp_data(p[cb]);
         }
     }
 }
 
-/* linear元(page0)→page1リングへ box透過転送。リングの256px境界を跨ぐぶんは分割。 */
+/* page0 の火球コマ→page1リングへ box透過転送。256px境界跨ぎは分割。
+   ★2コマは同一シルエット(外形=赤本体)なので、透過でも前コマを完全上書き=下地復元不要・残像なし。
+   スクロールで露出した行は draw_row が艦Bで上書き→本関数が毎フレーム再度重ねる=常時可視。 */
 static void ring_blit_t(u16 sx, u16 sy, u16 dx, u16 wtop, u16 w, u16 h) {
     u8  off = (u8)(wtop & 0xFF);
     u16 dy  = (u16)(256 + off);
@@ -245,30 +243,38 @@ static void ring_blit_t(u16 sx, u16 sy, u16 dx, u16 wtop, u16 w, u16 h) {
     else { u16 h1 = (u16)(256 - off);
         vdp_copy_t(sx, sy, dx, dy, w, h1); vdp_copy_t(sx, (u16)(sy + h1), dx, 256, w, (u16)(h - h1)); }
 }
-/* 破壊エンプレ1基を「炎上する残骸」として焼き付ける(死亡時に1回だけ)。
-   艦バッファB(綺麗な艦アート)へ火球を透過焼込み=以後スクロールで自然に炎ごと流れる(旧版=毎フレーム描画より軽量)。
-   さらに現在の表示リングへも即1回重ねる=既に画面内で死んでも即座に炎が見える(小炎が消える時間帯を作らない)。
-   cx=艦アート中心x, worldY=世界Y(=SC_SHIP_R0*16+艦内y), s=火球サイズ。 */
-static void burn_bake(s16 cx, u16 worldY, u8 s) {
-    u8  box = fb_box[s];
-    s16 left = (s16)(cx - box / 2);
-    u16 wtop, bufY;
+/* ★炎上サイト表: エンプレ撃破時に (left, worldY上端, サイズ) を1件追記。fire_draw はこの表だけを
+   走査するので、毎フレームの ship_aag_pos 呼びやエンティティ全走査が不要=軽量。 */
+#define BURN_MAX 28              /* 主砲4＋対空砲23 */
+static u8  burn_left[BURN_MAX];  /* 火球の左X(page1)。box≤32で0..224=u8可 */
+static u16 burn_wtop[BURN_MAX];  /* 火球の世界Y上端 */
+static u8  burn_sz[BURN_MAX];    /* 0大/1中/2小 */
+static u8  nburn;
+static void burn_add(s16 cx, u16 worldY, u8 s) {
+    u8 box = fb_box[s]; s16 left = (s16)(cx - box / 2);
+    if (nburn >= BURN_MAX) return;
     if (left < 0) left = 0; else if (left > (s16)(256 - box)) left = (s16)(256 - box);
-    wtop = (u16)((s16)worldY - box / 2);
-    bufY = (u16)((s16)SC_SHIPBUF_Y + (s16)wtop - SC_SHIP_R0 * 16);
-    vdp_copy_t(fb_x[s], FB_PAGE0_Y, (u16)left, bufY, box, box);   /* 艦Bへ永続焼込み */
-    ring_blit_t(fb_x[s], FB_PAGE0_Y, (u16)left, wtop, box, box);  /* 表示リングへ即時 */
+    burn_left[nburn] = (u8)left; burn_wtop[nburn] = (u16)((s16)worldY - box / 2);
+    burn_sz[nburn] = s; nburn++;
 }
-/* この面で新たに撃破された主砲(実体hp==0)を検出し、まだ焼いていなければ炎上残骸を焼く。
-   撃破済み砲台は hidden で不描画=color未使用なので color を「焼済フラグ(0xFE)」に流用。 */
-static void burn_new_turrets(void) {
-    u8 i;
+/* 全炎上サイトを毎フレーム描画(2コマアニメ)。同一シルエットの透過コピーなので下地復元不要・残像なし。
+   scroll/sea 描画の後に呼ぶ(露出行は draw_row が艦Bで上書き→本関数が再度重ねる=常時可視)。 */
+static u8 fb_anim;
+static void fire_draw(void) {
+    u8 i, fr;
+    /* 新たに撃破された主砲(hp==0)を検出して表へ追記(color=0xFEを焼済フラグに流用)。 */
     for (i = 0; i < ENT_MAX; i++) {
         Entity *e = ent_at(i);
         if (e->active && e->type == ET_TURRET && e->hp == 0 && e->color != 0xFE) {
-            e->color = 0xFE;
-            burn_bake((s16)(e->ax + 8), (u16)(e->ay + 8), 0);
+            e->color = 0xFE; burn_add((s16)(e->ax + 8), (u16)(e->ay + 8), 0);
         }
+    }
+    fb_anim++; fr = (u8)((fb_anim >> 3) & 1);   /* 8フレームでコマ切替 */
+    for (i = 0; i < nburn; i++) {
+        u8 box = fb_box[burn_sz[i]];
+        s16 sy = (s16)burn_wtop[i] - (s16)cam;
+        if (sy < -32 || sy > 236) continue;     /* 画面外は描かない */
+        ring_blit_t(fb_px[burn_sz[i] * 2 + fr], FB_PAGE0_Y, burn_left[i], burn_wtop[i], box, box);
     }
 }
 
@@ -288,7 +294,7 @@ static void special_update(void) {
                 e->y = (s16)(30 + (rnd() % 50));                          /* 見えている甲板上 */
                 e->ax = 4;                       /* 初期=下向き */
                 e->ftimer = 34;                  /* ホバー(展開) */
-                e->pat = SPR_HELLCAT; e->coltab = fighter_ctab[4]; e->shadow = 1;  /* F6F(赤=甲板で視認性)＋翼光沢＋落ち影 */
+                e->pat = SPR_HELLCAT; e->coltab = cur_ctab; e->shadow = 1;  /* F6F(赤=甲板で視認性)＋翼光沢＋落ち影 */
             }
             sfx(1, SFX_EFIRE);
             spc_timer = diff_interval(120);                     /* 次の射出まで(旧版 ep_launch) */
@@ -325,7 +331,7 @@ static void special_update(void) {
                 e->x = (rnd() & 1) ? -16 : 268;          /* 左右端 交互 */
                 e->y = (s16)(16 + (rnd() % 168));
                 e->ax = 4; e->ftimer = 0;                /* 展開無し=即追尾 */
-                e->pat = SPR_CORSAIR; e->coltab = fighter_ctab[1]; e->shadow = 1;  /* F4U(橙)＋落ち影 */
+                e->pat = SPR_CORSAIR; e->coltab = cur_ctab; e->shadow = 1;  /* F4U(橙)＋落ち影 */
             }
             sfx(1, SFX_EFIRE);
             spc_timer = diff_interval(45);                              /* 総攻撃=短間隔 */
@@ -364,6 +370,7 @@ static void stage_build(void) {
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
     g_gun_kills = 0;
     aa_reset();            /* 対空砲の発射タイマ初期化 */
+    nburn = 0;             /* 炎上サイト表クリア(面リスタートで炎を消す) */
     special_reset();       /* 艦種別固有兵装のタイマ初期化 */
     spawn_turret(gun_x[curstage][0], gun_y[curstage][0], 30);
     spawn_turret(gun_x[curstage][1], gun_y[curstage][1], 45);
@@ -468,25 +475,25 @@ static void results_and_fanfare(void) {
     vdp_set_vscroll(0);                 /* 縦スクロール解除(page0テキストのズレ＋上端ゴミを防ぐ) */
     vdp_sprite_hide_from(0);            /* スプライト全消し(停止マーカを slot0 へ) */
     vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
-    vdp_fill(0, 0, 256, 212, 0);        /* 黒地(色0=黒。色1は海の青) */
-    /* 撃破!! パネル+赤枠(旧版準拠)。赤ブロックを敷き、パネルの黒地(offcol=0)が中央を抜く=外周が赤枠に。 */
+    vdp_fill(0, 0, 256, 212, 1);        /* ★背景=エンディング/開始カードと同じ青(色1)。トーン統一 */
+    /* 撃破!! パネル+赤枠(旧版準拠)。赤ブロックを敷き、パネルの青地(offcol=1)が中央を抜く=外周が赤枠に。 */
     vdp_fill(66, 34, 124, 53, 11);      /* 赤ブロック(この外周だけが枠として残る) */
     data_read(ASSET_BANK, panel_off, panel_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM(魏碑の筆文字) */
-    blit_panel(76, 44, 11, 0);          /* 撃破!! の影(赤, +4/+4) */
-    blit_panel(72, 40, 15, 0);          /* 撃破!! 本体(白)。中央 x72(=(256-112)/2) */
+    blit_panel(76, 44, 11, 1);          /* 撃破!! の影(赤, +4/+4) */
+    blit_panel(72, 40, 15, 1);          /* 撃破!! 本体(白)。中央 x72(=(256-112)/2) */
     /* [艦名] SUNK を赤・2倍角で中央(旧版: draw_text_center g_L[10+stage], 赤)。 */
     { const char *m = cur_sunk; u8 n = 0;
       while (m[n]) n++;
-      vdp_text_s((u8)((256 - (u16)n * 16) / 2), 100, 11, 0, 2, m); }
+      vdp_text_s((u8)((256 - (u16)n * 16) / 2), 100, 11, 1, 2, m); }
     if (g_score > g_hiscore) g_hiscore = g_score;
     fmt_score(g_score);
-    vdp_text(72, 132, 15, 0, "SCORE");
-    vdp_text(120, 132, 11, 0, scorebuf);
+    vdp_text(72, 132, 15, 1, "SCORE");
+    vdp_text(120, 132, 11, 1, scorebuf);
     fmt_score(g_hiscore);
-    vdp_text(72, 152, 14, 0, "HI");
-    vdp_text(120, 152, 14, 0, scorebuf);
+    vdp_text(72, 152, 14, 1, "HI");
+    vdp_text(120, 152, 14, 1, scorebuf);
     play_fanfare();                     /* 勝ちどき(BGM停止・前景同期) */
-    vdp_text(88, 176, 14, 0, "PUSH SPACE");
+    vdp_text(88, 176, 14, 1, "PUSH SPACE");
     { u8 armed = 0;                     /* ★連射ホールドで一瞬で飛ばされないよう「一度離してから押す」を要求 */
       for (f = 0; f < 240; f++) {       /* 約4秒 or 新規トリガ押下で次へ */
           input_poll();
@@ -557,20 +564,8 @@ static u8 defeat_update(void) {
     iv = (dtimer < 50) ? 1 : 3;         /* クライマックス(残り<50)で爆発を倍密に */
     if ((dtimer & iv) == 0) ent_spawn_explosion((s16)(80 + (rnd() % 96)), (s16)(20 + (rnd() % 172)));  /* 艦の全幅に降らす */
     if ((dtimer % 12) == 0) sfx(2, SFX_BOOM);
-    /* ★旧版の撃破スペクタクル: BG火球を艦全体へ escalating に撒き、炎で覆い尽くす(スプライト枠不使用)。
-       数は時間と共に増加(3→16)。cam凍結なので毎フレーム撒くと蓄積して艦が炎まみれになる。 */
-    { u8 q, qmax = (u8)(3 + (150 - dtimer) / 8);
-      if (qmax > 16) qmax = 16;
-      for (q = 0; q < qmax; q++) {
-          s16 sx = (s16)(88 + (rnd() % 84));            /* 艦のX帯 */
-          s16 sy = (s16)(12 + (rnd() % 180));           /* 画面Y */
-          u8  fs = (u8)(rnd() % 3), box = fb_box[fs];
-          s16 left = (s16)(sx - box / 2);
-          if (left < 0) left = 0; else if (left > (s16)(256 - box)) left = (s16)(256 - box);
-          ring_blit_t(fb_x[fs], FB_PAGE0_Y, (u16)left, (u16)((s16)cam + sy - box / 2), box, box);
-      }
-    }
-    ent_update_all();                   /* 爆発アニメを進める(炎上残骸はB/リングに焼済=cam凍結で維持) */
+    ent_update_all();                   /* 爆発アニメを進める */
+    fire_draw();                        /* 全撃破エンプレ(主砲＋対空砲27基)の炎上=艦を炎まみれに(2コマ) */
     ent_draw_all();
     if (dtimer) dtimer--;
     if (dtimer == 0) {
@@ -590,8 +585,8 @@ u8 stage_update(void) {
     if (g_hitstop) { g_hitstop--; return SCENE_NONE; }   /* ★ヒットストップ=数フレーム凍結(手応え) */
 
     if (phase == 0) {
-        /* 海: 蛇行なしの直進。船尾が見えたら(=cam<=STERN)交戦フェーズへ地続きに移行 */
-        if (++sdiv >= 2) { sdiv = 0; if (cam > SC_CAM_STERN) cam--; }
+        /* 海: 蛇行なしの直進(速め=2px/f)。船尾(艦)が見えたら(=cam<=SHIP)交戦＝蛇行フェーズへ地続き移行 */
+        if (cam > SC_CAM_SHIP) { cam = (cam - SC_CAM_SHIP >= 2) ? (u16)(cam - 2) : SC_CAM_SHIP; }
         scroll_to(cam);
         /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
            (でないと戦闘機が上端=艦の上に突然湧いてゴミに見える。HANDOFF §2: 空戦→戦艦)。 */
@@ -601,11 +596,11 @@ u8 stage_update(void) {
                 u8 arch = fighter_arch[curstage];
                 f->x = 24 + (rnd() % 200); f->y = -16;
                 f->ax = arch;                                  /* 挙動archetype(bh_fighterが解釈) */
-                if (arch == 0)      { f->vx = (rnd() & 1) ? 1 : -1; f->vy = 3; }              /* 独 急降下(以後加速) */
-                else if (arch == 1) { f->vx = (rnd() & 1) ? 2 : -2; f->vy = 2; }              /* 英 蛇行 */
-                else                { f->vx = (rnd() & 1) ? 1 : -1; f->vy = 2 + (rnd() % 2); }/* 米 直進 */
+                if (arch == 0)      { f->vx = (rnd() & 1) ? 1 : -1; f->vy = 4; }              /* 独 急降下(以後加速) */
+                else if (arch == 1) { f->vx = (rnd() & 1) ? 3 : -3; f->vy = 3; }              /* 英 蛇行 */
+                else                { f->vx = (rnd() & 1) ? 1 : -1; f->vy = 3 + (rnd() % 2); }/* 米 直進 */
                 f->color = fighter_col[curstage]; f->pat = fighter_pat[curstage];
-                f->coltab = fighter_ctab[curstage];   /* 行別色=陰影 */
+                f->coltab = cur_ctab;   /* 行別色=陰影 */
                 f->shadow = 1;                        /* 海面へ落ち影(旧版に無い新規) */
                 if (rnd() & 1) { f->fire = fd_faim; f->ftimer = 20 + (rnd() % 30); }
             }
@@ -617,18 +612,16 @@ u8 stage_update(void) {
                            bgm_play(stage_bgm[curstage]); }   /* ★敵艦が見えた=海イントロ共通→面別BGMへ切替 */
             else ent_clear_fighters();
         }
-        if (cam <= SC_CAM_STERN) { phase = 1; camdir = -1; }
+        if (cam <= SC_CAM_SHIP) { phase = 1; camdir = -1; }   /* ★艦出現(=BGM切替)の瞬間から蛇行開始 */
     } else {
-        /* 戦艦: 船首↔船尾の往復(縦) */
-        if (++sdiv >= 2) {
-            sdiv = 0;
-            cam = (u16)((s16)cam + camdir);
-            if (cam <= SC_CAM_BOW)   camdir = 1;
-            if (cam >= SC_CAM_STERN) camdir = -1;
-        }
+        /* 戦艦: 船首↔船尾の往復(縦, 速め=2px/f)。艦出現(cam=SHIP>STERN)から入るので、
+           下降中は STERN でクランプせず BOW まで一気に見せ、以後 BOW↔STERN を往復する。 */
+        cam = (u16)((s16)cam + (s16)camdir * 2);
+        if (camdir < 0) { if ((s16)cam <= SC_CAM_BOW)   { cam = SC_CAM_BOW;   camdir = 1;  } }
+        else            { if (cam >= SC_CAM_STERN)      { cam = SC_CAM_STERN; camdir = -1; } }
         scroll_to(cam);
-        /* 蛇行(横揺れ) */
-        if (++wtimer >= 3) {
+        /* 蛇行(横揺れ, 速め) */
+        if (++wtimer >= 2) {
             wtimer = 0;
             weaveX += wdir;
             if (weaveX >= WMAX)  wdir = -1;
@@ -653,7 +646,7 @@ u8 stage_update(void) {
     aa_collide();      /* 自機弾×対空砲(座標判定=破壊可能) */
     ent_draw_all();
     sea_frame();   /* SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール */
-    burn_new_turrets();   /* 新たに撃破された主砲の炎上残骸を焼付け(AAはaa_collideで焼済) */
+    fire_draw();          /* 破壊した主砲＋対空砲を毎フレーム炎上(2コマ・下地復元で残像なし・常時可視) */
 
     /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。
        尽きたら 継続ONでコンティニュー(残機を初期値へ戻して再挑戦=無限) / OFFでタイトルへ。 */

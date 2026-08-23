@@ -287,6 +287,7 @@ void ent_resolve_collisions(void) {
             if (t->type == ET_TURRET && t->hp && overlap(b, t)) {
                 b->active = 0;
                 if (--t->hp == 0) { t->hidden = 1; g_gun_kills++; g_score += 60; ent_spawn_explosion(t->x, t->y);
+                                    sfx(2, SFX_BOOM);              /* ★主砲撃破の爆発音(欠落バグ修正。AAだけ鳴っていた) */
                                     g_hitstop = 4; g_shake = 8; }   /* 撃破=手応え(凍結＋揺れ)。activeは維持し炎上させる */
                 else { t->h = 6; ent_spawn_spark(b->x, b->y); }   /* 非撃破=砲身が白フラッシュ(h)＋火花 */
                 break;

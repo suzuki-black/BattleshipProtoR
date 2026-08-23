@@ -250,23 +250,28 @@ function fbDisk(px, box, cx, cy, r, col) {
     if (dx * dx + dy * dy <= rr) px[y * box + x] = col;
   }
 }
-function fireballBmp(box) {
+// frame=0/1 の2コマ。★外形(赤本体＋舌)は両コマ完全に同一シルエットにし、内側の白熱芯の大きさだけ
+// 変える(燃焼のちらつき)。→ 透過コピーで前コマを完全に上書きでき、下地復元なしでも残像が出ない(軽量)。
+function fireballBmp(box, frame) {
   const px = new Uint8Array(box * box);            // 0=透明
   const c = (box - 1) / 2, r = box / 2 - 1;
-  for (let t = 0; t < 12; t++) {                    // ギザギザの赤い舌(炎らしさ)
+  for (let t = 0; t < 12; t++) {                    // ギザギザの赤い舌(両コマ同一位相=footprint固定)
     const a = (t / 12) * Math.PI * 2;
-    fbDisk(px, box, c + Math.cos(a) * (r - 1), c + Math.sin(a) * (r - 1), 1.6 + (t % 2), 11);
+    fbDisk(px, box, c + Math.cos(a) * (r - 1), c + Math.sin(a) * (r - 1), 1.8, 11);
   }
-  fbDisk(px, box, c, c, r - 1, 11);                 // 赤い本体
-  fbDisk(px, box, c, c, Math.max(1, (r * 3 / 5) | 0), 12);   // 橙
-  fbDisk(px, box, c, c, Math.max(1, (r * 3 / 10) | 0), 15);  // 白熱の芯
+  fbDisk(px, box, c, c, r - 1, 11);                 // 赤い本体(両コマ同一)
+  fbDisk(px, box, c, c, Math.max(1, (r * 3 / 5) | 0), 12);   // 橙(両コマ同一, 赤の内側)
+  // 白熱の芯だけコマで拡縮(赤本体の内側に必ず収まる=footprintは赤本体のまま不変)。
+  const wr = frame ? Math.max(1, (r * 3 / 10 + 1) | 0) : Math.max(1, (r * 3 / 10 - 1) | 0);
+  fbDisk(px, box, c, c, wr, 15);
   const bytes = box / 2, out = Buffer.alloc(box * bytes);    // 2px/byte へパック
   for (let y = 0; y < box; y++) for (let b = 0; b < bytes; b++)
     out[y * bytes + b] = (px[y * box + b * 2] << 4) | px[y * box + b * 2 + 1];
   return out;
 }
-const FB_BOXES = [24, 16, 12];                       // 大(主砲)/中(大型AA)/小(極小AA)
-const fbBlobs = FB_BOXES.map(fireballBmp);
+const FB_BOXES = [32, 22, 16];                       // 大(主砲=ドームを包む)/中(大型AA)/小(極小AA)
+// 3サイズ × 2コマ = 6枚。順=[s0f0,s0f1, s1f0,s1f1, s2f0,s2f1]。
+const fbBlobs = FB_BOXES.flatMap((b) => [fireballBmp(b, 0), fireballBmp(b, 1)]);
 
 // ---- 面別ドラム(旧版 drmPat/drmPat2/drmPat3 移植)。各スタイル=[pat16, v0(4), tempo] の21B。 ----
 // スタイル1=標準マーチ / 2=重い戦闘(空母) / 3=激しい刻み(フッド/アイオワ, テンポ速)。常駐節約でバンクへ。
@@ -294,6 +299,16 @@ function str16(arr) {
 }
 const strBlob = Buffer.concat([str16(STAGE_NAMES), str16(SUNK_MSGS)]);
 
+// ---- 海イントロ敵機の行別カラー(陰影)を常駐から追い出す: 面別16B×5をデータバンクへ ----
+const FIGHTER_CTAB = [
+  [ 3, 3, 3, 3, 3, 3, 8,10, 8, 3, 3, 3, 3, 3, 3, 3],  // Bf109 独緑
+  [12,12,11,12,12,12,14,12,11,12,12,12,11,12,12,12],  // Corsair 米橙
+  [ 9, 3, 9, 9, 9, 9,10,10,10,10, 9, 9, 9, 9, 9, 9],  // Spitfire 英
+  [14,14,13,14,14,14,15,15,14,14,14,14,13,14,13,14],  // Fw190 独灰
+  [11,11,11,11,11,11,12,15,12,11,11,11,11,11,11,11],  // Hellcat 米赤
+];
+const fctabBlob = Buffer.from(FIGHTER_CTAB.flat());
+
 // ---- 撃破!! パネル(1bpp)を常駐から追い出す: 既存ヘッダのバイト列を読み、データバンクへ ----
 const panelSrc = readFileSync(new URL('../src/include/panel_gekiha.h', import.meta.url), 'utf8');
 const panelW  = +(panelSrc.match(/#define\s+PANEL_W\s+(\d+)/)[1]);
@@ -308,7 +323,7 @@ const panelBlob = Buffer.from(panelBytes);
 const emptyops = shipops([]);   // ops2 が無い艦(1バイト END)
 const bgmBlobs = TRACKS.map(packTrack);
 const shipBlobs = SHIPS.flatMap((s) => [s.ops, s.ops2 || emptyops]);   // 艦ごとに ops, ops2 の2枚
-const parts = [...bgmBlobs, ...shipBlobs, ...fbBlobs, panelBlob, drumBlob, strBlob];
+const parts = [...bgmBlobs, ...shipBlobs, ...fbBlobs, panelBlob, drumBlob, strBlob, fctabBlob];
 const offAll = [];
 let cur = 0;
 for (const b of parts) { offAll.push(cur); cur += b.length; }
@@ -320,6 +335,7 @@ const fbOff = fbBlobs.map((_, i) => offAll[fbBase + i]);
 const panelOff = offAll[fbBase + fbBlobs.length];
 const drumOff = offAll[fbBase + fbBlobs.length + 1];
 const strOff  = offAll[fbBase + fbBlobs.length + 2];
+const fctabOff = offAll[fbBase + fbBlobs.length + 3];
 const bin = Buffer.concat(parts);
 if (bin.length > 0x2000) throw new Error(`assets ${bin.length}B > 8KB bank`);
 writeFileSync(binOut, bin);
@@ -350,10 +366,9 @@ const h = [
   `static const unsigned int ship_bowyb[STAGE_COUNT]   = { ${SHIPS.map((s) => s.bowYb).join(',')} };`,
   `static const unsigned char ship_aagtbl[STAGE_COUNT] = { ${SHIPS.map((s) => s.aagTbl).join(',')} };`,
   `static const unsigned char ship_aagp[STAGE_COUNT][4] = { ${SHIPS.map((s) => `{${s.aagP.join(',')}}`).join(', ')} };`,
-  '/* --- 撃破エンプレの炎上火球(丸。box×box/2 byte, 色0=透明)。bake_fireballs が page0非表示域へ展開。 --- */',
-  `#define FB_COUNT ${fbBlobs.length}`,
+  '/* --- 撃破エンプレの炎上火球(丸, 2コマ×3サイズ=6枚。box×box/2 byte, 色0=透明)。 --- */',
+  `#define FB_COUNT ${fbBlobs.length}`,          /* 6 = 3サイズ×2コマ, 順[s0f0,s0f1,s1f0,...] */
   `#define FB_RAM_MAX ${Math.max(...fbBlobs.map((b) => b.length))}`,
-  `static const unsigned char fb_box_gen[FB_COUNT] = { ${FB_BOXES.join(',')} };`,
   `static const unsigned int fb_off[FB_COUNT] = { ${fbOff.join(',')} };`,
   '/* --- 撃破!! パネル(1bpp)。常駐節約のためデータバンクへ。results_and_fanfare が data_read して blit。 --- */',
   `#define PANEL_W ${panelW}`,
@@ -368,6 +383,7 @@ const h = [
   '/* --- 面名(開始カード)/撃沈メッセージ(結果画面)。各16Bスロット。stage_build で当該面をRAMへ。 --- */',
   `static const unsigned int stagename_off = ${strOff};`,
   `static const unsigned int sunk_off = ${strOff + 5 * 16};`,
+  `static const unsigned int fighter_ctab_off = ${fctabOff};`,
   '/* --- 開始カードの事前ベイク艦画像(64x48=48行x32byte)。bank4(旧demo跡)に5艦連結(assets/cards.bin)。 --- */',
   '#define SHIP_CARD_BANK 4',
   '#define SHIP_CARD_LEN 1536',
