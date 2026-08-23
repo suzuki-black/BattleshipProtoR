@@ -78,6 +78,16 @@ static void spawn_turret(u8 shipX, u16 shipY, u8 delay) {
 static u8  cur_gun_x[4];
 static u16 cur_gun_y[4];
 
+/* 空母(2面)の停泊F6F(甲板8機)。エンティティ(ET_PARKED)で艦上に静止=破壊/発艦できる。中央列4＋左列4。 */
+static void spawn_parked(u8 shipX, u16 shipY) {
+    Entity *e = ent_spawn(ET_PARKED);
+    if (e) {
+        e->ax = (s16)shipX - 8;                         /* 艦上世界アンカー(中心=shipX,ship座標y) */
+        e->ay = (s16)(SC_SHIP_R0 * 16 + shipY) - 8;
+        e->pat = SPR_HELLCAT; e->coltab = cur_ctab; e->shadow = 1;
+    }
+}
+
 /* 戦艦を バッファB へ事前描画(旧版忠実)。海テンプレ→OPS(+ops2)をRAMへ読み ship_render(艦種別)。
    ★重い(数千VDP塗り)ので、Bに既に現在の艦が居るなら再生成しない(ミス再挑戦=即再開)。 */
 static u8 ship_ram[SHIP_OPS_RAM_MAX];
@@ -239,7 +249,7 @@ static void ring_blit_t(u16 sx, u16 sy, u16 dx, u16 wtop, u16 w, u16 h) {
 }
 /* ★炎上サイト表: エンプレ撃破時に (left, worldY上端, サイズ) を1件追記。fire_draw はこの表だけを
    走査するので、毎フレームの ship_aag_pos 呼びやエンティティ全走査が不要=軽量。 */
-#define BURN_MAX 48              /* 主砲4＋対空砲23＋撃破時の散布18 */
+#define BURN_MAX 28              /* 主砲4＋対空砲23 */
 static u8  burn_left[BURN_MAX];  /* 火球の左X(page1)。box≤32で0..224=u8可 */
 static u16 burn_wtop[BURN_MAX];  /* 火球の世界Y上端 */
 static u8  burn_sz[BURN_MAX];    /* 0大/1中/2小 */
@@ -286,18 +296,18 @@ static void special_reset(void) { spc_timer = 100; }
 static void special_update(void) {
     if (phase != 1) return;                    /* 戦艦が出てからのみ */
     if (spc_timer) { spc_timer--; return; }
-    if (curstage == 1) {                        /* 2面 空母: F6Fヘルキャットを甲板から射出→8方向追尾 */
+    if (curstage == 1) {                        /* 2面 空母: 停泊F6Fが「その停泊位置から」発艦→8方向追尾 */
         if (ent_count(ET_PURSUER) < 3) {        /* 同時最大3機(旧版 NPLANE) */
-            Entity *e = ent_spawn(ET_PURSUER);
-            if (e) {
-                e->x = (s16)(120 + g_meander) + (s16)(rnd() % 50) - 25;  /* 甲板中央付近 */
-                e->y = (s16)(30 + (rnd() % 50));                          /* 見えている甲板上 */
-                e->ax = 4;                       /* 初期=下向き */
-                e->ftimer = 34;                  /* ホバー(展開) */
-                e->pat = SPR_HELLCAT; e->coltab = cur_ctab; e->shadow = 1;  /* F6F(赤=甲板で視認性)＋翼光沢＋落ち影 */
+            u8 i; Entity *e = (Entity *)0;
+            for (i = 0; i < ENT_MAX; i++) {     /* 画面内の停泊機を1機選ぶ(その位置から浮上=停泊数が減る) */
+                Entity *p = ent_at(i);
+                if (p->active && p->type == ET_PARKED && p->y > 8 && p->y < 200) { e = p; break; }
             }
-            sfx(1, SFX_EFIRE);
-            spc_timer = diff_interval(120);                     /* 次の射出まで(旧版 ep_launch) */
+            if (e) {                            /* 停泊機→追尾機へ差し替え(x/yは現位置を継承=停泊位置から浮上) */
+                e->type = ET_PURSUER; e->ax = 4; e->ftimer = 34;
+                sfx(1, SFX_EFIRE);
+            }
+            spc_timer = diff_interval(120);                     /* 次の発艦まで(旧版 ep_launch) */
         } else spc_timer = 30;                   /* 満杯なら短く再試行 */
     } else if (curstage == 2) {                   /* 3面 フッド: 舷側から潜水艦ミサイル(浮上→弱誘導→8方向炸裂) */
         if (ent_count(ET_SMISSILE) < 3) {
@@ -377,6 +387,11 @@ static void stage_build(void) {
     spawn_turret(cur_gun_x[1], cur_gun_y[1], 45);
     spawn_turret(cur_gun_x[2], cur_gun_y[2], 60);
     spawn_turret(cur_gun_x[3], cur_gun_y[3], 75);
+    if (curstage == 1) {   /* 空母: 停泊F6F 8機を甲板へ(中央列x120×4＋左列x98×4) */
+        u8 i;
+        for (i = 0; i < 4; i++) spawn_parked(120, (u16)(130 + i * 40));
+        for (i = 0; i < 4; i++) spawn_parked(98,  (u16)(150 + i * 40));
+    }
 }
 
 /* 地形リングを表示(page1)＝ここでゲーム画面が現れる。scroll_init は prerender 済みが前提。 */
@@ -670,11 +685,7 @@ u8 stage_update(void) {
     if (phase == 1 && ent_live_turrets() == 0 && aa_alive() == 0) {
         dmode = 1; dtimer = 150;   /* 約2.5秒の炎上スペクタクル */
         vdp_set_hscroll(0, 0);     /* 蛇行(横HW)を0に=火球のX基準を艦アートへ揃える(旧版準拠) */
-        /* ★艦全体を炎に包む: 既存の炎上サイト(27基)に加え、艦上へ散布火球を追加登録
-           (fire_draw が全部を2コマ描画=もっさりの主因だった毎フレーム散布を廃し、撃破時に一度だけ)。 */
-        { u8 q; for (q = 0; q < 18; q++) {
-            u8 rr = rnd(); s16 fx = (s16)(72 + (rnd() & 127));   /* 艦帯 72..199 */
-            burn_add(fx, (u16)((s16)cam + 12 + (rr & 63) + (rnd() & 127)), (u8)(rr >> 6 > 2 ? 2 : rr >> 6)); } }
+        /* 艦全体の炎上は既存の炎上サイト(全撃破エンプレ27基の大火球)＋defeat_updateの爆発降らしで表現。 */
         bgm_stop();
         return SCENE_NONE;
     }

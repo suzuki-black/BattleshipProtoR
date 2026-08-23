@@ -6,7 +6,7 @@
 
 #include "types.h"
 
-#define ENT_MAX 24   /* turboR前提で余裕(HWスプライト32枚未満)。弾幕化時に拡張 */
+#define ENT_MAX 30   /* turboR前提。空母の停泊機(最大8)＋主砲4＋弾/エフェクトを同時に収める */
 
 /* 種別 = behavior テーブルの添字。追加時は entity.c の behaviors[] と対で更新。 */
 enum {
@@ -23,6 +23,7 @@ enum {
     ET_SMISSILE,  /* 潜水艦ミサイル(フッド): 舷側発進→浮上→弱誘導→8方向炸裂。ax=相(1..3)/ay=舷(±1)/ftimer=相タイマ。撃墜不可 */
     ET_COMBO,     /* 合体弾の予告(双子艦): 左右2発が中心へ収束→合体して自機狙いの大弾を発射。ay=中心x/y=中心y/x=半間隔off/ftimer=収束 */
     ET_SPARK,     /* 火花(被弾ヒット/マズルフラッシュ): SPR_FLASHを数フレーム明滅して消滅 */
+    ET_PARKED,    /* 空母甲板の停泊F6F: 艦上世界アンカー(ax,ay)で静止。自機弾で破壊可(体当り無し)。発艦でET_PURSUERへ */
     ET_COUNT
 };
 

@@ -209,6 +209,13 @@ static void bh_spark(Entity *e) {
     e->color = spark_col[(e->ftimer >> 1) & 3];
 }
 
+/* 空母甲板の停泊機: 艦上世界アンカー(ax,ay)で静止し、艦と一緒にスクロール(砲塔と同じ座標系, 発砲なし)。
+   自機弾で破壊可(下の当たり判定)。発艦時は scene が type を ET_PURSUER へ差し替える。 */
+static void bh_parked(Entity *e) {
+    e->x = e->ax + g_meander;
+    e->y = e->ay - (s16)g_cam;
+}
+
 extern void bh_player(Entity *e);   /* player.c(入力/発砲を持つのでゲーム側モジュールへ) */
 
 typedef void (*Behavior)(Entity *);
@@ -226,6 +233,7 @@ static const Behavior behaviors[ET_COUNT] = {
     bh_smissile,  /* ET_SMISSILE(潜水艦ミサイル4相) */
     bh_combo,     /* ET_COMBO(双子艦の合体弾予告) */
     bh_spark,     /* ET_SPARK(火花) */
+    bh_parked,    /* ET_PARKED(空母甲板の停泊機。艦上静止) */
 };
 
 u8 ent_count(u8 type) {
@@ -280,10 +288,10 @@ void ent_resolve_collisions(void) {
         if (!b->active || b->type != ET_BULLET || b->team != TEAM_PLAYER) continue;
         for (j = 0, t = pool; j < ENT_MAX; j++, t++) {
             if (!t->active) continue;
-            if ((t->type == ET_FIGHTER || t->type == ET_PURSUER) && overlap(b, t)) {
+            if ((t->type == ET_FIGHTER || t->type == ET_PURSUER || t->type == ET_PARKED) && overlap(b, t)) {
                 b->active = 0; t->active = 0; g_kills++;
-                g_score += (t->type == ET_PURSUER) ? 20 : 10;   /* 艦載機は高得点 */
-                ent_spawn_explosion(t->x, t->y);
+                g_score += (t->type == ET_PURSUER) ? 20 : 10;   /* 追尾機20 / 戦闘機・停泊機10 */
+                ent_spawn_explosion(t->x, t->y);   /* 停泊機も自機弾で破壊(体当り判定は持たない) */
                 break;
             }
             if (t->type == ET_TURRET && t->hp && overlap(b, t)) {
