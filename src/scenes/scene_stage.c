@@ -249,7 +249,7 @@ static void ring_blit_t(u16 sx, u16 sy, u16 dx, u16 wtop, u16 w, u16 h) {
 }
 /* ★炎上サイト表: エンプレ撃破時に (left, worldY上端, サイズ) を1件追記。fire_draw はこの表だけを
    走査するので、毎フレームの ship_aag_pos 呼びやエンティティ全走査が不要=軽量。 */
-#define BURN_MAX 28              /* 主砲4＋対空砲23 */
+#define BURN_MAX 48              /* 主砲4＋対空砲23＋撃破時の散布火球 */
 static u8  burn_left[BURN_MAX];  /* 火球の左X(page1)。box≤32で0..224=u8可 */
 static u16 burn_wtop[BURN_MAX];  /* 火球の世界Y上端 */
 static u8  burn_sz[BURN_MAX];    /* 0大/1中/2小 */
@@ -640,7 +640,11 @@ u8 stage_update(void) {
     if (phase == 1 && ent_live_turrets() == 0 && aa_alive() == 0) {
         dmode = 1; dtimer = 150;   /* 約2.5秒の炎上スペクタクル */
         vdp_set_hscroll(0, 0);     /* 蛇行(横HW)を0に=火球のX基準を艦アートへ揃える(旧版準拠) */
-        /* 艦全体の炎上は既存の炎上サイト(全撃破エンプレ27基の大火球)＋defeat_updateの爆発降らしで表現。 */
+        /* ★艦全体を炎に包む(旧版): 全撃破エンプレ27基に加え散布火球18枚を追加登録。fire_draw が2コマ描画。
+           撃破時に一度だけ(毎フレーム散布=もっさりの主因は回避)。 */
+        { u8 q; for (q = 0; q < 18; q++) {
+            u8 rr = rnd(); s16 fx = (s16)(72 + (rnd() & 127));
+            burn_add(fx, (u16)((s16)cam + 12 + (rr & 63) + (rnd() & 127)), (u8)(rr >> 6 > 2 ? 2 : rr >> 6)); } }
         bgm_stop();
         return SCENE_NONE;
     }
