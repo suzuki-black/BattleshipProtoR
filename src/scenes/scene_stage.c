@@ -521,56 +521,11 @@ static void results_and_fanfare(void) {
 }
 
 /* 自機撃墜の沈没演出: スクロール凍結・自機位置に火球を降らせ轟音(旧版 player_burst 相当・短縮)。 */
-static void play_death_anim(void) {
-    u8 t; s16 px = (s16)g_player_x, py = (s16)g_player_y;
-    bgm_stop();
-    ent_reset();                        /* 自機/弾/敵を全消し(死んだ機を火球に置換) */
-    sfx(2, SFX_BOOM);
-    for (t = 0; t < 84; t++) {          /* ~1.4s */
-        scroll_to(cam);                 /* 死んだ場所を表示維持 */
-        vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % 9) - 4));   /* 沈没の揺れ: 縦±4px */
-        if ((t & 7) == 0) ent_spawn_explosion(px + (s16)(rnd() % 14) - 7, py + (s16)(rnd() % 14) - 7);
-        if ((t % 24) == 0) sfx(2, SFX_BOOM);
-        ent_update_all();
-        ent_draw_all();
-        vdp_wait_frame();
-    }
-}
+/* 沈没演出/ゲームオーバー画面は冷たいバンク(bank16)へ移設(常駐節約)。ship.h の play_death_banked/
+   game_over_banked を bcall。data_read を伴わない=窓を差し替えないので安全。 */
 
 /* ゲームオーバー画面＋コンティニュー選択(旧版準拠・カウントダウン無し)。戻り 1=CONTINUE / 0=TITLE。
    継続ON時のみ CONTINUE/TITLE のカーソルメニュー。CONTINUE=残機初期化＋同面再開(スコア保持)。 */
-static u8 game_over_screen(void) {
-    u8 sel = 0; s8 prev = -1;
-    play_sink();                        /* 沈没音(下降) */
-    vdp_set_vscroll(0); vdp_sprite_hide_from(0); vdp_set_display_page(0);
-    vdp_fill(0, 0, 256, 212, 0);        /* 黒地(色0=黒) */
-    vdp_text_s(56, 44, 11, 0, 2, "GAME OVER");   /* 赤・2倍角(9字×16=144→x56中央) */
-    if (g_score > g_hiscore) g_hiscore = g_score;
-    fmt_score(g_score);
-    vdp_text(84, 96, 15, 0, "SCORE");
-    vdp_text(132, 96, 11, 0, scorebuf);
-    fmt_score(g_hiscore);
-    vdp_text(84, 116, 14, 0, "HI");
-    vdp_text(132, 116, 14, 0, scorebuf);
-    if (!g_continue) {                  /* 継続OFF: PUSH SPACE → タイトル */
-        vdp_text(88, 160, 14, 0, "PUSH SPACE");
-        for (;;) { input_poll(); if (g_input_edge & INP_TRIG) break; vdp_wait_frame(); }
-        return 0;
-    }
-    for (;;) {                          /* 継続ON: CONTINUE/TITLE メニュー(UP/DOWN選択, SPACE確定) */
-        input_poll();
-        if ((g_input_edge & INP_UP) && sel)    sel = 0;
-        if ((g_input_edge & INP_DOWN) && !sel) sel = 1;
-        if (sel != (u8)prev) {
-            vdp_text(96, 150, sel == 0 ? 11 : 4, 0, "CONTINUE");
-            vdp_text(96, 170, sel == 1 ? 11 : 4, 0, "TITLE   ");
-            prev = (s8)sel;
-        }
-        if (g_input_edge & INP_TRIG) break;
-        vdp_wait_frame();
-    }
-    return (sel == 0) ? 1 : 0;
-}
 
 /* 撃破演出(炎上スペクタクル): スクロール凍結・艦上へ爆発を降らせる＋轟音。尺が尽きたら結果へ。 */
 static u8 defeat_update(void) {
@@ -671,10 +626,10 @@ u8 stage_update(void) {
        尽きたら 継続ONでコンティニュー(残機を初期値へ戻して再挑戦=無限) / OFFでタイトルへ。 */
     if (g_miss) {
         g_miss = 0;
-        play_death_anim();              /* 沈没演出(自機位置に火球＋轟音) */
+        play_death_banked(cam);         /* 沈没演出(bank16) */
         if (g_lives) g_lives--;
         if (g_lives == 0) {
-            if (game_over_screen()) { g_lives = lives_init(); stage_setup(); }  /* CONTINUE=同面再開・スコア保持 */
+            if (game_over_banked()) { g_lives = lives_init(); stage_setup(); }  /* CONTINUE=同面再開・スコア保持 */
             else return SC_TITLE;
         } else {
             stage_setup();              /* 残機あり: 面最初から全砲台復活 */

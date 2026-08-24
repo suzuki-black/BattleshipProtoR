@@ -36,7 +36,9 @@ typedef struct {
     u16 bow_yb;
     u8 aag_tbl;
     const u8 *aagp, *ops, *ops2;
-    u8 mode;   /* 0=艦描画(ship_render) / 1=開始カード艦画像の2倍拡大(draw_card) */
+    u8 mode;   /* 0=艦描画 / 1=開始カード拡大 / 2=沈没演出 / 3=ゲームオーバー画面 */
+    u16 cam;   /* mode2(沈没演出)の表示維持カメラ */
+    u8 ret;    /* mode3(ゲームオーバー)の戻り値: 1=CONTINUE / 0=TITLE */
 } ShipArgs;
 extern ShipArgs g_shipargs;
 
@@ -44,6 +46,10 @@ extern ShipArgs g_shipargs;
    page0へ展開(重い拡大ループを常駐から追い出す)。読み込みは常駐で済ませ、バンク内では窓を差替えない。 */
 extern u8 g_card_ram[1536];
 void draw_card_banked(void);   /* g_card_ram を2倍拡大して page0 へ(bcall)。事前に data_read 済のこと */
+/* 冷たい終盤画面をバンクへ(常駐節約)。沈没演出＝自機位置(g_player_x/y)へ火球＋轟音を尺ぶん。
+   ゲームオーバー＝黒地にGAME OVER/SCORE/HI＋(継続ON時)CONTINUE/TITLE選択。戻り 1=CONTINUE/0=TITLE。 */
+void play_death_banked(u16 cam);
+u8   game_over_banked(void);
 
 /* 対空砲23基の艦内座標表(常駐 ship_aag.c で定義)。バンク側 draw_aag と常駐 ship_aag_pos が参照。 */
 extern const u8  aag_x_bb[SHIP_NAAG], aag_x_cv[SHIP_NAAG], aag_x_hd[SHIP_NAAG], aag_x_nl[SHIP_NAAG];

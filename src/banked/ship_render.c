@@ -4,8 +4,13 @@
    ★このバンク内からは data窓を差替えない(vdp_copy は常駐/窓非差替なので呼んでよい)。
    対空砲座標表(aag_*)と g_shipargs は常駐(ship_aag.c)にあり extern 参照。 */
 #include "ship.h"
-#include "scroll.h"  /* SC_SHIPBUF_Y / SC_SEATMPL_Y / SC_SHIP_ROWS */
+#include "scroll.h"  /* SC_SHIPBUF_Y / SC_SEATMPL_Y / SC_SHIP_ROWS / scroll_to */
 #include "vdp.h"     /* vdp_copy(常駐。海テンプレのタイル) */
+#include "entity.h"  /* 沈没演出: ent_reset/ent_update_all/ent_draw_all/ent_spawn_explosion(常駐) */
+#include "sound.h"   /* sfx/bgm_stop/play_sink/SFX_* */
+#include "player.h"  /* g_player_x/y */
+#include "input.h"   /* input_poll/g_input_edge/INP_* */
+#include "gamestate.h" /* g_score/g_hiscore/g_continue */
 
 __sfr __at(0x98) SH_DAT;     /* VRAM データ */
 __sfr __at(0x99) SH_CTRL;    /* VDP アドレス/レジスタ */
@@ -332,8 +337,64 @@ static void draw_card_impl(void) {
     }
 }
 
+/* ---- 沈没演出(旧 play_death_anim)。cam=表示維持カメラ。自機位置は g_player_x/y。 ---- */
+static void death_impl(u16 cam) {
+    u8 t; s16 px = (s16)g_player_x, py = (s16)g_player_y;
+    bgm_stop();
+    ent_reset();                        /* 自機/弾/敵を全消し(死んだ機を火球に置換) */
+    sfx(2, SFX_BOOM);
+    for (t = 0; t < 84; t++) {          /* ~1.4s */
+        scroll_to(cam);
+        vdp_set_vscroll((u8)((s16)cam + (s16)(rnd() % 9) - 4));   /* 沈没の揺れ: 縦±4px */
+        if ((t & 7) == 0) ent_spawn_explosion(px + (s16)(rnd() % 14) - 7, py + (s16)(rnd() % 14) - 7);
+        if ((t % 24) == 0) sfx(2, SFX_BOOM);
+        ent_update_all();
+        ent_draw_all();
+        vdp_wait_frame();
+    }
+}
+
+/* ---- ゲームオーバー画面(旧 game_over_screen)。戻り 1=CONTINUE / 0=TITLE を g_shipargs.ret へ。 ---- */
+static char go_score[6];
+static void go_fmt(u16 v) {
+    u8 i; for (i = 5; i > 0; i--) { go_score[i - 1] = (char)('0' + (v % 10)); v /= 10; } go_score[5] = 0;
+}
+static u8 gameover_impl(void) {
+    u8 sel = 0; s8 prev = -1;
+    play_sink();
+    vdp_set_vscroll(0); vdp_sprite_hide_from(0); vdp_set_display_page(0);
+    vdp_fill(0, 0, 256, 212, 0);
+    vdp_text_s(56, 44, 11, 0, 2, "GAME OVER");
+    if (g_score > g_hiscore) g_hiscore = g_score;
+    go_fmt(g_score); vdp_text(84, 96, 15, 0, "SCORE"); vdp_text(132, 96, 11, 0, go_score);
+    go_fmt(g_hiscore); vdp_text(84, 116, 14, 0, "HI"); vdp_text(132, 116, 14, 0, go_score);
+    if (!g_continue) {
+        vdp_text(88, 160, 14, 0, "PUSH SPACE");
+        for (;;) { input_poll(); if (g_input_edge & INP_TRIG) break; vdp_wait_frame(); }
+        return 0;
+    }
+    for (;;) {
+        input_poll();
+        if ((g_input_edge & INP_UP) && sel)    sel = 0;
+        if ((g_input_edge & INP_DOWN) && !sel) sel = 1;
+        if (sel != (u8)prev) {
+            vdp_text(96, 150, sel == 0 ? 11 : 4, 0, "CONTINUE");
+            vdp_text(96, 170, sel == 1 ? 11 : 4, 0, "TITLE   ");
+            prev = (s8)sel;
+        }
+        if (g_input_edge & INP_TRIG) break;
+        vdp_wait_frame();
+    }
+    return (sel == 0) ? 1 : 0;
+}
+
 void banked_entry(void) {
-    if (g_shipargs.mode) { draw_card_impl(); return; }
-    ship_render_impl(g_shipargs.kind, g_shipargs.hull, g_shipargs.bow_cnt, g_shipargs.bow_yb,
-                     g_shipargs.aag_tbl, g_shipargs.aagp, g_shipargs.ops, g_shipargs.ops2);
+    switch (g_shipargs.mode) {
+        case 1: draw_card_impl(); return;
+        case 2: death_impl(g_shipargs.cam); return;
+        case 3: g_shipargs.ret = gameover_impl(); return;
+        default:
+            ship_render_impl(g_shipargs.kind, g_shipargs.hull, g_shipargs.bow_cnt, g_shipargs.bow_yb,
+                             g_shipargs.aag_tbl, g_shipargs.aagp, g_shipargs.ops, g_shipargs.ops2);
+    }
 }

@@ -25,6 +25,16 @@ void draw_card_banked(void) {
     g_shipargs.mode = 1;
     bcall_to(SHIP_RENDER_BANK);
 }
+/* 冷たい終盤画面をバンクで実行(常駐節約)。data_read は内部で行わない=窓を差し替えない。 */
+void play_death_banked(u16 cam) {
+    g_shipargs.mode = 2; g_shipargs.cam = cam;
+    bcall_to(SHIP_RENDER_BANK);
+}
+u8 game_over_banked(void) {
+    g_shipargs.mode = 3;
+    bcall_to(SHIP_RENDER_BANK);
+    return g_shipargs.ret;
+}
 
 /* 艦を バッファB へ描画(常駐ラッパ)。引数を退避して重い実体を SHIP_RENDER_BANK で実行。
    ★カード表示中(BGM停止)に一度だけ呼ばれる冷たい経路なので bcall のバンク差替コストは無視できる。 */
