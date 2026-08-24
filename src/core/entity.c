@@ -77,19 +77,25 @@ static void bh_shooter(Entity *e) {
    横=ax+weaveX(蛇行の横揺れに追従)。画面内に居る時だけ発砲(動く的)。
    ★可動砲身: 自機を狙って段階回転(vx=向き0-7, vy=旋回冷却)。命中フラッシュ(h=残フレーム, 白coltab)。 */
 s16 g_meander;
+#define BARREL_OFF 5   /* 砲身スプライトを狙い方向へ突き出す量(ドームから砲身が出る) */
 static void bh_turret(Entity *e) {
+    s16 dx, dy; u8 d;
     if (e->hp == 0) { e->hidden = 1; return; }         /* 撃破済み: 砲身消失・不動(炎上はscene側BGで) */
-    e->x = e->ax + g_meander;
-    e->y = e->ay - (s16)g_cam;
+    dx = e->ax + g_meander;                            /* ドーム位置(照準/発砲/当たりの基準) */
+    dy = e->ay - (s16)g_cam;
+    e->x = dx; e->y = dy;
     if (e->h) { e->h--; e->coltab = barrel_flash; }   /* 命中で白フラッシュ */
     else        e->coltab = barrel_col;               /* 通常=金属シェード */
-    if (e->y > -16 && e->y < 212) {
-        u8 tgt = dir8((s16)g_player_x - e->x, (s16)g_player_y - e->y);
+    if (dy > -16 && dy < 212) {
+        u8 tgt = dir8((s16)g_player_x - dx, (s16)g_player_y - dy);
         if (e->vy) e->vy--;                            /* 旋回冷却 */
         else { e->vx = (s16)step_dir((u8)e->vx, tgt); e->vy = 5; }   /* 5fごとに1段 */
-        run_fire(e);                                   /* 発砲(画面内のみ) */
+        run_fire(e);                                   /* 発砲(ドーム位置から, 画面内のみ) */
     } else e->ftimer = 1;                              /* 画面外はチャージ据置 */
-    e->pat = (u8)(SPR_BARREL0 + ((u8)e->vx & 7) * 4);  /* 向きに応じた砲身パターン */
+    d = (u8)e->vx & 7;
+    e->pat = (u8)(SPR_BARREL0 + d * 4);                /* 向きに応じた砲身バー(上下=縦, 左右=横, 斜め) */
+    e->x = dx + (s16)dirdx8[d] * BARREL_OFF;           /* ★砲身をドームから狙い方向へ突き出す=切れて見えない */
+    e->y = dy + (s16)dirdy8[d] * BARREL_OFF;
 }
 
 /* 敵戦闘機(空戦): 下方向へ進み画面下で消滅。fireを持てば発砲も。
