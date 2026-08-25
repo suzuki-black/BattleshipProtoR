@@ -472,17 +472,19 @@ static void fmt_score(u16 v) {
 
 /* 撃破!! パネルの1bppデータをバンク→RAMへ(結果画面の直前に1回)。 */
 static u8 panel_ram[PANEL_WB * PANEL_H];
-/* 撃破!! パネルを page0 の (dstx,dsty) へ blit(1bpp→SCREEN5, 2px/byte)。on=oncol/off=offcol。dstxは偶数。 */
-static void blit_panel(u16 dstx, u16 dsty, u8 oncol, u8 offcol) {
+/* 撃破!! パネルを透過blit: ビットの立った2画素対だけ oncol で書く(オフ対は書かない=下地/影が残る)。
+   ★不透過に全面 offcol で塗ると本体の地塗りが影を消す。落ち影/ゴーストは
+     「青地に 影(透過) → 本体(透過)」の2枚重ねで出す。dstx は偶数。 */
+static void blit_panel_t(u16 dstx, u16 dsty, u8 oncol) {
     u8 y, b, i;
+    u8 cc = (u8)((oncol << 4) | oncol);
     for (y = 0; y < PANEL_H; y++) {
-        vdp_write_addr((u16)((u16)(dsty + y) * 128 + (dstx >> 1)));
+        u16 addr = (u16)((u16)(dsty + y) * 128 + (dstx >> 1));
         for (b = 0; b < PANEL_WB; b++) {
             u8 bits = panel_ram[(u16)y * PANEL_WB + b];
             for (i = 0; i < 8; i += 2) {
-                u8 p0 = (bits & (u8)(0x80 >> i)) ? oncol : offcol;
-                u8 p1 = (bits & (u8)(0x80 >> (i + 1))) ? oncol : offcol;
-                vdp_data((u8)((p0 << 4) | p1));
+                if (bits & (u8)(0xC0 >> i)) { vdp_write_addr(addr); vdp_data(cc); }  /* 対にオンビットがあれば書く */
+                addr++;
             }
         }
     }
@@ -495,11 +497,11 @@ static void results_and_fanfare(void) {
     vdp_sprite_hide_from(0);            /* スプライト全消し(停止マーカを slot0 へ) */
     vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
     vdp_fill(0, 0, 256, 212, 1);        /* 背景=エンディング/開始カードと同じ青(色1)。トーン統一 */
-    /* 撃破!! (魏碑の筆文字)。枠・赤は無し。黒の影を横に大きく(+6,+2)ずらしてブラウン管ゴースト風に。
-       右へ伸びた黒が各画を太らせ、字が厚く見える＝迫力を出す。影→白本体の順で背景青の上に直接。 */
+    /* 撃破!! (魏碑の筆文字)。枠・赤は無し。ブラウン管ゴースト風に黒影を横+6/縦+2へ大きくずらす。
+       ★透過blitで「青地 → 影(黒) → 本体(白)」の順に重ねる(不透過blitだと本体の地塗りが影を消す)。 */
     data_read(ASSET_BANK, panel_off, panel_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */
-    blit_panel(78, 42, 0, 1);           /* 影=黒(on=0), 地=背景青(off=1)。横+6/縦+2=CRTゴースト風に大きく覗く */
-    blit_panel(72, 40, 15, 1);          /* 本体=白(on=15), 地=背景青。中央 x72(=(256-112)/2) */
+    blit_panel_t(78, 42, 0);            /* 影=黒。透過=隙間から本体の裏へ影が残る。横+6/縦+2で大きく覗く */
+    blit_panel_t(72, 40, 15);           /* 本体=白。透過で影の上に重ねる。中央 x72(=(256-112)/2) */
     /* [艦名] SUNK を白・2倍角で中央。 */
     { const char *m = cur_sunk; u8 n = 0;
       while (m[n]) n++;
