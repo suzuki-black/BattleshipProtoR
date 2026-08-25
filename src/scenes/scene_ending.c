@@ -70,6 +70,10 @@ static u8 run_ending(void) {
     u8  sc = 0;
     u16 f;
 
+    /* ★_bcall は banked 実行中ずっと di だが、本体は vdp_wait_frame(JIFFYを割込みで更新)で
+       毎フレーム待つ=di のままだと JIFFY が進まず無限ループ(フリーズ)。BGM再生ISRは曲を
+       RAM(bgm_ram)から読み 0xA000窓に触れないので、ここで ei しても bank7 窓は壊れない。 */
+    __asm ei __endasm;
     vdp_set_vscroll(0);
     vdp_set_display_page(0);
     vdp_fill(0, 0, 256, 256, END_BG);      /* page0 リングをクリア */

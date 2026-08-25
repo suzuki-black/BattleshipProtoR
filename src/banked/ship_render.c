@@ -340,6 +340,11 @@ static void draw_card_impl(void) {
 /* ---- 沈没演出(旧 play_death_anim)。cam=表示維持カメラ。自機位置は g_player_x/y。 ---- */
 static void death_impl(u16 cam) {
     u8 t; s16 px = (s16)g_player_x, py = (s16)g_player_y;
+    /* ★_bcall は banked 実行中ずっと di。しかし本関数は vdp_wait_frame(JIFFYを割込みで更新)で
+       毎フレーム待つため、di のままだと JIFFY が進まず無限ループ=フリーズする。
+       BGM再生ISRは曲データをRAM(bgm_ram)から読み 0xA000窓に触れないので、ここで ei しても
+       窓(bank16)は壊れない。よって沈没演出/GO画面だけ割込みを許可する。 */
+    __asm ei __endasm;
     bgm_stop();
     ent_reset();                        /* 自機/弾/敵を全消し(死んだ機を火球に置換) */
     sfx(2, SFX_BOOM);
@@ -361,6 +366,7 @@ static void go_fmt(u16 v) {
 }
 static u8 gameover_impl(void) {
     u8 sel = 0; s8 prev = -1;
+    __asm ei __endasm;   /* ★同上: 入力待ち/フレーム待ちに割込みが要る(di のままだとフリーズ) */
     play_sink();
     vdp_set_vscroll(0); vdp_sprite_hide_from(0); vdp_set_display_page(0);
     vdp_fill(0, 0, 256, 212, 0);
