@@ -265,6 +265,8 @@ static void burn_add(s16 cx, u16 worldY, u8 s) {
     burn_left[nburn] = (u8)left; burn_wtop[nburn] = wtop; burn_sz[nburn] = s; nburn++;
     bufY = (u16)((s16)SC_SHIPBUF_Y + (s16)wtop - SC_SHIP_R0 * 16);
     vdp_copy_t(fb_px[s * 2], FB_PAGE0_Y, (u16)left, bufY, box, box);   /* 艦Bへ永続焼込み(常時可視) */
+    rendered_stage = -1;   /* ★Bを炎で汚したので、同一面リスタート時は必ず艦を描き直させる
+                              (でないと撃墜やり直しで前ライフの破壊痕がBに残り「壊れた艦＋復活砲台」に) */
     ring_blit_t(fb_px[s * 2], FB_PAGE0_Y, (u16)left, wtop, box, box);  /* 表示リングへ即時 */
 }
 /* 炎上アニメ: 新撃破の主砲検出は毎フレーム(軽量)。火球の上書きは8フレームに1回だけ(常時可視はBが担保
@@ -493,9 +495,9 @@ static void results_and_fanfare(void) {
     vdp_sprite_hide_from(0);            /* スプライト全消し(停止マーカを slot0 へ) */
     vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
     vdp_fill(0, 0, 256, 212, 1);        /* 背景=エンディング/開始カードと同じ青(色1)。トーン統一 */
-    /* 撃破!! (魏碑の筆文字)。枠・赤は無し。黒の影(+4,+4)＋白本体を背景青の上に直接。 */
+    /* 撃破!! (魏碑の筆文字)。枠・赤は無し。黒の影(+2,+2)＋白本体を背景青の上に直接。 */
     data_read(ASSET_BANK, panel_off, panel_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */
-    blit_panel(76, 44, 0, 1);           /* 影=黒(on=0), 地=背景青(off=1)。右下+4に覗く */
+    blit_panel(74, 42, 0, 1);           /* 影=黒(on=0), 地=背景青(off=1)。右下+2に密着=陰が離れて見えない */
     blit_panel(72, 40, 15, 1);          /* 本体=白(on=15), 地=背景青。中央 x72(=(256-112)/2) */
     /* [艦名] SUNK を白・2倍角で中央。 */
     { const char *m = cur_sunk; u8 n = 0;
