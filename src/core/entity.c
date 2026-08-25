@@ -27,10 +27,14 @@ static void bh_bouncer(Entity *e) {
     else if (e->y > (s16)(SCR_H - e->h)){ e->y = SCR_H - e->h;    e->vy = -e->vy; }
 }
 
-/* 弾: 直進し画面外(±16マージン)で消滅。 */
+/* 弾: 直進し画面外(±16マージン)で消滅。
+   ★敵弾は甲板(page1)の縦スクロールに追従補正する。補正しないと弾は画面固定速度なのに甲板が
+     蛇行で上下するため、見かけ速度が「上りで遅く/下りで速く」変わる(旧版由来の違和感)。
+     e->y -= g_scroll_dy で甲板基準の一定速度にする(自機弾=TEAM_PLAYERは画面基準のまま)。 */
 static void bh_bullet(Entity *e) {
     e->x += e->vx;
     e->y += e->vy;
+    if (e->team == TEAM_ENEMY) e->y -= g_scroll_dy;
     if (e->x < -16 || e->x > SCR_W || e->y < -16 || e->y > SCR_H) e->active = 0;
 }
 
@@ -45,6 +49,7 @@ static const s8 dirdy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 static void bh_aaburst(Entity *e) {
     e->x += e->vx;
     e->y += e->vy;
+    e->y -= g_scroll_dy;          /* 敵の時限信管弾も甲板スクロールへ追従(見かけ速度を一定化) */
     if (e->x < 0 || e->x > 255 || e->y < 16 || e->y > 220) { e->active = 0; return; }
     if (e->ftimer == 0) {                       /* 信管作動 */
         if (e->y < 185) {                       /* 自機帯より上でのみ炸裂(下から湧かない) */

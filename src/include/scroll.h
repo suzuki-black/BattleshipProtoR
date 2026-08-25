@@ -36,5 +36,8 @@ void scroll_init(void);                 /* 表示page1へ＋開始窓を描画(�
 void scroll_to(u16 cam);                /* cam(世界Y)へ移動。露出行を流し R#23 更新 */
 
 extern u16 g_cam;
+/* ★この frame に甲板(page1)が縦スクロールした量(px, phase1蛇行の縦分。phase0は0)。
+   敵弾はこの分だけ画面Yを補正し「甲板に対する見かけ速度」を蛇行の上り/下りで一定化する。 */
+extern s16 g_scroll_dy;
 
 #endif /* SCROLL_H */

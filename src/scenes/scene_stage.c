@@ -495,9 +495,10 @@ static void results_and_fanfare(void) {
     vdp_sprite_hide_from(0);            /* スプライト全消し(停止マーカを slot0 へ) */
     vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
     vdp_fill(0, 0, 256, 212, 1);        /* 背景=エンディング/開始カードと同じ青(色1)。トーン統一 */
-    /* 撃破!! (魏碑の筆文字)。枠・赤は無し。黒の影(+2,+2)＋白本体を背景青の上に直接。 */
+    /* 撃破!! (魏碑の筆文字)。枠・赤は無し。黒の影を横に大きく(+6,+2)ずらしてブラウン管ゴースト風に。
+       右へ伸びた黒が各画を太らせ、字が厚く見える＝迫力を出す。影→白本体の順で背景青の上に直接。 */
     data_read(ASSET_BANK, panel_off, panel_ram, PANEL_LEN);   /* 撃破!!パネルをバンク→RAM */
-    blit_panel(74, 42, 0, 1);           /* 影=黒(on=0), 地=背景青(off=1)。右下+2に密着=陰が離れて見えない */
+    blit_panel(78, 42, 0, 1);           /* 影=黒(on=0), 地=背景青(off=1)。横+6/縦+2=CRTゴースト風に大きく覗く */
     blit_panel(72, 40, 15, 1);          /* 本体=白(on=15), 地=背景青。中央 x72(=(256-112)/2) */
     /* [艦名] SUNK を白・2倍角で中央。 */
     { const char *m = cur_sunk; u8 n = 0;
@@ -553,15 +554,17 @@ static u8 defeat_update(void) {
     return SCENE_NONE;
 }
 
-static u8 vcnt;   /* 縦スクロール速度=0.8倍(=1.6px/f)。2,2,2,1,1 の5コマ周期(平均8/5=1.6, 除算不要)。 */
+static u8 vcnt;   /* 縦スクロール速度の位相(5コマ周期)。phase0=ゆっくり / phase1=高速(蛇行)。 */
 u8 stage_update(void) {
     u8 vstep;
     if (dmode) return defeat_update();  /* 撃破演出中は専用処理 */
     if (g_hitstop) { g_hitstop--; return SCENE_NONE; }   /* ★ヒットストップ=数フレーム凍結(手応え) */
-    vstep = (vcnt < 3) ? 2 : 1; if (++vcnt >= 5) vcnt = 0;   /* 縦0.8倍(横スクロール=蛇行は据置) */
+    if (++vcnt >= 5) vcnt = 0;
 
     if (phase == 0) {
-        /* 海: 蛇行なしの直進(縦0.8倍)。船尾(艦)が見えたら(=cam<=SHIP)交戦＝蛇行フェーズへ地続き移行 */
+        /* 海のみ: ゆっくり前進(≈0.8px/f=戦艦交戦の半分)。蛇行なし。船尾(艦)が見えたら交戦へ地続き移行。 */
+        vstep = (vcnt < 4) ? 1 : 0;   /* 4/5≈0.8px/f(旧1.6の半分=「海はゆっくり」) */
+        g_scroll_dy = 0;              /* 海は固定物なし=敵弾補正不要 */
         if (cam > SC_CAM_SHIP) { cam = (cam - SC_CAM_SHIP >= vstep) ? (u16)(cam - vstep) : SC_CAM_SHIP; }
         scroll_to(cam);
         /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
@@ -590,9 +593,11 @@ u8 stage_update(void) {
         }
         if (cam <= SC_CAM_SHIP) { phase = 1; camdir = -1; }   /* ★艦出現(=BGM切替)の瞬間から蛇行開始 */
     } else {
-        /* 戦艦: 船首↔船尾の往復(縦0.8倍)。艦出現(cam=SHIP>STERN)から入るので、
+        /* 戦艦: 船首↔船尾の往復(今の高速蛇行≈1.6px/f=緊迫感)。艦出現(cam=SHIP>STERN)から入るので、
            下降中は STERN でクランプせず BOW まで一気に見せ、以後 BOW↔STERN を往復する。 */
-        cam = (u16)((s16)cam + (s16)camdir * (s16)vstep);
+        vstep = (vcnt < 3) ? 2 : 1;   /* 2,2,2,1,1=1.6px/f(現状の高速を維持) */
+        g_scroll_dy = (s16)camdir * (s16)vstep;   /* ★この frame の甲板縦スクロール量=敵弾の補正量 */
+        cam = (u16)((s16)cam + g_scroll_dy);
         if (camdir < 0) { if ((s16)cam <= SC_CAM_BOW)   { cam = SC_CAM_BOW;   camdir = 1;  } }
         else            { if (cam >= SC_CAM_STERN)      { cam = SC_CAM_STERN; camdir = -1; } }
         scroll_to(cam);
