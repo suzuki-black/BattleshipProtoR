@@ -165,9 +165,11 @@ static void aa_update(void) {
         sy = (s16)(SC_SHIP_R0 * 16 + (s16)gy) - (s16)cam;   /* 画面Y */
         if (sy < 8 || sy > 200) continue;                   /* 画面帯外は撃たない(=艦が視界に無い間も含む) */
         if (aa_fire[i]) { aa_fire[i]--; continue; }
-        if (fired >= 3) { aa_fire[i] = 1; continue; }       /* ★同フレーム発砲上限=発砲波の狙い計算スパイク(もたつき)を平準化(発射レートは不変=次フレームへ繰越) */
+        if (fired >= 2) { aa_fire[i] = 1; continue; }       /* ★同フレーム発砲上限=発砲波の狙い計算スパイク(もたつき)を平準化(発射レートは不変=次フレームへ繰越) */
         sx = gx + g_meander;                                /* 画面X(蛇行に追従) */
-        { u8 dir = aim_dir(sx, sy, (s16)g_player_x, (s16)g_player_y);
+        { /* ★狙い±3ステップの散らし: 全砲が自機へ一直線に撃つと弾が重なって無駄なので方向を散らす。
+             rnd()&7 → -3..+4(≒±38°)。マスクのみ=除算を使わない。 */
+          u8 dir = (u8)((aim_dir(sx, sy, (s16)g_player_x, (s16)g_player_y) + (rnd() & 7) + 29) & 31);
           if (i < 14) { emit_burst(sx, sy, dir, 2, 42); }    /* 大型=時限信管エアバースト(橙カプセル, fuze42) */
           else { emit(sx, sy, dir, 0, 2); }                  /* 小型=通常小弾(橙ペレット) */
         }
