@@ -17,6 +17,9 @@ u8 g_spr_base;          /* エンティティ描画の開始スプライトス�
 
 static Entity pool[ENT_MAX];
 
+/* 各スプライトスロットに最後に書いた単色(0xFF=coltab/未確定=強制書換)。色表の重複16B書込みを省く。 */
+static u8 slot_col[32];
+
 /* ---- behavior: 種別ごとの毎フレーム更新 ---- */
 static void bh_bouncer(Entity *e) {
     e->x += e->vx;
@@ -347,6 +350,7 @@ void ent_resolve_collisions(void) {
 void ent_reset(void) {
     u8 i;
     for (i = 0; i < ENT_MAX; i++) pool[i].active = 0;
+    for (i = 0; i < 32; i++) slot_col[i] = 0xFF;   /* 色キャッシュ無効化(面開始/再開で色表を必ず書直す) */
 }
 
 /* 敵戦闘機と敵弾だけを消す(自機/自機弾/砲台は残す)。空戦→戦艦の受け渡しで空襲を退かせる用。 */
@@ -401,9 +405,15 @@ void ent_update_all(void) {
      - 残り(弾/敵/砲塔/エフェクト)は毎フレーム割当開始を回転(rot)させ、9枚以上の走査線での
        欠落を「常に同じ弾が消える」でなく「フレーム毎に入れ替わるちらつき」に分散する。
      - 総数は 32 枚で頭打ち(それ以上は描かない)。 */
+/* ★色表(mode2=16B/枚)を毎フレーム全枚書くと弾数比例で重い(もたつきの一因)。前フレームと同じ単色なら
+   VRAMに既にその色=16B書込みを省く(弾は殆ど橙12で殆ど省ける)。coltabは毎回書きキャッシュ無効(0xFF)。
+   隠し(Y=216)は属性のみ変更で色表は残るためキャッシュ有効。ent_reset で 0xFF 初期化。 */
+static void spr_col1(u8 slot, u8 color) {
+    if (slot_col[slot] != color) { vdp_sprite_color(slot, color); slot_col[slot] = color; }
+}
 static u8 draw1(u8 slot, const Entity *e) {   /* 1体を slot へ描画し、次 slot を返す */
-    if (e->coltab) vdp_sprite_color_tab(slot, e->coltab);   /* 行別色(陰影) */
-    else           vdp_sprite_color(slot, e->color);        /* 単色 */
+    if (e->coltab) { vdp_sprite_color_tab(slot, e->coltab); slot_col[slot] = 0xFF; }  /* 行別色(陰影) */
+    else           spr_col1(slot, e->color);                                          /* 単色(差分のみ書換) */
     vdp_sprite_pos(slot, (u8)e->x, (u8)e->y, e->pat);
     return (u8)(slot + 1);
 }
@@ -412,7 +422,7 @@ static u8 draw1(u8 slot, const Entity *e) {   /* 1体を slot へ描画し、次
 #define SHADOW_DX 5
 #define SHADOW_DY 6
 static u8 draw_shadow(u8 slot, const Entity *e) {
-    vdp_sprite_color(slot, 13);   /* ほぼ黒(1,1,1) */
+    spr_col1(slot, 13);   /* ほぼ黒(1,1,1)。単色=差分書換 */
     vdp_sprite_pos(slot, (u8)(e->x + SHADOW_DX), (u8)(e->y + SHADOW_DY), e->pat);
     return (u8)(slot + 1);
 }
@@ -447,8 +457,8 @@ void ent_draw_all(void) {
         const Entity *e = &pool[i];
         if (e->active && e->type == ET_COMBO && e->y > -16 && e->y < 212) {
             s16 cx = e->ay, cy = e->y, off = e->x, lx = cx - off, rx = cx + off;
-            if (lx >= 0 && lx < 256) { vdp_sprite_color(slot, 12); vdp_sprite_pos(slot, (u8)lx, (u8)cy, SPR_EBSHELL); slot++; }
-            if (slot < 32 && rx >= 0 && rx < 256) { vdp_sprite_color(slot, 12); vdp_sprite_pos(slot, (u8)rx, (u8)cy, SPR_EBSHELL); slot++; }
+            if (lx >= 0 && lx < 256) { spr_col1(slot, 12); vdp_sprite_pos(slot, (u8)lx, (u8)cy, SPR_EBSHELL); slot++; }
+            if (slot < 32 && rx >= 0 && rx < 256) { spr_col1(slot, 12); vdp_sprite_pos(slot, (u8)rx, (u8)cy, SPR_EBSHELL); slot++; }
         }
     }
     /* 落ち影パス: 影は最後=最も高いslot=最低優先で描く(混雑ラインではゲーム弾/敵機に譲って先に落ちる)。 */

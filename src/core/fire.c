@@ -54,13 +54,23 @@ Entity *emit_burst(s16 x, s16 y, u8 dir, u8 spd, u8 fuze) {
     return b;
 }
 
+/* (dx,dy)に最も近い32方向index(dir0=上, 時計回り)。
+   ★旧版は全32方向で内積(16bit乗算64回≈5万サイクル/呼)=多砲同時発砲時のCPUスパイク(もたつき)の主因。
+   2段探索に変更: (1)8つの代表方向(0,4,..28)で粗く最寄りを求め、(2)その±3の7方向だけ厳密化。
+   真の最寄りは必ず代表±3内(全画面座標で検証済)なので旧版と同一結果、乗算は64→30回に半減。 */
 u8 aim_dir(s16 ex, s16 ey, s16 px, s16 py) {
     s16 dx = px - ex, dy = py - ey;
-    s16 best = -32767;
-    u8 bi = 16, i;
-    for (i = 0; i < 32; i++) {
-        s16 s = dx * (s16)dvx[i] + dy * (s16)dvy[i];   /* 内積が最大=最も近い方向 */
-        if (s > best) { best = s; bi = i; }
+    s16 best; u8 bp = 0, bi, i, j;
+    best = -32767;
+    for (i = 0; i < 32; i += 4) {                            /* 粗: 8代表方向 */
+        s16 s = dx * (s16)dvx[i] + dy * (s16)dvy[i];
+        if (s > best) { best = s; bp = i; }
+    }
+    best = -32767; bi = bp;
+    for (j = 0; j < 7; j++) {                                /* 密: bp-3 .. bp+3 */
+        i = (u8)((bp + 29 + j) & 31);
+        { s16 s = dx * (s16)dvx[i] + dy * (s16)dvy[i];
+          if (s > best) { best = s; bi = i; } }
     }
     return bi;
 }

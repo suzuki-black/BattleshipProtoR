@@ -157,7 +157,7 @@ static void aa_reset(void) {
 }
 static u8 aa_alive(void) { u8 i, n = 0; for (i = 0; i < SHIP_NAAG; i++) if (!aa_dead[i]) n++; return n; }
 static void aa_update(void) {
-    u8 tbl = ship_aagtbl[curstage], i;
+    u8 tbl = ship_aagtbl[curstage], i, fired = 0;
     for (i = 0; i < SHIP_NAAG; i++) {
         s16 gx, sy, sx; u16 gy;
         if (aa_dead[i]) continue;                           /* 破壊済みは撃たない */
@@ -165,12 +165,14 @@ static void aa_update(void) {
         sy = (s16)(SC_SHIP_R0 * 16 + (s16)gy) - (s16)cam;   /* 画面Y */
         if (sy < 8 || sy > 200) continue;                   /* 画面帯外は撃たない(=艦が視界に無い間も含む) */
         if (aa_fire[i]) { aa_fire[i]--; continue; }
+        if (fired >= 3) { aa_fire[i] = 1; continue; }       /* ★同フレーム発砲上限=発砲波の狙い計算スパイク(もたつき)を平準化(発射レートは不変=次フレームへ繰越) */
         sx = gx + g_meander;                                /* 画面X(蛇行に追従) */
         { u8 dir = aim_dir(sx, sy, (s16)g_player_x, (s16)g_player_y);
           if (i < 14) { emit_burst(sx, sy, dir, 2, 42); }    /* 大型=時限信管エアバースト(橙カプセル, fuze42) */
           else { emit(sx, sy, dir, 0, 2); }                  /* 小型=通常小弾(橙ペレット) */
         }
         aa_fire[i] = diff_interval((u8)(aafire_iv[curstage] + i * 6));   /* ★難易度スケール */
+        fired++;
         sfx(1, SFX_EFIRE);
     }
 }
