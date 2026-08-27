@@ -569,9 +569,10 @@ u8 stage_update(void) {
     if (++vcnt >= 5) vcnt = 0;
 
     if (phase == 0) {
-        /* 海のみ: ゆっくり前進(≈0.8px/f=戦艦交戦の半分)。蛇行なし。船尾(艦)が見えたら交戦へ地続き移行。 */
-        vstep = (vcnt < 4) ? 1 : 0;   /* 4/5≈0.8px/f(旧1.6の半分=「海はゆっくり」) */
-        g_scroll_dy = 0;              /* 海は固定物なし=敵弾補正不要 */
+        /* 海のみ: ゆっくり前進。★毎フレーム1pxで動かす=停止フレームを作らない(整数スクロールで
+           滑らかに出せる最も遅い一定速度)。旧実装は4/5コマだけ動かす=停止コマがカクつき「フレームレート
+           低下」に見えていた。1px/f は蛇行(1.6px/f)より遅く、かつ完全に一定速度=滑らか。蛇行なし。 */
+        vstep = 1;
         if (cam > SC_CAM_SHIP) { cam = (cam - SC_CAM_SHIP >= vstep) ? (u16)(cam - vstep) : SC_CAM_SHIP; }
         scroll_to(cam);
         /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
@@ -603,8 +604,7 @@ u8 stage_update(void) {
         /* 戦艦: 船首↔船尾の往復(今の高速蛇行≈1.6px/f=緊迫感)。艦出現(cam=SHIP>STERN)から入るので、
            下降中は STERN でクランプせず BOW まで一気に見せ、以後 BOW↔STERN を往復する。 */
         vstep = (vcnt < 3) ? 2 : 1;   /* 2,2,2,1,1=1.6px/f(現状の高速を維持) */
-        g_scroll_dy = (s16)camdir * (s16)vstep;   /* ★この frame の甲板縦スクロール量=敵弾の補正量 */
-        cam = (u16)((s16)cam + g_scroll_dy);
+        cam = (u16)((s16)cam + (s16)camdir * (s16)vstep);
         if (camdir < 0) { if ((s16)cam <= SC_CAM_BOW)   { cam = SC_CAM_BOW;   camdir = 1;  } }
         else            { if (cam >= SC_CAM_STERN)      { cam = SC_CAM_STERN; camdir = -1; } }
         scroll_to(cam);

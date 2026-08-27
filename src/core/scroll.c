@@ -5,7 +5,6 @@
 #define PAGE1_Y   256           /* 表示リング(page1)の基準Y */
 
 u16 g_cam;
-s16 g_scroll_dy;   /* この frame の甲板縦スクロール量(敵弾補正用。scene_stage が毎frame設定) */
 static s16 drawn_top, drawn_bot;
 
 /* 海テンプレート用の乱数(旧版と同LCG。斑点の見た目のみ) */
