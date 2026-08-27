@@ -15,6 +15,8 @@ SRC    = src
 CORE   = $(SRC)/core
 SCENES = $(SRC)/scenes
 INC    = -I$(SRC)/include -I$(BUILD)
+# ビルドタグ(gitの短縮ハッシュ)。CONFIG画面に表示し、どのコミットのROMか一目で判別できるようにする。
+GITVER := $(shell git rev-parse --short HEAD 2>/dev/null || echo local)
 
 # ── ヘッダ依存(重要): 共有ヘッダ(特に構造体を
 #    定義する entity.h 等)を変更したら全 .c を必ず再コンパイルする。これを怠ると
@@ -70,6 +72,13 @@ $(BUILD)/assets_data.h: tools/gen_assets.mjs | $(BUILD)
 $(BUILD)/assets.bin: $(BUILD)/assets_data.h
 	@true
 
+# ビルドタグ用ヘッダ。毎ビルドで git ハッシュを生成し、内容が変わった時だけ更新(不要な再コンパイルを避ける)。
+.PHONY: FORCE
+FORCE:
+$(BUILD)/version.h: FORCE | $(BUILD)
+	@printf '#define BUILD_VER "%s"\n' '$(GITVER)' > $@.tmp; \
+	 cmp -s $@.tmp $@ 2>/dev/null || mv $@.tmp $@; rm -f $@.tmp
+
 # C ソースは core/ と scenes/ から探す(basename は一意に保つ)
 vpath %.c $(CORE) $(SCENES)
 
@@ -96,7 +105,7 @@ $(BUILD)/bankhead.rel: $(SRC)/banked/bankhead.s | $(BUILD)
 	sdasz80 -o $@ $<
 # 2) バンクシーン汎用ルール(scene_<name>.c → bank .ihx)。追加は ROMPACK_BANKS に1行。
 #    bankhead + scene_<name> + resident_syms を 0xA000 リンク。data-loc は各シーン共用の退避域。
-$(BUILD)/scene_%.ihx: $(SCENES)/scene_%.c $(HDRS) $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
+$(BUILD)/scene_%.ihx: $(SCENES)/scene_%.c $(HDRS) $(BUILD)/version.h $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
 	sdcc -m$(TARGET) -c $(OPT) $(INC) $< -o $(BUILD)/scene_$*.rel
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/scene_$*.rel $(BUILD)/resident_syms.rel -o $@

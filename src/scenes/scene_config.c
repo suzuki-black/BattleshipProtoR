@@ -6,6 +6,7 @@
 #include "input.h"
 #include "scene.h"
 #include "gamestate.h"
+#include "version.h"   /* BUILD_VER(gitハッシュ)。どのコミットのROMか判別用 */
 
 #define CFG_START 6      /* 項目0..5 ＋ START(6) */
 #define ROWS 7
@@ -47,6 +48,7 @@ static void draw_all(void) {
     vdp_text(88, 12, 15, 1, "- CONFIG -");
     for (i = 0; i < ROWS; i++) draw_row(i);
     vdp_text(24, 194, 14, 1, "UP/DN:SEL  L/R:CHG  SPACE:OK");
+    vdp_text(8, 180, 12, 1, "BUILD " BUILD_VER);   /* ★ビルドタグ(git短縮ハッシュ)=版の判別用 */
 }
 
 /* L/R で1項目の値を増減(範囲クランプ)。変化したら1を返す。 */
