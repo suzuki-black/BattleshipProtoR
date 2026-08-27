@@ -71,6 +71,11 @@ u8      ent_count(u8 type);         /* active な type の数(撃破判定用) *
 Entity *ent_at(u8 i);               /* プールの i 番目(0..ENT_MAX-1)。active は呼び側で確認 */
 Entity *ent_pool(void);             /* プール先頭ポインタ(ポインタ加算で走査=添字乗算を避ける) */
 u8      ent_live_turrets(void);     /* 生存(hp>0)砲台の数。撃破済みは active のまま炎上させるため別カウント */
+
+/* ★画面弾幕リミッタ(全砲台・全敵で一元管理)。敵弾(通常弾＋信管弾＋炸裂破片)の同時数が上限に
+   達していれば 1 を返す=以降の敵弾spawnを一律に取り締まる。旧ピーク25の約80%=20を上限とする。 */
+#define ENEMY_BULLET_CAP 20
+u8      ent_enemy_bullet_full(void);
 void    ent_spawn_explosion(s16 x, s16 y);  /* 撃破エフェクト(火球アニメ)を1つ */
 void    ent_spawn_spark(s16 x, s16 y);      /* 小さな火花(被弾ヒット/発砲)を1つ */
 

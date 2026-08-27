@@ -30,7 +30,9 @@ static u16 fr = 0x2B7D;
 static u8 frand(void) { fr = fr * 25173 + 13849; return (u8)(fr >> 8); }
 
 Entity *emit(s16 x, s16 y, u8 dir, u8 kind, u8 spd) {
-    Entity *b = ent_spawn(ET_BULLET);
+    Entity *b;
+    if (ent_enemy_bullet_full()) return (Entity *)0;   /* ★弾幕上限リミッタ(全砲台・全敵共通) */
+    b = ent_spawn(ET_BULLET);
     if (!b) return (Entity *)0;
     dir &= 31;
     b->x = x; b->y = y;
@@ -43,7 +45,9 @@ Entity *emit(s16 x, s16 y, u8 dir, u8 kind, u8 spd) {
 
 /* 時限信管弾(対空砲エアバースト): dir へ spd で飛び、fuze フレーム後に炸裂(bh_aaburst)。 */
 Entity *emit_burst(s16 x, s16 y, u8 dir, u8 spd, u8 fuze) {
-    Entity *b = ent_spawn(ET_AABURST);
+    Entity *b;
+    if (ent_enemy_bullet_full()) return (Entity *)0;   /* ★弾幕上限リミッタ(全砲台・全敵共通) */
+    b = ent_spawn(ET_AABURST);
     if (!b) return (Entity *)0;
     dir &= 31;
     b->x = x; b->y = y;

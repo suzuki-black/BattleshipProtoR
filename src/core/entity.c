@@ -59,7 +59,9 @@ static void bh_aaburst(Entity *e) {
             static const u8 shdir[3] = { 3, 4, 5 };   /* 右下/下/左下の扇 */
             u8 k;
             for (k = 0; k < 3; k++) {
-                Entity *f = ent_spawn(ET_BULLET);
+                Entity *f;
+                if (ent_enemy_bullet_full()) break;   /* ★弾幕上限リミッタ(破片も一元管理) */
+                f = ent_spawn(ET_BULLET);
                 if (f) {
                     f->team = TEAM_ENEMY;
                     f->x = e->x; f->y = (s16)(e->y + k * 3);   /* Yを少しずらし同一走査線回避 */
@@ -264,6 +266,17 @@ u8 ent_live_turrets(void) {
     for (i = 0; i < ENT_MAX; i++)
         if (pool[i].active && pool[i].type == ET_TURRET && pool[i].hp) n++;
     return n;
+}
+
+/* ★画面弾幕リミッタ: 敵弾(TEAM_ENEMYの通常弾＋信管弾)の同時数が ENEMY_BULLET_CAP に達していれば 1。
+   全ての敵弾spawn(emit/emit_burst/炸裂破片)がこれを見て「上限突破しないなら出す/するなら出さない」。
+   上限到達で即抜け(残スロットは走査しない)＝高速。 */
+u8 ent_enemy_bullet_full(void) {
+    u8 i, n = 0; Entity *e = pool;
+    for (i = 0; i < ENT_MAX; i++, e++)
+        if (e->active && ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_AABURST))
+            if (++n >= ENEMY_BULLET_CAP) return 1;
+    return 0;
 }
 
 void ent_spawn_explosion(s16 x, s16 y) {
