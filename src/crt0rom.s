@@ -15,6 +15,8 @@
         .globl  l__INITIALIZER
         .globl  s__INITIALIZER
         .globl  s__INITIALIZED
+        .globl  s__DATA
+        .globl  l__DATA
 
         .area   _HEADER (ABS)
         .org    0x4000
@@ -91,6 +93,28 @@ _bcall::
         .area   _HOME
         .area   _GSINIT
 gsinit:
+        ;; --- 未初期化static(_DATA領域)をゼロクリア ---
+        ;;   ★従来 gsinit は _INITIALIZER のコピーのみで _DATA(未初期化static)をゼロ化していなかった。
+        ;;     初回起動はRAMが0の環境で「たまたま」動いていたが、ソフトリセットではRAMが残るため
+        ;;     g_scene/dmode/phase/g_vmode 等の残留stateが残り、リセット後にゲームが誤動作していた
+        ;;     (例: リセット→コナミ→config→開始でステージが始まらずタイトルへ戻る／表示崩れ)。
+        ;;     ここで毎起動(リセット含む)に _DATA を0で埋め、冷起動と同じ清浄な初期状態にする。
+        ;;   ※初期化子付きstatic(_INITIALIZED)は下の ldir で正しい値へ上書きされるので順序OK。
+        ld      bc, #l__DATA
+        ld      a, b
+        or      a, c
+        jr      Z, gs_copy
+        ld      hl, #s__DATA
+        ld      (hl), #0x00
+        dec     bc
+        ld      a, b
+        or      a, c
+        jr      Z, gs_copy
+        ld      d, h
+        ld      e, l
+        inc     de
+        ldir                    ; [s__DATA]=0 を全域へ伝播
+gs_copy:
         ld      bc, #l__INITIALIZER
         ld      a, b
         or      a, c
