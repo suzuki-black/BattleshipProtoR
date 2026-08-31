@@ -11,7 +11,7 @@
 #include "scene.h"
 
 /* 隠しコマンド(コナミ): 上上下下左右左右 B A。成立で設定メニュー(SC_CONFIG)を開く。
-   B=INP_TRIGB(ジョイ トリガ2 / キーM), A=INP_TRIG(スペース / ジョイ トリガ1)。 */
+   B=INP_TRIGB(キーB / ジョイ トリガ2 / キーM), A=INP_TRIG(キーA / スペース / ジョイ トリガ1)。 */
 static const u8 konami[10] = {
     INP_UP, INP_UP, INP_DOWN, INP_DOWN, INP_LEFT, INP_RIGHT, INP_LEFT, INP_RIGHT, INP_TRIGB, INP_TRIG
 };
