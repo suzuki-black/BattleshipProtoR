@@ -16,7 +16,9 @@ CORE   = $(SRC)/core
 SCENES = $(SRC)/scenes
 INC    = -I$(SRC)/include -I$(BUILD)
 # ビルドタグ(gitの短縮ハッシュ)。CONFIG画面に表示し、どのコミットのROMか一目で判別できるようにする。
-GITVER := $(shell git rev-parse --short HEAD 2>/dev/null || echo local)
+GITVER := $(shell (git rev-parse --short HEAD 2>/dev/null || echo local) | tr 'a-z' 'A-Z')
+# semver(単一の真実=VERSIONファイル)。行末インラインコメントはMakeが値にスペースを含めるので別行にする
+GAMEVER := $(shell cat VERSION 2>/dev/null || echo 0.0.0)
 
 # ── ヘッダ依存(重要): 共有ヘッダ(特に構造体を
 #    定義する entity.h 等)を変更したら全 .c を必ず再コンパイルする。これを怠ると
@@ -76,7 +78,7 @@ $(BUILD)/assets.bin: $(BUILD)/assets_data.h
 .PHONY: FORCE
 FORCE:
 $(BUILD)/version.h: FORCE | $(BUILD)
-	@printf '#define BUILD_VER "%s"\n' '$(GITVER)' > $@.tmp; \
+	@printf '#define BUILD_VER "%s"\n#define GAME_VERSION "%s"\n' '$(GITVER)' '$(GAMEVER)' > $@.tmp; \
 	 cmp -s $@.tmp $@ 2>/dev/null || mv $@.tmp $@; rm -f $@.tmp
 
 # C ソースは core/ と scenes/ から探す(basename は一意に保つ)

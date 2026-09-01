@@ -51,7 +51,7 @@ static void draw_all(void) {
     vdp_text(88, 12, 15, 1, "- CONFIG -");
     for (i = 0; i < ROWS; i++) draw_row(i);
     vdp_text(24, 194, 14, 1, "UP/DN:SEL  L/R:CHG  SPACE:OK");
-    vdp_text(8, 180, 12, 1, "BUILD " BUILD_VER);   /* ★ビルドタグ(git短縮ハッシュ)=版の判別用 */
+    vdp_text(8, 180, 12, 1, "V" GAME_VERSION " " BUILD_VER);   /* ★版(semver)＋ビルドタグ(git短縮ハッシュ) */
 }
 
 /* L/R で1項目の値を増減(範囲クランプ)。変化したら1を返す。 */

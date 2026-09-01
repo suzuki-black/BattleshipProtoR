@@ -249,6 +249,7 @@ static const u8 fontset[37][8] = {
     { 0x1E,0x06,0x06,0x06,0x66,0x66,0x3C,0x00 },  /* 34=J */
     { 0x3C,0x66,0x66,0x66,0x66,0x6C,0x36,0x00 },  /* 35=Q */
     { 0x7E,0x06,0x0C,0x18,0x30,0x60,0x7E,0x00 },  /* 36=Z */
+    { 0x00,0x00,0x00,0x00,0x00,0x00,0x18,0x18 },  /* 37=. (バージョン表記用のピリオド) */
 };
 /* A-Z(0..25) → fontset 添字。順不同(旧版の格納順)。 */
 static const u8 az_idx[26] = {
@@ -258,6 +259,7 @@ static s8 font_index(u8 c) {
     if (c >= '0' && c <= '9') return (s8)(17 + (c - '0'));
     if (c >= 'A' && c <= 'Z') return (s8)az_idx[c - 'A'];
     if (c == '-') return 16;
+    if (c == '.') return 37;   /* バージョン表記(0.0.1)用 */
     return -1;   /* 空白/未収録は空白 */
 }
 
