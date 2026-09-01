@@ -698,12 +698,12 @@ u8 stage_update(void) {
     aa_collide();      /* 自機弾×対空砲(座標判定=破壊可能) */
     ent_draw_all();
     /* SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール。
-       ★序盤(海モード=phase0)は全幅塗り(実測24ms/f=VDP律速でturboRでも縮まない)が最重。
-         うねりは「艦と海の多重スクロール錯覚」の飾りで、艦未出現の序盤は錯覚対象が無く粗くて可。
-         そこで phase0 だけ SEA0_DIV フレームに1回に間引く(海24→約8ms=turboR 60fps狙い)。
-         戦闘中(phase1)は海が狭帯で8ms=軽く、艦との錯覚が効く局面なので毎フレームのまま温存。 */
+       ★序盤(海モード=phase0)は全幅塗り(実測24ms/f=VDP律速でturboRでも縮まない)が最重→SEA0_DIVで間引く。
+       ★戦闘中(phase1)も sea_frame は実測7.9ms/f(HMMMコピー=VDP実行待ち主体でturboRでも縮まない)と重い。
+         艦が主役で海を注視しない局面なので2フレームに1回へ間引く(約4ms/f削減、turboRの30fps壁に直接効く)。
+         見た目はさざ波が半速になるだけ。 */
     if (phase != 0) {
-        sea_frame();
+        if (++seatick & 1) sea_frame();   /* phase1: 2フレームに1回 */
     } else if (++seatick >= SEA0_DIV) {
         seatick = 0; sea_frame();
     }
