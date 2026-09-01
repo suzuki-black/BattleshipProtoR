@@ -25,12 +25,19 @@ void hud_init(void) {
 /* スコア5桁ゼロ詰め(slot0-4)＋残機=零戦アイコン(slot5)＋予備機数1桁(slot6, 右上)。
    HUDは低slot=高優先なので、8枚/走査線を超えても敵機(slot7+)が先に間引かれHUDは残る。 */
 void hud_draw(u16 score, u8 lives) {
-    static const u16 place[5] = { 10000, 1000, 100, 10, 1 };
+    /* ★桁分解(除算×10)はスコア/残機が変化した時だけ=毎フレームの高価な除算を回避(Z80は除算がライブラリ呼び)。
+       スプライト位置(vscroll補正で毎フレーム変わる)は毎回書く。 */
+    static u16 last_score = 0xFFFF; static u8 dig[5] = { 0,0,0,0,0 };
+    static u8  last_lives = 0xFF;   static u8 ldig = 0;
     u8 i;
-    for (i = 0; i < 5; i++) {
-        u8 dg = (u8)((score / place[i]) % 10);
-        vdp_sprite_pos(i, (u8)(8 + i * 8), 2, (u8)(SPR_DIGIT0 + dg * 4));
+    if (score != last_score) {
+        static const u16 place[5] = { 10000, 1000, 100, 10, 1 };
+        for (i = 0; i < 5; i++) dig[i] = (u8)((score / place[i]) % 10);
+        last_score = score;
     }
-    vdp_sprite_pos(5, 212, 1, SPR_ZERO);                                   /* 残機=零戦シルエット */
-    vdp_sprite_pos(6, 234, 2, (u8)(SPR_DIGIT0 + (lives % 10) * 4));        /* 予備機数(9頭打ち) */
+    if (lives != last_lives) { ldig = (u8)(lives % 10); last_lives = lives; }
+    for (i = 0; i < 5; i++)
+        vdp_sprite_pos(i, (u8)(8 + i * 8), 2, (u8)(SPR_DIGIT0 + dig[i] * 4));
+    vdp_sprite_pos(5, 212, 1, SPR_ZERO);                          /* 残機=零戦シルエット */
+    vdp_sprite_pos(6, 234, 2, (u8)(SPR_DIGIT0 + ldig * 4));       /* 予備機数(9頭打ち) */
 }

@@ -4,6 +4,7 @@
 u8  g_difficulty = 1;   /* NORMAL */
 u8  g_lives_idx  = 1;   /* 3機     */
 u8  g_durability = 3;   /* 耐久HP  */
+u8  g_view       = 0;   /* 画面ビューア: 0=通常/1=カードのみ/2=結果のみ(config設定) */
 u8  g_stage_sel  = 0;   /* 1面     */
 u8  g_continue   = 1;   /* 継続ON  */
 u8  g_invinc     = 0;   /* 無敵OFF */

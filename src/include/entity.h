@@ -62,8 +62,6 @@ extern u8 g_shake;       /* >0: 画面を数フレーム縦に揺らす(砲台�
 
 extern u8 g_spr_base;               /* エンティティ描画の開始スプライトslot(HUDが先頭を確保) */
 void    ent_reset(void);            /* プール全消去 */
-void    ent_clear_enemies(void);    /* 敵戦闘機と敵弾を一掃(空戦→戦艦の受け渡し等) */
-void    ent_clear_fighters(void);   /* 敵戦闘機のみ一掃(砲台弾は残す。接近中の毎フレーム掃除用) */
 Entity *ent_spawn(u8 type);         /* 空きを1つ確保(既定値で初期化)。無ければ NULL */
 void    ent_update_all(void);       /* 全 active の behavior update を回す */
 void    ent_draw_all(void);         /* active をスプライトへ(hidden除く) */
@@ -73,8 +71,8 @@ Entity *ent_pool(void);             /* プール先頭ポインタ(ポインタ�
 u8      ent_live_turrets(void);     /* 生存(hp>0)砲台の数。撃破済みは active のまま炎上させるため別カウント */
 
 /* ★画面弾幕リミッタ(全砲台・全敵で一元管理)。敵弾(通常弾＋信管弾＋炸裂破片)の同時数が上限に
-   達していれば 1 を返す=以降の敵弾spawnを一律に取り締まる。旧ピーク25の約80%=20を上限とする。 */
-#define ENEMY_BULLET_CAP 20
+   達していれば 1 を返す=以降の敵弾spawnを一律に取り締まる。体感で20相当に見えたため15へ引き下げ。 */
+#define ENEMY_BULLET_CAP 15
 u8      ent_enemy_bullet_full(void);
 void    ent_spawn_explosion(s16 x, s16 y);  /* 撃破エフェクト(火球アニメ)を1つ */
 void    ent_spawn_spark(s16 x, s16 y);      /* 小さな火花(被弾ヒット/発砲)を1つ */

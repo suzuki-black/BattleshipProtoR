@@ -59,7 +59,7 @@ extern const u16 aag_y_bb[SHIP_NAAG], aag_y_cv[SHIP_NAAG], aag_y_hd[SHIP_NAAG], 
    ops/ops2 = data_read でRAMへ読んだ艦OPS(7B/レコード, op=0終端)。aagp=[gb,gs,ab,as]。 */
 void ship_render(u8 kind, u8 hull, u8 bow_cnt, u16 bow_yb, u8 aag_tbl, const u8 *aagp, const u8 *ops, const u8 *ops2);
 
-/* 対空砲 i(0..22)の艦内座標(艦種tbl)。発砲システム(scene_stage)が毎フレーム使う=常駐。 */
-void ship_aag_pos(u8 tbl, u8 i, s16 *px, u16 *py);
+/* 艦種tblの対空砲座標表(x/y)先頭を返す。aa_updateがループ外で1回取得し直接添字参照する(高速化)。 */
+void ship_aag_tables(u8 tbl, const u8 **px, const u16 **py);
 
 #endif /* SHIP_H */

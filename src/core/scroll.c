@@ -5,6 +5,7 @@
 #define PAGE1_Y   256           /* 表示リング(page1)の基準Y */
 
 u16 g_cam;
+s16 g_scroll_dy;   /* このフレームのスクロール量(new-old, px)。敵弾の艦追従に使う */
 static s16 drawn_top, drawn_bot;
 
 /* 海テンプレート用の乱数(旧版と同LCG。斑点の見た目のみ) */
@@ -26,6 +27,27 @@ static void draw_row(s16 r) {
         vdp_copy(0, (u16)(SC_SHIPBUF_Y + (u16)(r - SC_SHIP_R0) * 16), 0, dy, 256, 16);
     else
         vdp_copy(0, SC_SEATMPL_Y, 0, dy, 256, 16);
+}
+
+/* 世界行 r0..r1 を表示リングへ再描画(可視域 drawn_top..drawn_bot にクランプ)。
+   ★炎をバッファBへ焼込んだ後、その行だけをリングへ正しい位置で反映する用。
+     炎を表示リングへ直接 blit すると、リング256px<艦496px のため 256px 離れた砲台に
+     エイリアスして炎が乗る不具合が出るため、必ず「B→draw_row(行ごとに正位置)」を経由する。 */
+/* ★炎専用の「部分幅」行反映: 世界行 r0..r1 の [x0,x0+w) 帯だけを 艦バッファB→リングへ写す。
+   炎は必ず艦上(x≈60..190, 海帯に掛からない)なので艦行のみB経由でコピー=海テンプレ不要。
+   従来の scroll_repaint_rows は全幅256pxを塗り直していたが、炎は幅≤32pxなのでコピー面積を約1/8へ。
+   ★HMMM(G4=2px/byte)は X/幅の低位1bitを無視するので、x0を偶数へ丸め・幅を右端まで覆う偶数へ拡張。 */
+void scroll_repaint_cols(s16 r0, s16 r1, u8 x0, u8 w) {
+    u8 x  = (u8)(x0 & 0xFE);                          /* 偶数境界へ */
+    u8 ww = (u8)(((u8)(x0 & 1) + w + 1) & 0xFE);      /* [x0,x0+w) を確実に覆う偶数幅 */
+    s16 r;
+    if (r0 < drawn_top) r0 = drawn_top;
+    if (r1 > drawn_bot) r1 = drawn_bot;
+    for (r = r0; r <= r1; r++) {
+        if (r < SC_SHIP_R0 || r >= SC_SHIP_R1) continue;   /* 炎は艦行のみ(海行に炎は付かない) */
+        { u16 dy = (u16)(PAGE1_Y + (u8)((u16)r << 4));
+          vdp_copy(x, (u16)(SC_SHIPBUF_Y + (u16)(r - SC_SHIP_R0) * 16), x, dy, ww, 16); }
+    }
 }
 
 /* ===== SEA13: 海コラムだけ位相流し(艦とその影は不可侵=帯で避ける) ===== */
@@ -57,7 +79,9 @@ void sea_set_ship(u8 stage) {
     }
 }
 
-/* 1帯を16px周期wrapでテンプレから塗る(上[p..16]＋下[0..p])。source X=dest X=YMMM相当。 */
+/* 1帯を16px周期wrapでテンプレから塗る(上[p..16]＋下[0..p])。source X=dest X の縦コピー。
+   ★以前 端接地帯を YMMM(0xE0) 化したが、YMMMは「DXから画面端まで」で残留VDP状態に敏感=WebMSXの
+     ソフトリセット後に海帯が崩れる不具合が出たため HMMM に戻した(効果は-0.8msと最小で堅牢性を優先)。 */
 static void sea13_paint_range(u16 vy, u8 rx, u8 rw, u8 p) {
     u8 t = (u8)(16 - p);
     vdp_copy(rx, (u16)(SC_SEATMPL_Y + p), rx, vy, rw, t);
@@ -65,6 +89,8 @@ static void sea13_paint_range(u16 vy, u8 rx, u8 rw, u8 p) {
 }
 
 void sea_frame(void) {
+    /* 海コラム塗りは vdp_copy=HMMM(0xD0)。HMMM は LMMM の約2.4倍速(実測 CE待ち 155→64反復/コピー)。
+       ★呼ぶ頻度は呼び元(scene_stage)が制御: 戦闘中は毎フレーム、序盤(全幅=最重)は SEA0_DIV 間引き。 */
     u16 vy = (u16)(PAGE1_Y + (u16)sea_strip * 16);
     u8 p = (u8)(sea_phase & 15), i;
     for (i = 0; i < sea_nranges; i++)
@@ -97,6 +123,7 @@ void scroll_to(u16 cam) {
     s16 vb = (s16)((cam + 211) >> 4);
     while (drawn_bot < vb) { drawn_bot++; draw_row(drawn_bot); if (drawn_top < drawn_bot - 15) drawn_top = drawn_bot - 15; }
     while (drawn_top > vt) { drawn_top--; draw_row(drawn_top); if (drawn_bot > drawn_top + 15) drawn_bot = drawn_top + 15; }
+    g_scroll_dy = (s16)cam - (s16)g_cam;   /* ★このフレームのスクロール量(new-old)。敵弾が艦と一緒に流れる為に使う */
     g_cam = cam;
     vdp_set_vscroll((u8)cam);
 }

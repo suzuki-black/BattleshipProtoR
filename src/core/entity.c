@@ -21,14 +21,9 @@ static Entity pool[ENT_MAX];
 static u8 slot_col[32];
 
 /* ---- behavior: 種別ごとの毎フレーム更新 ---- */
-static void bh_bouncer(Entity *e) {
-    e->x += e->vx;
-    e->y += e->vy;
-    if (e->x < 0)                       { e->x = 0;               e->vx = -e->vx; }
-    else if (e->x > (s16)(SCR_W - e->w)){ e->x = SCR_W - e->w;    e->vx = -e->vx; }
-    if (e->y < 0)                       { e->y = 0;               e->vy = -e->vy; }
-    else if (e->y > (s16)(SCR_H - e->h)){ e->y = SCR_H - e->h;    e->vy = -e->vy; }
-}
+/* ET_NONE/ET_BOUNCER/ET_SHOOTER の no-op behavior(実ゲームでspawnしないデモ枠。enum添字対応の
+   ため behaviors[] のスロットは残すが、コードは共有stubで常駐サイズを節約)。 */
+static void bh_noop(Entity *e) { (void)e; }
 
 /* 弾: 直進し画面外(±16マージン)で消滅。
    ★スクロールとは完全に独立=毎フレーム画面座標を vx/vy だけ進める(表示上の見かけ速度が一定)。
@@ -36,6 +31,9 @@ static void bh_bouncer(Entity *e) {
 static void bh_bullet(Entity *e) {
     e->x += e->vx;
     e->y += e->vy;
+    /* ★敵弾は艦(背景)と一緒に縦スクロールへ流れる。論理Y自体を流すので、描画・当たり判定・
+       画面外消滅・弾数リミッタが全て視覚と一致する(自機弾=TEAM_PLAYERは画面固定のまま)。 */
+    if (e->team == TEAM_ENEMY) e->y -= g_scroll_dy;
     if (e->x < -16 || e->x > SCR_W || e->y < -16 || e->y > SCR_H) e->active = 0;
 }
 
@@ -49,7 +47,8 @@ static const s8 dirdy8[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
    炸裂時は下向き3破片(右下/下/左下)を速度3で撒き、その場に爆発演出。旧版 airburst の移植。 */
 static void bh_aaburst(Entity *e) {
     e->x += e->vx;
-    e->y += e->vy;                /* ★信管弾もスクロール非依存=画面座標を一定速度で進める */
+    e->y += e->vy;
+    e->y -= g_scroll_dy;         /* ★信管弾も敵弾=艦と一緒に縦スクロールへ流れる(論理Yを流す) */
     if (e->x < 0 || e->x > 255 || e->y < 16 || e->y > 220) { e->active = 0; return; }
     if (e->ftimer == 0) {                       /* 信管作動 */
         if (e->y < 185) {                       /* 自機帯より上でのみ炸裂(下から湧かない) */
@@ -73,11 +72,6 @@ static void bh_aaburst(Entity *e) {
         return;
     }
     e->ftimer--;
-}
-
-/* 射手: 発砲スクリプトを進める(発射は run_fire→emit)。位置は固定。 */
-static void bh_shooter(Entity *e) {
-    run_fire(e);
 }
 
 /* 砲塔: 艦上の世界座標(ax,ay)から画面座標へ。縦=ay-cam(艦と一緒にスクロール)、
@@ -189,6 +183,7 @@ static void bh_smissile(Entity *e) {
 #define CB_GAP      52    /* 収束開始の半間隔(左右の艦=中心±52) */
 #define CB_CONVERGE 24    /* 収束フレーム数 */
 static void bh_combo(Entity *e) {
+    e->y -= g_scroll_dy;                               /* ★合体弾(予告)も敵弾=艦と一緒に流れる */
     if (e->ftimer) {                                   /* 収束中: off を 0 へ */
         e->ftimer--;
         e->x = (s16)((u16)e->ftimer * CB_GAP / CB_CONVERGE);
@@ -234,9 +229,9 @@ extern void bh_player(Entity *e);   /* player.c(入力/発砲を持つのでゲ�
 typedef void (*Behavior)(Entity *);
 static const Behavior behaviors[ET_COUNT] = {
     0,            /* ET_NONE      */
-    bh_bouncer,   /* ET_BOUNCER   */
+    bh_noop,      /* ET_BOUNCER(デモ枠=no-op) */
     bh_bullet,    /* ET_BULLET    */
-    bh_shooter,   /* ET_SHOOTER   */
+    bh_noop,      /* ET_SHOOTER(デモ枠=no-op)  */
     bh_fighter,   /* ET_FIGHTER   */
     bh_player,    /* ET_PLAYER    */
     bh_turret,    /* ET_TURRET(蛇行追従＋発砲。破壊可能) */
@@ -250,8 +245,8 @@ static const Behavior behaviors[ET_COUNT] = {
 };
 
 u8 ent_count(u8 type) {
-    u8 i, n = 0;
-    for (i = 0; i < ENT_MAX; i++) if (pool[i].active && pool[i].type == type) n++;
+    u8 i, n = 0; Entity *e = pool;   /* ポインタ加算走査=pool[i]の乗算を排除 */
+    for (i = 0; i < ENT_MAX; i++, e++) if (e->active && e->type == type) n++;
     return n;
 }
 
@@ -259,9 +254,9 @@ Entity *ent_at(u8 i) { return &pool[i]; }
 Entity *ent_pool(void) { return pool; }   /* 先頭ポインタ(ポインタ加算走査で乗算を避ける用) */
 
 u8 ent_live_turrets(void) {
-    u8 i, n = 0;
-    for (i = 0; i < ENT_MAX; i++)
-        if (pool[i].active && pool[i].type == ET_TURRET && pool[i].hp) n++;
+    u8 i, n = 0; Entity *e = pool;   /* ポインタ加算走査=pool[i]の乗算を排除 */
+    for (i = 0; i < ENT_MAX; i++, e++)
+        if (e->active && e->type == ET_TURRET && e->hp) n++;
     return n;
 }
 
@@ -303,15 +298,22 @@ static u8 overlap(const Entity *a, const Entity *b) {
 }
 
 void ent_resolve_collisions(void) {
-    u8 i, j;
+    u8 i, j, nt = 0;
     Entity *b, *t, *p, *e;
-    /* ★ポインタ加算で走査(pool[j]の添字アクセスは毎回 j*sizeof(Entity) の乗算=Z80で重い。
-       ネスト576×2回で乗算1000回超=もっさりの主因だった。b++/t++ は定数加算で乗算を消す)。 */
+    Entity *tgt[ENT_MAX];   /* ★敵ターゲット(戦闘機/追尾/停泊/砲台)のコンパクト集合 */
+    /* ★ポインタ加算で走査(pool[j]の添字アクセスは毎回 j*sizeof(Entity) の乗算=Z80で重い。b++は定数加算)。
+       ★さらに自機弾の内側走査を全30→敵ターゲットだけに短縮: ターゲットは通常8体前後だが自機弾は10-15発
+         あり、内側30走査×弾数がO(N²)の主因だった。ターゲットを1回だけ集めて弾×ターゲットに縮める。 */
+    for (i = 0, t = pool; i < ENT_MAX; i++, t++) {
+        if (t->active && (t->type == ET_FIGHTER || t->type == ET_PURSUER ||
+                          t->type == ET_PARKED || t->type == ET_TURRET)) tgt[nt++] = t;
+    }
     /* 自機弾(TEAM_PLAYER) × 敵戦闘機/砲台 → 弾消滅、戦闘機は即撃破、砲台は hp 減算 */
     for (i = 0, b = pool; i < ENT_MAX; i++, b++) {
         if (!b->active || b->type != ET_BULLET || b->team != TEAM_PLAYER) continue;
-        for (j = 0, t = pool; j < ENT_MAX; j++, t++) {
-            if (!t->active) continue;
+        for (j = 0; j < nt; j++) {
+            t = tgt[j];
+            if (!t->active) continue;   /* 先に別の弾で消えた可能性(集合はstale許容) */
             if ((t->type == ET_FIGHTER || t->type == ET_PURSUER || t->type == ET_PARKED) && overlap(b, t)) {
                 b->active = 0; t->active = 0; g_kills++;
                 g_score += (t->type == ET_PURSUER) ? 20 : 10;   /* 追尾機20 / 戦闘機・停泊機10 */
@@ -363,28 +365,10 @@ void ent_reset(void) {
     for (i = 0; i < 32; i++) slot_col[i] = 0xFF;   /* 色キャッシュ無効化(面開始/再開で色表を必ず書直す) */
 }
 
-/* 敵戦闘機と敵弾だけを消す(自機/自機弾/砲台は残す)。空戦→戦艦の受け渡しで空襲を退かせる用。 */
-void ent_clear_enemies(void) {
-    u8 i;
-    for (i = 0; i < ENT_MAX; i++) {
-        Entity *e = &pool[i];
-        if (!e->active) continue;
-        if (e->type == ET_FIGHTER || (e->type == ET_BULLET && e->team == TEAM_ENEMY)) e->active = 0;
-    }
-}
-
-/* 敵戦闘機だけを消す(戦艦接近中に紛れ込む戦闘機の毎フレーム掃除用。砲台弾は残す)。 */
-void ent_clear_fighters(void) {
-    u8 i;
-    for (i = 0; i < ENT_MAX; i++)
-        if (pool[i].active && pool[i].type == ET_FIGHTER) pool[i].active = 0;
-}
-
 Entity *ent_spawn(u8 type) {
-    u8 i;
-    for (i = 0; i < ENT_MAX; i++) {
-        if (!pool[i].active) {
-            Entity *e = &pool[i];
+    u8 i; Entity *e = pool;   /* ★ポインタ加算走査=pool[i]の乗算を排除。発砲中は弾/爆発/火花で多発するので効く */
+    for (i = 0; i < ENT_MAX; i++, e++) {
+        if (!e->active) {
             e->active = 1; e->type = type;
             e->x = 0; e->y = 0; e->vx = 0; e->vy = 0; e->ax = 0; e->ay = 0;
             e->w = 16; e->h = 16; e->color = 15; e->pat = 0;
@@ -436,48 +420,46 @@ static u8 draw_shadow(u8 slot, const Entity *e) {
     vdp_sprite_pos(slot, (u8)(e->x + SHADOW_DX), (u8)(e->y + SHADOW_DY), e->pat);
     return (u8)(slot + 1);
 }
-static u8 visible(const Entity *e, u8 skip_player) {
-    if (!e->active || e->hidden) return 0;
-    if (skip_player ? (e->type == ET_PLAYER) : (e->type != ET_PLAYER)) return 0;
-    /* スプライトX/Yは u8。画面外(特に x<0/y<0)は (u8)化で反対端へ折り返すので描画しない
-       (左端を抜けた弾が右端に出る等を防ぐ)。x は 0..255(=画面幅), y は -16..212 を可視域とする。 */
-    return (e->y > -16 && e->y < 212 && e->x >= 0 && e->x < 256);
-}
+/* ★プール全走査を1回に統合(従来は自機探索/可視収集/合体弾/影 で4回走査していた=各エンティティの
+   active/type/x/y を4回読み直していた)。1走査で自機・通常描画対象(vis)・合体弾(co)・影(sh)へ分類し、
+   以後は各リストだけを回す。描画順(自機→回転割当vis→合体弾→影)とスロット優先/影の包含は従来と同一。 */
 void ent_draw_all(void) {
     static u8 rot;
-    u8 i, j, n = 0, slot = g_spr_base;
-    u8 vis[ENT_MAX];   /* 描画対象(自機以外)の pool 添字 */
-    /* 自機を固定最優先スロット(g_spr_base)へ=絶対に欠けさせない */
-    for (i = 0; i < ENT_MAX; i++)
-        if (visible(&pool[i], 0)) { slot = draw1(slot, &pool[i]); break; }
-    /* 描画対象を収集 */
-    for (i = 0; i < ENT_MAX; i++)
-        if (visible(&pool[i], 1)) vis[n++] = i;
-    /* 収集集合内で開始位置を毎フレーム回転させて割当。クラスタ位置に依らず均等に回るので、
-       同一走査線9枚以上の欠落が「フレーム毎に入れ替わるちらつき」へ均等分散する。 */
+    u8 i, j, n = 0, nco = 0, nsh = 0, slot = g_spr_base;
+    Entity *vis[ENT_MAX], *co[ENT_MAX], *sh[ENT_MAX];
+    Entity *player = (Entity *)0;
+    Entity *e = pool;
+    for (i = 0; i < ENT_MAX; i++, e++) {
+        u8 ty;
+        if (!e->active) continue;
+        ty = e->type;
+        if (ty == ET_COMBO) {                                   /* 合体弾(hidden)は専用パス。y域のみ判定 */
+            if (e->y > -16 && e->y < 212) co[nco++] = e;
+            continue;                                           /* hidden=vis/影の対象外 */
+        }
+        if (e->hidden || e->y <= -16 || e->y >= 212 || e->x < 0 || e->x >= 256) continue;  /* 画面外/不可視 */
+        if (ty == ET_PLAYER) player = e;                        /* 自機=最優先スロット(絶対に欠けさせない) */
+        else                 vis[n++] = e;                      /* 通常描画対象 */
+        if (e->shadow) sh[nsh++] = e;                           /* 影(自機/敵機。可視かつshadow) */
+    }
+    /* 自機を固定最優先スロット(g_spr_base)へ */
+    if (player) slot = draw1(slot, player);
+    /* 収集集合内で開始位置を毎フレーム回転させて割当(9枚/走査線超の欠落をちらつきへ均等分散)。 */
     if (n) {
         u8 start = (u8)(rot % n);
         for (j = 0; j < n && slot < 32; j++) {
             i = (u8)(start + j); if (i >= n) i -= n;
-            slot = draw1(slot, &pool[vis[i]]);
+            slot = draw1(slot, vis[i]);
         }
     }
-    /* 合体弾パス(双子艦): hidden な ET_COMBO を「中心±off の2発」として描く。 */
-    for (i = 0; i < ENT_MAX && slot < 31; i++) {
-        const Entity *e = &pool[i];
-        if (e->active && e->type == ET_COMBO && e->y > -16 && e->y < 212) {
-            s16 cx = e->ay, cy = e->y, off = e->x, lx = cx - off, rx = cx + off;
-            if (lx >= 0 && lx < 256) { spr_col1(slot, 12); vdp_sprite_pos(slot, (u8)lx, (u8)cy, SPR_EBSHELL); slot++; }
-            if (slot < 32 && rx >= 0 && rx < 256) { spr_col1(slot, 12); vdp_sprite_pos(slot, (u8)rx, (u8)cy, SPR_EBSHELL); slot++; }
-        }
+    /* 合体弾パス(双子艦): 中心±off の2発として描く。 */
+    for (i = 0; i < nco && slot < 31; i++) {
+        s16 cx = co[i]->ay, cy = co[i]->y, off = co[i]->x, lx = cx - off, rx = cx + off;
+        if (lx >= 0 && lx < 256) { spr_col1(slot, 12); vdp_sprite_pos(slot, (u8)lx, (u8)cy, SPR_EBSHELL); slot++; }
+        if (slot < 32 && rx >= 0 && rx < 256) { spr_col1(slot, 12); vdp_sprite_pos(slot, (u8)rx, (u8)cy, SPR_EBSHELL); slot++; }
     }
-    /* 落ち影パス: 影は最後=最も高いslot=最低優先で描く(混雑ラインではゲーム弾/敵機に譲って先に落ちる)。 */
-    for (i = 0; i < ENT_MAX && slot < 32; i++) {
-        const Entity *e = &pool[i];
-        if (e->active && !e->hidden && e->shadow &&
-            e->x >= 0 && e->x < 256 && e->y > -16 && e->y < 212)
-            slot = draw_shadow(slot, e);
-    }
+    /* 落ち影パス: 影は最後=最も高いslot=最低優先(混雑ラインではゲーム弾/敵機に譲って先に落ちる)。 */
+    for (i = 0; i < nsh && slot < 32; i++) slot = draw_shadow(slot, sh[i]);
     vdp_sprite_hide_from(slot);
     rot++;
 }

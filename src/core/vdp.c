@@ -134,37 +134,70 @@ void vdp_cmd_wait(void) {
     __endasm;
 }
 
-/* LMMV(論理矩形塗り): (dx,dy)から(nx,ny)pxを色 color で塗る。座標・色ともピクセル単位。
-   ※HMMV(0xC0)はバイト単位のため G4(2px/byte)では縞になる。塗りは LMMV(0x80)を使う。
-   R#36..R#46 を個別書込(前作の実績イディオム)。前コマンド完了を待ってから発行。 */
-void vdp_fill(u16 dx, u16 dy, u16 nx, u16 ny, u8 color) {
-    vdp_cmd_wait();
-    vdp_wreg(36, dx & 0xFF);  vdp_wreg(37, (dx >> 8) & 0x01);  /* DX (9bit) */
-    vdp_wreg(38, dy & 0xFF);  vdp_wreg(39, (dy >> 8) & 0x03);  /* DY (10bit) */
-    vdp_wreg(40, nx & 0xFF);  vdp_wreg(41, (nx >> 8) & 0x01);  /* NX (9bit) */
-    vdp_wreg(42, ny & 0xFF);  vdp_wreg(43, (ny >> 8) & 0x03);  /* NY (10bit) */
-    vdp_wreg(44, color);                                       /* CLR (色0-15) */
-    vdp_wreg(45, 0);                                           /* ARG (DIX=DIY=0) */
-    vdp_wreg(46, 0x80);                                        /* CMD = LMMV(論理IMP) */
+/* ★VDPコマンドレジスタ(R#32-46)の一括発行 = R#17間接オートインクリメント + OTIR。
+   従来は R#36.. を1本ずつ vdp_wreg(各 di/ei + 2×OUT to 0x99)で叩いていた=1コマンド15本で
+   di/ei×15＋OUT×30。ここを「R#17=開始レジスタ番号(bit7=0でオートインクリメント)を1回設定→
+   値をポート0x9B(VDP_IDAT)へ OTIR で連続転送」に置換。0x9B書込みはアドレスFF(0x99の2バイト)を
+   使わないので割込安全、OTIRは1バイト~21T=個別wreg(~65T)の約1/3。海コピー等コマンド多発時のCPUを削減。
+   ISR(音)は 0x9B/R#17 に触れないので、di はR#17設定+OTIR全体を短く囲うだけでよい。 */
+/* ★asm(vdp_cmd_flush)から参照するため非static(グローバル)＋volatile
+   (Cからは書くだけ=デッドストア除去でシンボルごと消えるのを防ぐ)。他モジュールからは使わない。 */
+volatile u8 vdpcbuf[16];   /* R#開始..のレジスタ値を順に格納(RAM=OTIRのソース)。名前は_始まり不可(sdccが__に二重化) */
+volatile u8 vdpcstart;     /* 開始レジスタ番号(LMMM=32 / LMMV=36) */
+volatile u8 vdpccnt;       /* 転送本数 */
+static void vdp_cmd_flush(void) {
+    __asm
+        di
+        ld   a, (#_vdpcstart)
+        out  (0x99), a         ; R#17 = 開始レジスタ番号(bit7=0=オートインクリメント有効)
+        ld   a, #0x80 | 17
+        out  (0x99), a
+        ld   hl, #_vdpcbuf
+        ld   a, (#_vdpccnt)
+        ld   b, a
+        ld   c, #0x9B          ; VDP_IDAT(間接レジスタ, 書込む度にR#17が+1)
+        otir                    ; vdpcbuf[0..vdpccnt-1] を R#(vdpcstart)から連続書込
+        ei
+    __endasm;
 }
 
-/* LMMM 本体: R#32-45 を設定し R#46=cmd(0x90=不透過/0x98=透過)。前コマンド完了を待つ。 */
+/* LMMV(論理矩形塗り): (dx,dy)から(nx,ny)pxを色 color で塗る。座標・色ともピクセル単位。
+   ※HMMV(0xC0)はバイト単位のため G4(2px/byte)では縞になる。塗りは LMMV(0x80)を使う。 */
+void vdp_fill(u16 dx, u16 dy, u16 nx, u16 ny, u8 color) {
+    vdp_cmd_wait();
+    vdpcbuf[0] = dx & 0xFF;  vdpcbuf[1] = (dx >> 8) & 0x01;   /* R#36/37 DX (9bit)  */
+    vdpcbuf[2] = dy & 0xFF;  vdpcbuf[3] = (dy >> 8) & 0x03;   /* R#38/39 DY (10bit) */
+    vdpcbuf[4] = nx & 0xFF;  vdpcbuf[5] = (nx >> 8) & 0x01;   /* R#40/41 NX (9bit)  */
+    vdpcbuf[6] = ny & 0xFF;  vdpcbuf[7] = (ny >> 8) & 0x03;   /* R#42/43 NY (10bit) */
+    vdpcbuf[8] = color;      vdpcbuf[9] = 0;                  /* R#44 CLR / R#45 ARG(DIX=DIY=0) */
+    vdpcbuf[10] = 0x80;                                     /* R#46 CMD = LMMV(論理IMP) */
+    vdpcstart = 36; vdpccnt = 11;
+    vdp_cmd_flush();
+}
+
+/* LMMM 本体: R#32-46 を設定し R#46=cmd(0x90=不透過HMMMは0xD0/0x98=透過)。前コマンド完了を待つ。 */
 static void vdp_lmmm(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny, u8 cmd) {
     vdp_cmd_wait();
-    vdp_wreg(32, sx & 0xFF);  vdp_wreg(33, (sx >> 8) & 0x01);   /* SX (9bit)  */
-    vdp_wreg(34, sy & 0xFF);  vdp_wreg(35, (sy >> 8) & 0x03);   /* SY (10bit) */
-    vdp_wreg(36, dx & 0xFF);  vdp_wreg(37, (dx >> 8) & 0x01);   /* DX (9bit)  */
-    vdp_wreg(38, dy & 0xFF);  vdp_wreg(39, (dy >> 8) & 0x03);   /* DY (10bit) */
-    vdp_wreg(40, nx & 0xFF);  vdp_wreg(41, (nx >> 8) & 0x01);   /* NX (9bit)  */
-    vdp_wreg(42, ny & 0xFF);  vdp_wreg(43, (ny >> 8) & 0x03);   /* NY (10bit) */
-    vdp_wreg(44, 0);          vdp_wreg(45, 0);                   /* CLR/ARG    */
-    vdp_wreg(46, cmd);
+    vdpcbuf[0]  = sx & 0xFF;  vdpcbuf[1]  = (sx >> 8) & 0x01;   /* R#32/33 SX (9bit)  */
+    vdpcbuf[2]  = sy & 0xFF;  vdpcbuf[3]  = (sy >> 8) & 0x03;   /* R#34/35 SY (10bit) */
+    vdpcbuf[4]  = dx & 0xFF;  vdpcbuf[5]  = (dx >> 8) & 0x01;   /* R#36/37 DX (9bit)  */
+    vdpcbuf[6]  = dy & 0xFF;  vdpcbuf[7]  = (dy >> 8) & 0x03;   /* R#38/39 DY (10bit) */
+    vdpcbuf[8]  = nx & 0xFF;  vdpcbuf[9]  = (nx >> 8) & 0x01;   /* R#40/41 NX (9bit)  */
+    vdpcbuf[10] = ny & 0xFF;  vdpcbuf[11] = (ny >> 8) & 0x03;   /* R#42/43 NY (10bit) */
+    vdpcbuf[12] = 0;          vdpcbuf[13] = 0;                  /* R#44 CLR / R#45 ARG */
+    vdpcbuf[14] = cmd;                                        /* R#46 CMD */
+    vdpcstart = 32; vdpccnt = 15;
+    vdp_cmd_flush();
 }
-/* VRAM→VRAM 論理コピー(不透過)。 */
+/* VRAM→VRAM 高速コピー(不透過, HMMM=0xD0)。
+   ★HMMM は LMMM(0x90)より約1.4倍速(実測: コピー時間の~87%が命令実行待ち=ここが効く)。
+     HMMM は論理演算/透過をしない純バイト転送で、G4(2px/byte)では X/幅の低位1bitが無視される
+     =偶数境界で扱えばピクセル座標そのままで正しい(本作の不透過コピーは全て偶数X・偶数幅)。
+     Grauw VDP timing: LMMM=120cyc/px, HMMM=88cyc/px, YMMM=64cyc/px(+ライン跨ぎ0)。 */
 void vdp_copy(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny) {
-    vdp_lmmm(sx, sy, dx, dy, nx, ny, 0x90);
+    vdp_lmmm(sx, sy, dx, dy, nx, ny, 0xD0);
 }
-/* 透過版: ソースの色0はコピーしない(炎/煙を艦の上へ重ね描き)。 */
+/* 透過版: ソースの色0はコピーしない(炎/煙を艦の上へ重ね描き)。透過は論理コピー必須=LMMM(0x98)を維持。 */
 void vdp_copy_t(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny) {
     vdp_lmmm(sx, sy, dx, dy, nx, ny, 0x98);
 }
@@ -237,22 +270,10 @@ const u8 *vdp_glyph(u8 c) {
 
 /* 文字列描画(自前フォント)。1文字=8行×8px=4byte(2px/byte)を SCREEN5 page0 へ直接。
    px 偶数前提。fg/bg で地色も塗る。未収録文字は空白セルとして地色で埋める。 */
+/* 等倍テキスト = 2倍角描画の scale=1 特殊化。専用実装(4バイト/行直書き)と同一出力になるため、
+   常駐サイズ節約のため vdp_text_s へ委譲する薄いラッパにした(いずれも遷移/メニュー画面用=毎フレームでない)。 */
 void vdp_text(u8 px, u8 py, u8 fg, u8 bg, const char *s) {
-    u8 c, r;
-    vdp_cmd_wait();   /* 直前のLMMV(塗り)完了を待つ。走行中に直接VRAM書込すると衝突し文字が欠ける。 */
-    while ((c = (u8)*s++) != 0) {
-        s8 idx = font_index(c);
-        const u8 *g = (idx >= 0) ? fontset[idx] : (const u8 *)0;
-        for (r = 0; r < 8; r++) {
-            u8 fb = g ? g[r] : 0;
-            vdp_write_addr((u16)((u16)(py + r) * 128 + (px >> 1)));
-            VDP_DAT = (u8)(((fb & 0x80) ? fg : bg) << 4 | ((fb & 0x40) ? fg : bg));
-            VDP_DAT = (u8)(((fb & 0x20) ? fg : bg) << 4 | ((fb & 0x10) ? fg : bg));
-            VDP_DAT = (u8)(((fb & 0x08) ? fg : bg) << 4 | ((fb & 0x04) ? fg : bg));
-            VDP_DAT = (u8)(((fb & 0x02) ? fg : bg) << 4 | ((fb & 0x01) ? fg : bg));
-        }
-        px += 8;
-    }
+    vdp_text_s(px, py, fg, bg, 1, s);
 }
 
 /* 拡大文字描画(自前フォント, scale 倍角)。各グリフ画素を scale×scale ブロックへ展開。

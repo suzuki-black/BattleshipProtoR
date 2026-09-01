@@ -8,19 +8,21 @@
 #include "gamestate.h"
 #include "version.h"   /* BUILD_VER(gitハッシュ)。どのコミットのROMか判別用 */
 
-#define CFG_START 6      /* 項目0..5 ＋ START(6) */
-#define ROWS 7
+#define CFG_START 7      /* 項目0..6 ＋ START(7) */
+#define ROWS 8
 
-static u8 cur;   /* 0=難易度/1=残機/2=耐久/3=ステージ/4=継続/5=無敵/6=START。RAM(data-loc)。 */
+static u8 cur;   /* 0=難易度/1=残機/2=耐久/3=ステージ/4=継続/5=無敵/6=VIEW/7=START。RAM(data-loc)。 */
+static u8 g_mode;/* VIEW: 0=GAME(通常)/1=CARD(説明のみ)/2=RESULT(撃破画面のみ)/3=ENDING。START時に g_view へ反映 */
 
 static const char *const diffs[3]  = { "EASY  ", "NORMAL", "HARD  " };
 static const char *const livess[3] = { "2", "3", "5" };
 static const char *const onoff[2]  = { "OFF", "ON " };
 static const char *const num1_9[10]= { "0","1","2","3","4","5","6","7","8","9" };
+static const char *const modes[4]  = { "GAME  ", "CARD  ", "RESULT", "ENDING" };   /* 画面ビューア */
 static const char *const labels[ROWS] = {
-    "DIFFICULTY", "LIVES", "DURABILITY", "STAGE", "CONTINUE", "INVINCIBLE", "START GAME"
+    "DIFFICULTY", "LIVES", "DURABILITY", "STAGE", "CONTINUE", "INVINCIBLE", "VIEW", "START GAME"
 };
-static const u8 rowy[ROWS] = { 40, 60, 80, 100, 120, 140, 164 };
+static const u8 rowy[ROWS] = { 36, 54, 72, 90, 108, 126, 144, 168 };
 
 /* 行 idx の値文字列(START行は値なし=NULL)。 */
 static const char *val_of(u8 idx) {
@@ -30,6 +32,7 @@ static const char *val_of(u8 idx) {
     if (idx == 3) return num1_9[g_stage_sel + 1];
     if (idx == 4) return onoff[g_continue ? 1 : 0];
     if (idx == 5) return onoff[g_invinc ? 1 : 0];
+    if (idx == 6) return modes[g_mode];
     return (const char *)0;   /* START GAME */
 }
 
@@ -59,12 +62,16 @@ static u8 change(u8 idx, s8 d) {
     else if (idx == 3) { s8 v = (s8)g_stage_sel + d; if (v >= 0 && v < 5) { g_stage_sel = (u8)v; return 1; } }  /* 開始面(0..4=STAGE_COUNT-1)。面数変更時ここも更新 */
     else if (idx == 4) { u8 n = d > 0 ? 1 : (d < 0 ? 0 : g_continue); if (n != g_continue) { g_continue = n; return 1; } }
     else if (idx == 5) { u8 n = d > 0 ? 1 : (d < 0 ? 0 : g_invinc);   if (n != g_invinc)   { g_invinc = n;   return 1; } }
+    else if (idx == 6) { s8 v = (s8)g_mode + d; if (v >= 0 && v <= 3) { g_mode = (u8)v; return 1; } }   /* VIEW: GAME/CARD/RESULT/ENDING */
     return 0;
 }
 
 static void config_init(void) {
     vdp_set_display_page(0);
     cur = 0;
+    g_mode = 0;   /* ★VIEWを毎回GAMEへ確定。g_modeはbank6のstaticで0xE000共有RAM上=他バンクシーン
+                     (ship_render等)が同域を使うため残留値になり得る。放置すると START時 g_view=残留 で
+                     「カードのみ表示→タイトルへ戻る」誤動作(ステージ中リセット後に顕在化)を起こす。 */
     draw_all();
 }
 
@@ -74,7 +81,11 @@ static u8 config_update(void) {
     if ((e & INP_UP)   && cur > 0)         { u8 o = cur; cur--; draw_row(o); draw_row(cur); }
     if (e & INP_RIGHT) { if (change(cur, +1)) draw_row(cur); }
     if (e & INP_LEFT)  { if (change(cur, -1)) draw_row(cur); }
-    if ((e & INP_TRIG) && cur == CFG_START) return SC_STAGE;   /* START でステージ開始 */
+    if ((e & INP_TRIG) && cur == CFG_START) {   /* START: VIEWモードに応じて画面を出す */
+        if (g_mode == 3) { g_view = 0; return SC_ENDING; }   /* ENDING を直接表示 */
+        g_view = g_mode;                                     /* 0=通常/1=カードのみ/2=結果のみ */
+        return SC_STAGE;
+    }
     return SCENE_NONE;
 }
 

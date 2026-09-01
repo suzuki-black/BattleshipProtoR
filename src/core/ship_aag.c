@@ -47,14 +47,14 @@ void ship_render(u8 kind, u8 hull, u8 bow_cnt, u16 bow_yb, u8 aag_tbl,
     bcall_to(SHIP_RENDER_BANK);
 }
 
-/* 対空砲 i(0..22)の艦内座標を返す(発砲システム=scene_stage が毎フレーム使う)。tbl=艦種(bb0/cv1/hd2/nl3)。 */
-void ship_aag_pos(u8 tbl, u8 i, s16 *px, u16 *py) {
-    const u8 *ax; const u16 *ay;
+/* 艦種 tbl の対空砲座標表(x/y)の先頭ポインタを返す。★aa_update がループ前に1回だけ呼び、
+   以後 ax[i]/ay[i] を直接添字参照する=毎フレーム23回の ship_aag_pos 関数呼び＋switch を排除(高速化)。 */
+void ship_aag_tables(u8 tbl, const u8 **px, const u16 **py) {
     switch (tbl) {
-        case 1:  ax = aag_x_cv; ay = aag_y_cv; break;
-        case 2:  ax = aag_x_hd; ay = aag_y_hd; break;
-        case 3:  ax = aag_x_nl; ay = aag_y_nl; break;
-        default: ax = aag_x_bb; ay = aag_y_bb; break;
+        case 1:  *px = aag_x_cv; *py = aag_y_cv; break;
+        case 2:  *px = aag_x_hd; *py = aag_y_hd; break;
+        case 3:  *px = aag_x_nl; *py = aag_y_nl; break;
+        default: *px = aag_x_bb; *py = aag_y_bb; break;
     }
-    *px = (s16)ax[i]; *py = ay[i];
 }
+
