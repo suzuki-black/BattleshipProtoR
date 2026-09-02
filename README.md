@@ -44,7 +44,7 @@ public once ready. This game is an **improved successor to
 
 ### Story
 
-> The old warrior was enraged. He resolved that he must, without fail, rid the world of its wars.
+> The samurai was enraged. He resolved that he must, without fail, rid the world of its wars.
 > He knows nothing of politics. He is but a man of the blade, who has lived by honing his sword and
 > playing in the wind. Before dawn today he left his homeland; crossing clouds and waves — not ten
 > leagues but hundreds of sea-miles away — he came to this battlefield upon the sea. He has no
