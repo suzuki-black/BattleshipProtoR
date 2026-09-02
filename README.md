@@ -27,6 +27,7 @@ public once ready. This game is an **improved successor to
 <a name="english"></a>
 ## English
 
+- [Story](#story)
 - [Overview](#overview)
 - [Features](#features)
 - [Controls](#controls)
@@ -40,6 +41,15 @@ public once ready. This game is an **improved successor to
 - [Credits](#credits)
 - [License](#license)
 - [Disclaimer](#disclaimer)
+
+### Story
+
+> The old warrior was enraged. He resolved that he must, without fail, rid the world of its wars.
+> He knows nothing of politics. He is but a man of the blade, who has lived by honing his sword and
+> playing in the wind. Before dawn today he left his homeland; crossing clouds and waves — not ten
+> leagues but hundreds of sea-miles away — he came to this battlefield upon the sea. He has no
+> father, no mother, and no wife. He carries only a single sword, and a vow to the comrades who
+> will not return.
 
 ### Overview
 - **Platform:** MSX turboR software (256 KB ASCII8 mega-ROM). It also boots on an MSX2+, but with
