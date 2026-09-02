@@ -298,19 +298,40 @@ static u8 overlap(const Entity *a, const Entity *b) {
 }
 
 void ent_resolve_collisions(void) {
-    u8 i, j, nt = 0;
-    Entity *b, *t, *p, *e;
-    Entity *tgt[ENT_MAX];   /* ★敵ターゲット(戦闘機/追尾/停泊/砲台)のコンパクト集合 */
-    /* ★ポインタ加算で走査(pool[j]の添字アクセスは毎回 j*sizeof(Entity) の乗算=Z80で重い。b++は定数加算)。
-       ★さらに自機弾の内側走査を全30→敵ターゲットだけに短縮: ターゲットは通常8体前後だが自機弾は10-15発
-         あり、内側30走査×弾数がO(N²)の主因だった。ターゲットを1回だけ集めて弾×ターゲットに縮める。 */
-    for (i = 0, t = pool; i < ENT_MAX; i++, t++) {
-        if (t->active && (t->type == ET_FIGHTER || t->type == ET_PURSUER ||
-                          t->type == ET_PARKED || t->type == ET_TURRET)) tgt[nt++] = t;
+    /* ★プール全走査を1回に統合。従来は「敵ターゲット収集」「自機弾探索」「自機探索＋脅威内側30走査」で
+       都合3〜4回プールを舐めていた(各回で active/type を読み直し)。1走査で以下へ分類し、以後はコンパクト
+       集合だけを回す(判定・スコア・効果は従来と完全同一):
+         pb[]  = 自機弾(TEAM_PLAYER)          … 自機弾×ターゲットの外側
+         tgt[] = 戦闘機/追尾/停泊/砲台         … 自機弾の当たり相手
+         th[]  = 自機に当たる脅威(敵弾/戦闘機/信管弾/追尾/浮上ミサイル) … 自機×脅威
+         player = 自機 */
+    u8 i, j, npb = 0, nt = 0, nth = 0;
+    Entity *b, *t, *e;
+    Entity *pb[ENT_MAX], *tgt[ENT_MAX], *th[ENT_MAX], *player = (Entity *)0;
+    e = pool;
+    for (i = 0; i < ENT_MAX; i++, e++) {
+        u8 ty;
+        if (!e->active) continue;
+        ty = e->type;
+        if (ty == ET_BULLET) {
+            if (e->team == TEAM_PLAYER) pb[npb++] = e;   /* 自機弾 */
+            else                        th[nth++] = e;   /* 敵弾=脅威 */
+        } else if (ty == ET_PLAYER) {
+            player = e;
+        } else if (ty == ET_FIGHTER || ty == ET_PURSUER) {
+            tgt[nt++] = e; th[nth++] = e;                /* 戦闘機/追尾=ターゲットかつ脅威(体当り) */
+        } else if (ty == ET_PARKED || ty == ET_TURRET) {
+            tgt[nt++] = e;                               /* 停泊機/砲台=ターゲットのみ(体当り無し) */
+        } else if (ty == ET_AABURST) {
+            th[nth++] = e;                               /* 信管弾=脅威 */
+        } else if (ty == ET_SMISSILE && e->ax >= 2) {
+            th[nth++] = e;                               /* ミサイルは浮上後(相2以上)のみ危険 */
+        }
     }
     /* 自機弾(TEAM_PLAYER) × 敵戦闘機/砲台 → 弾消滅、戦闘機は即撃破、砲台は hp 減算 */
-    for (i = 0, b = pool; i < ENT_MAX; i++, b++) {
-        if (!b->active || b->type != ET_BULLET || b->team != TEAM_PLAYER) continue;
+    for (i = 0; i < npb; i++) {
+        b = pb[i];
+        if (!b->active) continue;
         for (j = 0; j < nt; j++) {
             t = tgt[j];
             if (!t->active) continue;   /* 先に別の弾で消えた可能性(集合はstale許容) */
@@ -330,29 +351,27 @@ void ent_resolve_collisions(void) {
             }
         }
     }
-    /* 敵弾(TEAM_ENEMY)/敵戦闘機 × 自機 → 敵を消し被弾+1 */
-    for (i = 0, p = pool; i < ENT_MAX; i++, p++) {
-        if (!p->active || p->type != ET_PLAYER) continue;
-        for (j = 0, e = pool; j < ENT_MAX; j++, e++) {
+    /* 敵弾(TEAM_ENEMY)/敵戦闘機/… × 自機 → 敵を消し被弾+1 */
+    if (player) {
+        Entity *p = player;
+        for (j = 0; j < nth; j++) {
+            u8 tol;
+            s16 dx, dy;
+            e = th[j];
             if (!e->active) continue;
-            if ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_FIGHTER
-                || e->type == ET_AABURST || e->type == ET_PURSUER
-                || (e->type == ET_SMISSILE && e->ax >= 2)) {   /* ミサイルは浮上後のみ危険 */
-                /* ★自機の当たりは旧版準拠でタイト: 弾/破片=±6(旧±5)、体当り系=±9(旧±8-10)。
-                   共通overlap(±14)のままだと自機が大きすぎて理不尽=避けても被弾する。 */
-                u8 tol = (e->type == ET_BULLET || e->type == ET_AABURST) ? 6 : 9;
-                s16 dx = e->x - p->x, dy = e->y - p->y;
-                if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
-                if (dx < tol && dy < tol) {
-                    e->active = 0;                 /* 敵/敵弾は消す(すり抜け防止) */
-                    if (g_pinv == 0 && !g_invinc) {/* 被弾直後の無敵中/設定無敵 は無傷 */
-                        g_playerhit++;
-                        sfx(0, SFX_PHIT);          /* 被弾の痛み音(tone A) */
-                        ent_spawn_explosion(p->x, p->y);
-                        g_hitstop = 5; g_shake = 12;   /* 被弾=強い手応え(凍結＋大きめ揺れ) */
-                        if (g_php > 1) { g_php--; g_pinv = 90; }  /* 耐久残=生存(1.5秒無敵点滅) */
-                        else { g_php = 0; g_miss = 1; }           /* 耐久尽き=撃墜。残機/リスタートはシーンが処理 */
-                    }
+            /* ★自機の当たりは旧版準拠でタイト: 弾/破片=±6、体当り系=±9(共通±14だと避けても被弾で理不尽)。 */
+            tol = (e->type == ET_BULLET || e->type == ET_AABURST) ? 6 : 9;
+            dx = e->x - p->x; dy = e->y - p->y;
+            if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
+            if (dx < tol && dy < tol) {
+                e->active = 0;                 /* 敵/敵弾は消す(すり抜け防止) */
+                if (g_pinv == 0 && !g_invinc) {/* 被弾直後の無敵中/設定無敵 は無傷 */
+                    g_playerhit++;
+                    sfx(0, SFX_PHIT);          /* 被弾の痛み音(tone A) */
+                    ent_spawn_explosion(p->x, p->y);
+                    g_hitstop = 5; g_shake = 12;   /* 被弾=強い手応え(凍結＋大きめ揺れ) */
+                    if (g_php > 1) { g_php--; g_pinv = 90; }  /* 耐久残=生存(1.5秒無敵点滅) */
+                    else { g_php = 0; g_miss = 1; }           /* 耐久尽き=撃墜。残機/リスタートはシーンが処理 */
                 }
             }
         }
