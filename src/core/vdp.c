@@ -143,12 +143,12 @@ void vdp_cmd_wait(void) {
 /* ★asm(vdp_cmd_flush)から参照するため非static(グローバル)＋volatile
    (Cからは書くだけ=デッドストア除去でシンボルごと消えるのを防ぐ)。他モジュールからは使わない。 */
 volatile u8 vdpcbuf[16];   /* R#32..46 の15レジスタ値を順に格納(RAM=OUTIのソース)。名前は_始まり不可(sdccが__に二重化) */
-/* ★A3(§B4の統一): 全コマンドを「R#32から15本固定」に統一。従来は fill=R#36から11本 / copy=R#32から
-   15本 と開始/本数が可変だったが、LMMV(塗り)はSX/SY(R#32-35)を参照しないので、fillでもR#32から15本を
-   OTIRで一括転送してよい(SX/SYは残値のまま無害)。これで開始/本数の分岐が消え、常に固定OTIR。
-   ※当初は更に「15×OUTI直列展開」(18T/byte, 毎コマンド~45T削減)まで入れたが、A6の追加で常駐が0xA000の
-     壁を越えたため、容量を優先してOTIR(21T/byte)へ戻した。OUTI展開の復活は常駐再確保後の課題。
-   0x9B書込みはアドレスFFを使わず割込安全。di はR#17設定+OTIRを短く囲うだけでよい。 */
+/* ★A3(§B4): 全コマンドを「R#32から15本固定」に統一し、OTIR(21T/byte)でなく15×OUTI直列展開(18T/byte)で発行。
+   従来は fill=R#36から11本 / copy=R#32から15本 と開始/本数が可変だったが、LMMV(塗り)はSX/SY(R#32-35)を
+   参照しないので、fillでもR#32から15本を流してよい(SX/SYは残値のまま無害)=固定本数に統一できる。
+   固定15本なのでエントリ計算不要のOUTI直打ちにでき、毎コマンド15×3T≒45T削減(コマンド多発フレームで約0.6ms)。
+   ※A6(SATバッチ)追加で一度は常駐0xA000の壁でOTIRへ退避したが、スプライトパターンをbank16へ移設して
+     常駐を~1KB空けたため復活。0x9B書込みはアドレスFFを使わず割込安全。di はR#17設定+OUTI群を短く囲う。 */
 static void vdp_cmd_flush(void) {
     __asm
         di
@@ -157,9 +157,22 @@ static void vdp_cmd_flush(void) {
         ld   a, #0x80 | 17
         out  (0x99), a
         ld   hl, #_vdpcbuf
-        ld   b, #15            ; 常に15本(R#32..46)固定
         ld   c, #0x9B          ; VDP_IDAT(間接レジスタ, 書込む度にR#17が+1)
-        otir                    ; vdpcbuf[0..14] を R#32..46 へ連続書込
+        outi                    ; vdpcbuf[0..14] を R#32..46 へ連続書込(15本固定展開)
+        outi
+        outi
+        outi
+        outi
+        outi
+        outi
+        outi
+        outi
+        outi
+        outi
+        outi
+        outi
+        outi
+        outi
         ei
     __endasm;
 }

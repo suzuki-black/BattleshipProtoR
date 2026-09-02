@@ -36,7 +36,7 @@ typedef struct {
     u16 bow_yb;
     u8 aag_tbl;
     const u8 *aagp, *ops, *ops2;
-    u8 mode;   /* 0=艦描画 / 1=開始カード拡大 / 2=沈没演出 / 3=ゲームオーバー画面 */
+    u8 mode;   /* 0=艦描画 / 1=開始カード拡大 / 2=沈没演出 / 3=ゲームオーバー画面 / 4=スプライトパターン投入 */
     u16 cam;   /* mode2(沈没演出)の表示維持カメラ */
     u8 ret;    /* mode3(ゲームオーバー)の戻り値: 1=CONTINUE / 0=TITLE */
 } ShipArgs;
