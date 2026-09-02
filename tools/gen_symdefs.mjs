@@ -19,6 +19,10 @@ for (const line of readFileSync(inNoi, 'utf8').split(/\r?\n/)) {
   const sym = m[1];
   const addr = parseInt(m[2], 16);
   if (addr >= 0xA000 && addr < 0xC000) continue;   // スワップ窓は除外
+  // ★sdccランタイムヘルパ(__moduchar/__divuchar/__mulint 等の二重アンダースコア)は除外。
+  //   これらは各バンクが自分の lib から持つべきもので、常駐のを export すると
+  //   バンク側 lib 由来と多重定義になる(ship_render の % 使用で __moduchar 衝突)。
+  if (sym.startsWith('__')) continue;
   out += `\t.globl ${sym}\n${sym} = 0x${addr.toString(16)}\n`;
   n++;
 }
