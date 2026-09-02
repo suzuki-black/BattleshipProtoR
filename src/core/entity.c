@@ -19,6 +19,10 @@ static Entity pool[ENT_MAX];
 
 /* 各スプライトスロットに最後に書いた単色(0xFF=coltab/未確定=強制書換)。色表の重複16B書込みを省く。 */
 static u8 slot_col[32];
+/* ★A1: 各スロットに最後に書いた行別色表(coltab)のポインタ(0=単色書込み後で無効)。
+   同一slotに同一coltabが既に載っていれば16B書込みを省く。単色書込み時は必ず 0 にして
+   「そのslotのVRAMはもう coltab でない」を記録する(=以後の同ポインタ判定が VRAM 実体と一致)。 */
+static const u8 *slot_ctab[32];
 
 /* ---- behavior: 種別ごとの毎フレーム更新 ---- */
 /* ET_NONE/ET_BOUNCER/ET_SHOOTER の no-op behavior(実ゲームでspawnしないデモ枠。enum添字対応の
@@ -381,7 +385,7 @@ void ent_resolve_collisions(void) {
 void ent_reset(void) {
     u8 i;
     for (i = 0; i < ENT_MAX; i++) pool[i].active = 0;
-    for (i = 0; i < 32; i++) slot_col[i] = 0xFF;   /* 色キャッシュ無効化(面開始/再開で色表を必ず書直す) */
+    for (i = 0; i < 32; i++) { slot_col[i] = 0xFF; slot_ctab[i] = 0; }   /* 色キャッシュ無効化(面開始/再開で色表を必ず書直す) */
 }
 
 Entity *ent_spawn(u8 type) {
@@ -422,12 +426,16 @@ void ent_update_all(void) {
    VRAMに既にその色=16B書込みを省く(弾は殆ど橙12で殆ど省ける)。coltabは毎回書きキャッシュ無効(0xFF)。
    隠し(Y=216)は属性のみ変更で色表は残るためキャッシュ有効。ent_reset で 0xFF 初期化。 */
 static void spr_col1(u8 slot, u8 color) {
-    if (slot_col[slot] != color) { vdp_sprite_color(slot, color); slot_col[slot] = color; }
+    if (slot_col[slot] != color) { vdp_sprite_color(slot, color); slot_col[slot] = color; slot_ctab[slot] = 0; }
 }
 static u8 draw1(u8 slot, const Entity *e) {   /* 1体を slot へ描画し、次 slot を返す */
-    if (e->coltab) { vdp_sprite_color_tab(slot, e->coltab); slot_col[slot] = 0xFF; }  /* 行別色(陰影) */
+    if (e->coltab) {                                                                  /* 行別色(陰影) */
+        if (slot_ctab[slot] != e->coltab) {   /* ★A1: 同一coltabが既に載っていれば16B書込みを省く */
+            vdp_sprite_color_tab(slot, e->coltab); slot_ctab[slot] = e->coltab; slot_col[slot] = 0xFF;
+        }
+    }
     else           spr_col1(slot, e->color);                                          /* 単色(差分のみ書換) */
-    vdp_sprite_pos(slot, (u8)e->x, (u8)e->y, e->pat);
+    vdp_sat_pos(slot, (u8)e->x, (u8)e->y, e->pat);   /* ★A6: 属性はシャドウへ(最後にバースト) */
     return (u8)(slot + 1);
 }
 
@@ -436,7 +444,7 @@ static u8 draw1(u8 slot, const Entity *e) {   /* 1体を slot へ描画し、次
 #define SHADOW_DY 6
 static u8 draw_shadow(u8 slot, const Entity *e) {
     spr_col1(slot, 13);   /* ほぼ黒(1,1,1)。単色=差分書換 */
-    vdp_sprite_pos(slot, (u8)(e->x + SHADOW_DX), (u8)(e->y + SHADOW_DY), e->pat);
+    vdp_sat_pos(slot, (u8)(e->x + SHADOW_DX), (u8)(e->y + SHADOW_DY), e->pat);   /* ★A6: シャドウへ */
     return (u8)(slot + 1);
 }
 /* ★プール全走査を1回に統合(従来は自機探索/可視収集/合体弾/影 で4回走査していた=各エンティティの
@@ -474,11 +482,12 @@ void ent_draw_all(void) {
     /* 合体弾パス(双子艦): 中心±off の2発として描く。 */
     for (i = 0; i < nco && slot < 31; i++) {
         s16 cx = co[i]->ay, cy = co[i]->y, off = co[i]->x, lx = cx - off, rx = cx + off;
-        if (lx >= 0 && lx < 256) { spr_col1(slot, 12); vdp_sprite_pos(slot, (u8)lx, (u8)cy, SPR_EBSHELL); slot++; }
-        if (slot < 32 && rx >= 0 && rx < 256) { spr_col1(slot, 12); vdp_sprite_pos(slot, (u8)rx, (u8)cy, SPR_EBSHELL); slot++; }
+        if (lx >= 0 && lx < 256) { spr_col1(slot, 12); vdp_sat_pos(slot, (u8)lx, (u8)cy, SPR_EBSHELL); slot++; }
+        if (slot < 32 && rx >= 0 && rx < 256) { spr_col1(slot, 12); vdp_sat_pos(slot, (u8)rx, (u8)cy, SPR_EBSHELL); slot++; }
     }
     /* 落ち影パス: 影は最後=最も高いslot=最低優先(混雑ラインではゲーム弾/敵機に譲って先に落ちる)。 */
     for (i = 0; i < nsh && slot < 32; i++) slot = draw_shadow(slot, sh[i]);
-    vdp_sprite_hide_from(slot);
+    /* ★A6: 溜めた属性(g_spr_base..slot-1)を1回のバーストでSATへ(flush内で停止マーカも直書き)。 */
+    vdp_sat_flush(g_spr_base, slot);
     rot++;
 }

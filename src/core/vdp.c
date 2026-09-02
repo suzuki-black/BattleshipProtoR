@@ -142,21 +142,24 @@ void vdp_cmd_wait(void) {
    ISR(音)は 0x9B/R#17 に触れないので、di はR#17設定+OTIR全体を短く囲うだけでよい。 */
 /* ★asm(vdp_cmd_flush)から参照するため非static(グローバル)＋volatile
    (Cからは書くだけ=デッドストア除去でシンボルごと消えるのを防ぐ)。他モジュールからは使わない。 */
-volatile u8 vdpcbuf[16];   /* R#開始..のレジスタ値を順に格納(RAM=OTIRのソース)。名前は_始まり不可(sdccが__に二重化) */
-volatile u8 vdpcstart;     /* 開始レジスタ番号(LMMM=32 / LMMV=36) */
-volatile u8 vdpccnt;       /* 転送本数 */
+volatile u8 vdpcbuf[16];   /* R#32..46 の15レジスタ値を順に格納(RAM=OUTIのソース)。名前は_始まり不可(sdccが__に二重化) */
+/* ★A3(§B4の統一): 全コマンドを「R#32から15本固定」に統一。従来は fill=R#36から11本 / copy=R#32から
+   15本 と開始/本数が可変だったが、LMMV(塗り)はSX/SY(R#32-35)を参照しないので、fillでもR#32から15本を
+   OTIRで一括転送してよい(SX/SYは残値のまま無害)。これで開始/本数の分岐が消え、常に固定OTIR。
+   ※当初は更に「15×OUTI直列展開」(18T/byte, 毎コマンド~45T削減)まで入れたが、A6の追加で常駐が0xA000の
+     壁を越えたため、容量を優先してOTIR(21T/byte)へ戻した。OUTI展開の復活は常駐再確保後の課題。
+   0x9B書込みはアドレスFFを使わず割込安全。di はR#17設定+OTIRを短く囲うだけでよい。 */
 static void vdp_cmd_flush(void) {
     __asm
         di
-        ld   a, (#_vdpcstart)
-        out  (0x99), a         ; R#17 = 開始レジスタ番号(bit7=0=オートインクリメント有効)
+        ld   a, #32
+        out  (0x99), a         ; R#17 = 32(bit7=0=オートインクリメント有効。R#32から順に書く)
         ld   a, #0x80 | 17
         out  (0x99), a
         ld   hl, #_vdpcbuf
-        ld   a, (#_vdpccnt)
-        ld   b, a
+        ld   b, #15            ; 常に15本(R#32..46)固定
         ld   c, #0x9B          ; VDP_IDAT(間接レジスタ, 書込む度にR#17が+1)
-        otir                    ; vdpcbuf[0..vdpccnt-1] を R#(vdpcstart)から連続書込
+        otir                    ; vdpcbuf[0..14] を R#32..46 へ連続書込
         ei
     __endasm;
 }
@@ -165,13 +168,14 @@ static void vdp_cmd_flush(void) {
    ※HMMV(0xC0)はバイト単位のため G4(2px/byte)では縞になる。塗りは LMMV(0x80)を使う。 */
 void vdp_fill(u16 dx, u16 dy, u16 nx, u16 ny, u8 color) {
     vdp_cmd_wait();
-    vdpcbuf[0] = dx & 0xFF;  vdpcbuf[1] = (dx >> 8) & 0x01;   /* R#36/37 DX (9bit)  */
-    vdpcbuf[2] = dy & 0xFF;  vdpcbuf[3] = (dy >> 8) & 0x03;   /* R#38/39 DY (10bit) */
-    vdpcbuf[4] = nx & 0xFF;  vdpcbuf[5] = (nx >> 8) & 0x01;   /* R#40/41 NX (9bit)  */
-    vdpcbuf[6] = ny & 0xFF;  vdpcbuf[7] = (ny >> 8) & 0x03;   /* R#42/43 NY (10bit) */
-    vdpcbuf[8] = color;      vdpcbuf[9] = 0;                  /* R#44 CLR / R#45 ARG(DIX=DIY=0) */
-    vdpcbuf[10] = 0x80;                                     /* R#46 CMD = LMMV(論理IMP) */
-    vdpcstart = 36; vdpccnt = 11;
+    /* R#32-35(SX/SY)は LMMV が参照しないので放置(vdpcbuf[0..3]は前コマンドの残値のまま=無害)。 */
+    vdpcbuf[4]  = dx & 0xFF; vdpcbuf[5]  = (dx >> 8) & 0x01;   /* R#36/37 DX (9bit)  */
+    vdpcbuf[6]  = dy & 0xFF; vdpcbuf[7]  = (dy >> 8) & 0x03;   /* R#38/39 DY (10bit) */
+    vdpcbuf[8]  = nx & 0xFF; vdpcbuf[9]  = (nx >> 8) & 0x01;   /* R#40/41 NX (9bit)  */
+    vdpcbuf[10] = ny & 0xFF; vdpcbuf[11] = (ny >> 8) & 0x03;   /* R#42/43 NY (10bit) */
+    vdpcbuf[12] = color;                                      /* R#44 CLR = 塗り色(LMMVはこれを使う) */
+    /* R#45 ARG(方向DIX/DIY)は常に0(BSS初期値のまま)=書かない。 */
+    vdpcbuf[14] = 0x80;                                        /* R#46 CMD = LMMV(論理IMP) */
     vdp_cmd_flush();
 }
 
@@ -184,9 +188,8 @@ static void vdp_lmmm(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny, u8 cmd) {
     vdpcbuf[6]  = dy & 0xFF;  vdpcbuf[7]  = (dy >> 8) & 0x03;   /* R#38/39 DY (10bit) */
     vdpcbuf[8]  = nx & 0xFF;  vdpcbuf[9]  = (nx >> 8) & 0x01;   /* R#40/41 NX (9bit)  */
     vdpcbuf[10] = ny & 0xFF;  vdpcbuf[11] = (ny >> 8) & 0x03;   /* R#42/43 NY (10bit) */
-    vdpcbuf[12] = 0;          vdpcbuf[13] = 0;                  /* R#44 CLR / R#45 ARG */
+    /* R#44 CLR は copy(HMMM/透過LMMM)が参照しない、R#45 ARG(方向)は常に0(BSS初期値のまま)=書かない。 */
     vdpcbuf[14] = cmd;                                        /* R#46 CMD */
-    vdpcstart = 32; vdpccnt = 15;
     vdp_cmd_flush();
 }
 /* VRAM→VRAM 高速コピー(不透過, HMMM=0xD0)。
@@ -402,4 +405,30 @@ void vdp_sprite_hide_from(u8 slot) {
     vdp_write_addr(SPR_ATTR + (u16)slot * 4);
     VDP_DAT = 216;           /* Y=216(0xD8)=212ライン時の停止マーカ。以降のスプライトを非表示
                                 (208=0xD0は192ライン用。212ラインでは終端にならず古い残像が残る) */
+}
+
+/* ===== A6(§D1): SAT(属性表)のRAMシャドウ→一括バースト =====
+   ent_draw_all は毎フレーム最大32枚の属性を書く。従来は1枚ごとに vdp_sprite_pos が
+   vdp_write_addr(di/ei+4ポート設定)してから4B書く=スロット毎にアドレス設定が要り、ポート
+   アクセスが多い(turboRは1アクセス~7μs固定なので効く)。ここをまずRAM鏡(sat_shadow)へ溜め、
+   最後に vdp_sat_flush で「1回のアドレス設定＋連続バースト」でVRAMへ流す=アドレス設定を32回→1回へ。
+   ★色表(SPR_COLOR=別テーブル)は従来通り直書き(A1の差分キャッシュが効く)。HUD/結果/エンディングは
+     直接 vdp_sprite_pos のまま(このバッチ経路は ent_draw_all 専用=影響範囲を局所化)。 */
+static u8 sat_shadow[128];   /* 32枚×4B(Y,X,pattern,予約) */
+void vdp_sat_pos(u8 slot, u8 x, u8 y, u8 patnum) {
+    u8 *p = &sat_shadow[(u16)slot * 4];
+    p[0] = (u8)(y + g_vscroll - 1);   /* 表示Y=属性Y+1のため-1。縦スクロール量を足して画面固定に補正(直書き版と同一) */
+    p[1] = x;
+    p[2] = patnum;
+    /* p[3](予約)は書かない: sat_shadowはBSSで0初期化・非0を書く者がいないので常に0のまま。 */
+}
+/* シャドウの from..live-1(=生存スプライト)を SAT へ一括バーストし、live<32なら続けて停止マーカを直書き。
+   ★バースト後 VRAMアドレスは丁度スロット live のYを指すので、停止マーカ用の別書き/別関数が不要。
+   ★0x98(VRAMデータ)はオートインクリメントでアドレスラッチのFFを使わない=di不要(vdp_blit_bank_vram と同理由)。 */
+void vdp_sat_flush(u8 from, u8 live) {
+    u8 i, n = (u8)((u16)(live - from) * 4);
+    const u8 *src = &sat_shadow[(u16)from * 4];
+    vdp_write_addr((u16)(SPR_ATTR + (u16)from * 4));
+    for (i = 0; i < n; i++) VDP_DAT = src[i];
+    if (live < 32) VDP_DAT = 216;   /* 停止マーカ(=スロットliveのY)。以降のスプライト非表示 */
 }
