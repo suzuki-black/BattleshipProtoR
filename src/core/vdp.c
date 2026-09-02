@@ -350,6 +350,17 @@ static void set_sprite16(void) {
     __endasm;
 }
 
+/* ★スプライト機能の一括ON/OFF(R#8 bit1=SPD)。on=0でスプライトを完全停止=VDPが
+   スプライト用フェッチを止め、コマンド帯域が回復(HMMMで+約30%, Grauw)。Y=216で隠すだけでは
+   帯域は戻らない点に注意。重い一括blit(艦バッファB生成/カード等=スプライト不要な区間)で off にする。
+   ★他ビット保持のため RG8SAV(0xFFE7=R#8ミラー)を read-modify-write。 */
+void vdp_sprites(u8 on) {
+    volatile u8 *rg8 = (volatile u8 *)0xFFE7;   /* RG8SAV(R#8 ミラー) */
+    u8 v = on ? (u8)(*rg8 & ~0x02) : (u8)(*rg8 | 0x02);   /* SPD=bit1: 1=スプライトOFF */
+    *rg8 = v;
+    vdp_wreg(8, v);
+}
+
 void vdp_sprite_init(void) {
     u8 i;
     set_sprite16();

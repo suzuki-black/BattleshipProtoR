@@ -104,11 +104,14 @@ static void load_stage_data(void) {
 }
 static void prerender_ship(void) {
     if (rendered_stage == (s8)curstage) return;   /* 既に描画済み=再生成不要 */
+    vdp_sprites(0);                            /* ★数千の一括塗り中はスプライトOFF=VDP帯域回復(生成が高速化)。
+                                                  カード表示中でスプライトは元々不要。 */
     scroll_build_sea();                        /* 海テンプレート(512) */
     data_read(ASSET_BANK, ship_ops_off[curstage],  ship_ram,  ship_ops_len[curstage]);
     data_read(ASSET_BANK, ship_ops2_off[curstage], ship_ram2, ship_ops2_len[curstage]);
     ship_render(ship_kind[curstage], ship_hull[curstage], ship_bowcnt[curstage], ship_bowyb[curstage],
                 ship_aagtbl[curstage], ship_aagp[curstage], ship_ram, ship_ram2);
+    vdp_sprites(1);                            /* スプライト復帰(ゲーム開始前) */
     rendered_stage = (s8)curstage;
 }
 

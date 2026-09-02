@@ -71,6 +71,7 @@ void vdp_set_display_page(u8 page);
    SCREEN5 の BIOS 既定テーブルを使用: 属性0x7600 / 色0x7400 / パターン0x7800(vdp.c参照)。
    色はmode2では行ごと(色表16B/枚)。単色運用は vdp_sprite_color で全16行を塗る。 */
 void vdp_sprite_init(void);                          /* 16x16化＋テーブル基底設定＋全消し */
+void vdp_sprites(u8 on);                             /* スプライト機能ON/OFF(R#8 SPD)。重いblit中はoff=VDP帯域回復 */
 void vdp_sprite_pattern(u8 patnum, const u8 *d32);   /* 16x16=32B をパターン patnum へ(patnumは4の倍数) */
 void vdp_sprite_color(u8 slot, u8 color);            /* slot の色表16行を単色 color に */
 void vdp_sprite_color_tab(u8 slot, const u8 *tab16); /* slot の色表を行別に(陰影)。row0=上 */
