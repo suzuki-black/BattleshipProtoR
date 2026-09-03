@@ -694,22 +694,27 @@ u8 stage_update(void) {
     hud_draw(g_score, g_lives);
 
     g_rage = (phase == 1 && ent_live_turrets() <= 1) ? 1 : 0;   /* ★最後の主砲=レイジ(全発砲が速射) */
-    ent_update_all();
-    aa_update();       /* 対空砲23基の発砲(画面内のみ。エアバースト/小弾) */
-    special_update();  /* 艦種別固有兵装(空母=艦載機射出 等) */
-    ent_resolve_collisions();
-    aa_collide();      /* 自機弾×対空砲(座標判定=破壊可能) */
-    ent_draw_all();
-    /* SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール。
-       ★序盤(海モード=phase0)は全幅塗り(実測24ms/f=VDP律速でturboRでも縮まない)が最重→SEA0_DIVで間引く。
-       ★戦闘中(phase1)も sea_frame は実測7.9ms/f(HMMMコピー=VDP実行待ち主体でturboRでも縮まない)と重い。
-         艦が主役で海を注視しない局面なので2フレームに1回へ間引く(約4ms/f削減、turboRの30fps壁に直接効く)。
-         見た目はさざ波が半速になるだけ。 */
+
+    /* ★B6(§B6): CE待ちにCPU仕事を重ねる。海コピー(HMMM=VDP実行待ち主体)を"CPUブロック(更新/当たり判定)の
+       前"に発行し、VDPが海を流している間にCPUが計算する。HUDは上のまま(後ろへ動かすとラスタ振動が再発)。
+       海コピーは表示リングを書くだけでCPUブロックは純計算(競合するVRAM書きが無い)ので安全に重ねられる。
+       ★turboRはCPUがZ80比1/5でVDP待ちが支配的になるため重ね合わせが効く。Z80では利得は小さい(=挙動は不変)。
+       ★当初は ent_draw_all 直前に明示 vdp_cmd_wait() を置いて海コピー完了を待つ設計にしたが、その
+         CE待ちのスピンがラスタ敏感なHUD(最上部)の表示を乱した(digitに横線)。明示待ちは置かず、次に
+         VDPコマンドを出す fire_draw の CE待ちに完了を委ねる(SATバーストは直書きで完了待ち不要)。
+       SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール。
+       ★序盤(phase0=海モード)は全幅塗り(最重)なのでSEA0_DIVで間引く。phase1も7.9ms/fと重いので2フレームに1回。 */
     if (phase != 0) {
         if (++seatick & 1) sea_frame();   /* phase1: 2フレームに1回 */
     } else if (++seatick >= SEA0_DIV) {
         seatick = 0; sea_frame();
     }
+    ent_update_all();
+    aa_update();       /* 対空砲23基の発砲(画面内のみ。エアバースト/小弾) */
+    special_update();  /* 艦種別固有兵装(空母=艦載機射出 等) */
+    ent_resolve_collisions();
+    aa_collide();      /* 自機弾×対空砲(座標判定=破壊可能) */
+    ent_draw_all();    /* SATバースト(直書き)。海コピーがまだ実行中でもVDPがVRAMアクセスを調停(遅くなるだけ)。完了待ちは fire_draw の CE待ちが担う */
     fire_draw();   /* 破壊した主砲＋対空砲を炎上(常時可視=B焼込み, アニメは8fに1回=軽量) */
 
     /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。
