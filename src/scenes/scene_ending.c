@@ -1,9 +1,10 @@
 /* scene_ending.c — ★エンディング(冷たいシーン=bank7)。静かなED曲(track2)＋
    なめらかな縦スクロールのスタッフロール(旧版 run_ending 移植)。
    技法: page0(0..255)を256pxリングにし、R#23(縦スクロール)を毎フレーム更新。スクロールで下端
-   (可視域直下の非可視帯)に入ってくる行だけを、その場で vdp_text 直接描画する(1行ストリーム)。
-   ★旧実装は全行をバッファBへ事前描画していたが B=最大31行の固定上限があった。直接描画に変えて
-     行数上限を撤廃(=物語/クレジットの分量に融通が利く)。描画は非可視帯で行うので tear しない。
+   (可視域直下の非可視帯)に入ってくる行を、その場で **1フレーム1文字ずつ(end_putc)** 先読み描画する。
+   ★旧実装は全行をバッファBへ事前描画(B=最大31行の固定上限)。1文字分散に変えて行数上限を撤廃
+     (=物語/クレジットの分量に融通が利く)。★描画は必ず end_putc(cmd_wait無し)で行う=毎フレーム
+     vdp_cmd_wait を呼ぶとVBLANK割込のタイミングを乱してスクロールがカクつく(実測で確定)。非可視帯なので tear なし。
    ※banked scene: 常駐 vdp_* を注入番地で呼ぶ。データ窓(bank_data)は触らない。 */
 #include "vdp.h"
 #include "input.h"
@@ -81,13 +82,31 @@ static u8 center_x(const char *s) {
     return (u8)((256 - (u16)n * 8) / 2);
 }
 
+/* ★1文字だけ page0(px,py) へ描く最小blit(vdp_cmd_wait を呼ばない=直接VRAM書込のみ)。
+   vdp_text の per-call オーバーヘッド(cmd_waitのCEスピン等)がカクつき原因かの切り分け用。 */
+static void end_putc(u8 px, u8 py, char c) {
+    const u8 *g = vdp_glyph((u8)c);
+    u8 gr;
+    for (gr = 0; gr < 8; gr++) {
+        u8 fb = g[gr], b;
+        vdp_write_addr((u16)((u16)(u8)(py + gr) * 128 + (px >> 1)));
+        for (b = 0; b < 8; b += 2) {
+            u8 hi = (u8)((fb & (u8)(0x80 >> b))       ? END_TX : END_BG);
+            u8 lo = (u8)((fb & (u8)(0x80 >> (b + 1))) ? END_TX : END_BG);
+            vdp_data((u8)((hi << 4) | lo));
+        }
+    }
+}
+
 /* エンディング本体(ブロッキング)。スクロール→THE END→タイトルへ。
    ★行を事前にバッファBへ描く方式(B=最大31行の固定上限)をやめ、スクロールで下端に入る行だけを
      その場で直接描画する(=クレジット行数の上限が消える=融通が利く)。描画位置は可視域(212px)の
      直下の非可視帯なので、スクロールで上がってくる頃には描き終わっている=tearしない。 */
 static u8 run_ending(void) {
     s16 cam, stopcam;
-    s16 botrow = -1;
+    s16 rrow = -1;    /* ★先読み描画中の行。1フレーム1文字ずつ描くので行の途中状態を保持 */
+    u8  rci  = 0xFF;  /* rrow内の描画カーソル(0xFF=この行は描き終わり=次行へ進める) */
+    u8  rx   = 0;     /* rrow の中央寄せ開始x */
     u8  sc = 0;
     u16 f;
 
@@ -102,22 +121,29 @@ static u8 run_ending(void) {
     stopcam = (s16)((NROWS - 1) * 16 + 24);
     cam = -212;
     while (cam < stopcam) {
-        /* ★重い vdp_text 描画は「camを進めないフレーム」に、1フレーム1行だけ先読みで行う。
-           理由: vdp_text は1文字ずつピクセル描画で重く、cam更新(=R#23が変わる=スクロールが動く)
-           フレームで描くと1フレーム溢れて約1秒毎(1行=64フレーム)にスクロールがカクつく。camを
-           進めないフレーム(R#23が前と同値)なら描画で溢れても見た目は停止しない=カクつきが消える。
-           非可視帯(可視域直下)へ2行先まで先読みするので、上がってくる頃には描き終わっている。 */
-        if (sc != 0) {   /* cam更新はsc:3→0の遷移だけ=sc!=0のフレームはR#23不変(スクロール静止)フレーム */
-            /* ★先読みは+1行まで(リング=16行、可視≒13.25行なので余白は約2.75行=44px。基準+13px＋16px=29px<44pxで
-               「上端に残る可視行」と衝突しない。+2行=45pxにすると一番上の可視行を上書きして順序が乱れる)。 */
-            s16 want = (s16)((cam + 224) >> 4) + 1;   /* 可視域直下＋1行先まで(idleフレームの1フレーム遅延を吸収) */
-            if (botrow < want) {
-                botrow++;
-                { u16 ry = (u16)(((u16)botrow * 16) & 0xFF);   /* リング(page0)の該当16px行 */
-                  vdp_fill(0, ry, 256, 16, END_BG);            /* 行をBGでクリア(中央寄せの左右余白も) */
-                  if (botrow >= 0 && botrow < (s16)NROWS && credits[botrow][0])
-                      vdp_text(center_x(credits[botrow]), (u8)ry, END_TX, END_BG, credits[botrow]); }
-            }
+        /* ★スクロールをカクつかせない要(実測で確定):
+           (1) 1行を一気に描かず **1フレームに最大1文字(or 1行クリア)だけ** 描く(char分散)。行は先読み(+1行)
+               で前もって描き切るので、上がってくる頃には完成している。→ 行数の上限なし(融通)。
+           (2) 文字描画は vdp_text でなく **end_putc(=vdp_cmd_wait を呼ばない直接VRAM書込)** を使う。
+               ★vdp_text 内の vdp_cmd_wait(CEポーリング=di/ei+S#2選択の反復)を毎フレーム呼ぶと、VBLANK割込みの
+                 タイミングを乱してフレーム超過を量産し、約38%のフレームがカクついた(素のループは0%)。cmd_wait を
+                 外したら hitch≒0 に。→ **スクロール中のホットパスで vdp_cmd_wait を毎フレーム呼ぶな**。
+           先読みは+1行まで(リング16行/可視≒13.25行=余白約2.75行=44px。基準+13px＋16px=29px<44pxで
+           「上端に残る可視行」と衝突しない。+2行=45pxで一番上の可視行を上書き→表示順が乱れる)。 */
+        { s16 want = (s16)((cam + 224) >> 4) + 1;
+          if (rci == 0xFF) {                        /* 現在行は完了→次行へ(先読み範囲内なら) */
+              if (rrow < want && rrow + 1 < (s16)NROWS) {
+                  rrow++;
+                  { u16 ry = (u16)(((u16)rrow * 16) & 0xFF);
+                    vdp_fill(0, ry, 256, 16, END_BG); }        /* 行クリア(1コマンド=軽い。空行もこれで消える) */
+                  if (credits[rrow][0]) { rx = center_x(credits[rrow]); rci = 0; }   /* 文字あり→描画開始 */
+                  /* 空行は rci=0xFF のまま=次フレームで次行へ */
+              }
+          } else {                                  /* 行の途中: 1文字だけ描く(最小blit=cmd_wait無し) */
+              end_putc((u8)(rx + rci * 8), (u8)(((u16)rrow * 16) & 0xFF), credits[rrow][rci]);
+              rci++;
+              if (credits[rrow][rci] == 0) rci = 0xFF;         /* 行末→完了 */
+          }
         }
         vdp_wait_frame();
         vdp_set_vscroll((u8)(cam & 0xFF));          /* VBLANK直後にR#23=無 tearing */
