@@ -1,44 +1,77 @@
 /* scene_ending.c — ★エンディング(冷たいシーン=bank7)。静かなED曲(track2)＋
    なめらかな縦スクロールのスタッフロール(旧版 run_ending 移植)。
-   技法: 全クレジット行を一度だけオフスクリーンのバッファB(VRAM Y=528)へ描画し、
-   スクロール中は「下端に入る行だけ」1発のLMMM(vdp_copy)で page0 のリング(0..255)へ流し、
-   R#23(縦スクロール)を毎フレーム更新する。全画面コピーは重いのでこの1行ストリームで軽量化。
+   技法: page0(0..255)を256pxリングにし、R#23(縦スクロール)を毎フレーム更新。スクロールで下端
+   (可視域直下の非可視帯)に入ってくる行だけを、その場で vdp_text 直接描画する(1行ストリーム)。
+   ★旧実装は全行をバッファBへ事前描画していたが B=最大31行の固定上限があった。直接描画に変えて
+     行数上限を撤廃(=物語/クレジットの分量に融通が利く)。描画は非可視帯で行うので tear しない。
    ※banked scene: 常駐 vdp_* を注入番地で呼ぶ。データ窓(bank_data)は触らない。 */
 #include "vdp.h"
 #include "input.h"
 #include "scene.h"
 
-#define END_B    528   /* バッファB基準VRAM Y(艦バッファと同域=ED時は空き) */
 #define END_SPD  4     /* 4フレームで1px=約15px/s(ゆっくり) */
 #define END_BG   1     /* 背景=濃紺 */
 #define END_TX   15    /* 文字=白 */
 
 /* クレジット行(旧版 ENDALL 準拠, 描画可能文字 [A-Z0-9 -] のみ)。""=空行(間隔)。 */
 static const char *const credits[] = {
-    "THE ZERO HAS SUNK",
-    "EVERY BATTLESHIP",
+    /* ★エンディングストーリー: READMEあらすじ(走れメロス冒頭のオマージュ)への返歌=結末のオマージュ。
+       暖かくユーモラスに締める。会話は追加した '"' / ',' グリフを使用。 */
+    "IN HIS LONE ZERO",
+    "THE SAMURAI HAD SUNK",
+    "EVERY LAST BATTLESHIP.",
     "",
-    "PEACE RETURNS - BUT",
-    "ONLY FOR A MOMENT",
+    "HIS GREAT WORK DONE,",
+    "HE CAME HOME TO HIS VILLAGE",
+    "STILL IN THE CLOTHES",
+    "THE FIERCE BATTLE HAD TORN.",
     "",
-    "WHAT DID THEY SAVE",
-    "AND WHAT WAS LOST",
+    "THE VILLAGERS CROWDED ROUND,",
+    "AND WITH ONE VOICE",
+    "THEY PRAISED HIS DEED.",
     "",
-    "TIME MARCHES ON",
-    "CRUEL AND UNRELENTING",
+    "THEN A YOUNG GIRL HELD OUT",
+    "A CRIMSON CLOAK TO HIM.",
+    "THE SAMURAI STOOD AT A LOSS.",
+    "",
+    "A GOOD FRIEND OF THE VILLAGE,",
+    "QUICK TO CATCH ON,",
+    "KINDLY TOLD HIM,",
+    "",
+    "\"WHY, YOU ARE ALL BUT NAKED.",
+    "HURRY, PUT ON THAT CLOAK.",
+    "THIS DEAR GIRL CANNOT BEAR",
+    "TO HAVE ALL SEE YOU BARE.\"",
+    "",
+    "THE SAMURAI BLUSHED",
+    "A DEEP, DEEP RED.",
     "",
     "",
     "STAFF",
     "",
-    "CONCEPT - SUZUKI-BLACK",
+    "ORIGINAL PLAN",           /* 原案 */
+    "SUZUKI-BLACK",
     "",
-    "GRAPHICS - CLAUDE CODE",
+    "ORIGINAL CONCEPT",
+    "SUZUKI-BLACK",
     "",
-    "SOUND - CLAUDE CODE",
+    "DIRECTION",
+    "SUZUKI-BLACK",
     "",
-    "PROGRAM - CLAUDE CODE",
+    "PROGRAM",
+    "CLAUDE CODE",
     "",
-    "TITLE - MICROSOFT COPILOT",
+    "GRAPHICS",
+    "CLAUDE CODE",
+    "",
+    "SOUND",
+    "CLAUDE CODE",
+    "",
+    "TITLE ILLUSTRATION",
+    "MS COPILOT",
+    "",
+    "CO-TITLE ILLUSTRATION",   /* 共同=CO-(映画クレジット流) */
+    "CLAUDE CODE",
 };
 #define NROWS ((u8)(sizeof(credits) / sizeof(credits[0])))
 
@@ -48,22 +81,10 @@ static u8 center_x(const char *s) {
     return (u8)((256 - (u16)n * 8) / 2);
 }
 
-/* 全行をバッファB(528..)へ一度だけ描く。空行はBG(初期クリア済み)のまま。 */
-static void prerender(void) {
-    u8 i;
-    vdp_fill(0, END_B, 256, (u16)NROWS * 16, END_BG);   /* B のリールをクリア */
-    for (i = 0; i < NROWS; i++) {
-        const char *s = credits[i];
-        if (s[0]) {
-            vdp_fill(0, 224, 256, 16, END_BG);           /* スクラッチ行(page0の非可視Y=224) */
-            vdp_text(center_x(s), 224, END_TX, END_BG, s);
-            vdp_copy(0, 224, 0, (u16)(END_B + (u16)i * 16), 256, 16);   /* B の i 行へ */
-        }
-    }
-    vdp_fill(0, 224, 256, 16, END_BG);                   /* スクラッチ後始末 */
-}
-
-/* エンディング本体(ブロッキング)。スクロール→THE END→タイトルへ。 */
+/* エンディング本体(ブロッキング)。スクロール→THE END→タイトルへ。
+   ★行を事前にバッファBへ描く方式(B=最大31行の固定上限)をやめ、スクロールで下端に入る行だけを
+     その場で直接描画する(=クレジット行数の上限が消える=融通が利く)。描画位置は可視域(212px)の
+     直下の非可視帯なので、スクロールで上がってくる頃には描き終わっている=tearしない。 */
 static u8 run_ending(void) {
     s16 cam, stopcam;
     s16 botrow = -1;
@@ -77,18 +98,17 @@ static u8 run_ending(void) {
     vdp_set_vscroll(0);
     vdp_set_display_page(0);
     vdp_fill(0, 0, 256, 256, END_BG);      /* page0 リングをクリア */
-    prerender();
 
     stopcam = (s16)((NROWS - 1) * 16 + 24);
     cam = -212;
     while (cam < stopcam) {
-        s16 needbot = (s16)((cam + 224) >> 4);      /* 下端に入るべき行 */
+        s16 needbot = (s16)((cam + 224) >> 4);      /* 下端(可視域直下)に入るべき行 */
         while (botrow < needbot) {
             botrow++;
-            if (botrow >= 0 && botrow < (s16)NROWS)
-                vdp_copy(0, (u16)(END_B + (u16)botrow * 16), 0, (u16)(((u16)botrow * 16) & 0xFF), 256, 16);
-            else
-                vdp_fill(0, (u16)(((u16)botrow * 16) & 0xFF), 256, 16, END_BG);
+            { u16 ry = (u16)(((u16)botrow * 16) & 0xFF);   /* リング(page0)の該当16px行 */
+              vdp_fill(0, ry, 256, 16, END_BG);            /* まず行をBGでクリア(中央寄せの左右余白も) */
+              if (botrow >= 0 && botrow < (s16)NROWS && credits[botrow][0])
+                  vdp_text(center_x(credits[botrow]), (u8)ry, END_TX, END_BG, credits[botrow]); }  /* 直接描画(非可視帯=tearなし) */
         }
         vdp_wait_frame();
         vdp_set_vscroll((u8)(cam & 0xFF));          /* VBLANK直後にR#23=無 tearing */
