@@ -102,17 +102,26 @@ static u8 run_ending(void) {
     stopcam = (s16)((NROWS - 1) * 16 + 24);
     cam = -212;
     while (cam < stopcam) {
-        s16 needbot = (s16)((cam + 224) >> 4);      /* 下端(可視域直下)に入るべき行 */
-        while (botrow < needbot) {
-            botrow++;
-            { u16 ry = (u16)(((u16)botrow * 16) & 0xFF);   /* リング(page0)の該当16px行 */
-              vdp_fill(0, ry, 256, 16, END_BG);            /* まず行をBGでクリア(中央寄せの左右余白も) */
-              if (botrow >= 0 && botrow < (s16)NROWS && credits[botrow][0])
-                  vdp_text(center_x(credits[botrow]), (u8)ry, END_TX, END_BG, credits[botrow]); }  /* 直接描画(非可視帯=tearなし) */
+        /* ★重い vdp_text 描画は「camを進めないフレーム」に、1フレーム1行だけ先読みで行う。
+           理由: vdp_text は1文字ずつピクセル描画で重く、cam更新(=R#23が変わる=スクロールが動く)
+           フレームで描くと1フレーム溢れて約1秒毎(1行=64フレーム)にスクロールがカクつく。camを
+           進めないフレーム(R#23が前と同値)なら描画で溢れても見た目は停止しない=カクつきが消える。
+           非可視帯(可視域直下)へ2行先まで先読みするので、上がってくる頃には描き終わっている。 */
+        if (sc != 0) {   /* cam更新はsc:3→0の遷移だけ=sc!=0のフレームはR#23不変(スクロール静止)フレーム */
+            /* ★先読みは+1行まで(リング=16行、可視≒13.25行なので余白は約2.75行=44px。基準+13px＋16px=29px<44pxで
+               「上端に残る可視行」と衝突しない。+2行=45pxにすると一番上の可視行を上書きして順序が乱れる)。 */
+            s16 want = (s16)((cam + 224) >> 4) + 1;   /* 可視域直下＋1行先まで(idleフレームの1フレーム遅延を吸収) */
+            if (botrow < want) {
+                botrow++;
+                { u16 ry = (u16)(((u16)botrow * 16) & 0xFF);   /* リング(page0)の該当16px行 */
+                  vdp_fill(0, ry, 256, 16, END_BG);            /* 行をBGでクリア(中央寄せの左右余白も) */
+                  if (botrow >= 0 && botrow < (s16)NROWS && credits[botrow][0])
+                      vdp_text(center_x(credits[botrow]), (u8)ry, END_TX, END_BG, credits[botrow]); }
+            }
         }
         vdp_wait_frame();
         vdp_set_vscroll((u8)(cam & 0xFF));          /* VBLANK直後にR#23=無 tearing */
-        if (++sc >= END_SPD) { sc = 0; cam++; }
+        if (++sc >= END_SPD) { sc = 0; cam++; }     /* END_SPDフレームで1px前進 */
         input_poll();
         if (g_input_edge & INP_TRIG) break;         /* SPACEで飛ばせる */
     }
