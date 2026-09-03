@@ -132,12 +132,13 @@ static u8 run_ending(void) {
            「上端に残る可視行」と衝突しない。+2行=45pxで一番上の可視行を上書き→表示順が乱れる)。 */
         { s16 want = (s16)((cam + 224) >> 4) + 1;
           if (rci == 0xFF) {                        /* 現在行は完了→次行へ(先読み範囲内なら) */
-              if (rrow < want && rrow + 1 < (s16)NROWS) {
+              if (rrow < want) {                    /* ★NROWSを超えても行送りは続ける=末尾の行もBGクリアして
+                                                       リングのラップ(16行前の古いクレジット)が再表示されるのを防ぐ */
                   rrow++;
                   { u16 ry = (u16)(((u16)rrow * 16) & 0xFF);
-                    vdp_fill(0, ry, 256, 16, END_BG); }        /* 行クリア(1コマンド=軽い。空行もこれで消える) */
-                  if (credits[rrow][0]) { rx = center_x(credits[rrow]); rci = 0; }   /* 文字あり→描画開始 */
-                  /* 空行は rci=0xFF のまま=次フレームで次行へ */
+                    vdp_fill(0, ry, 256, 16, END_BG); }        /* 行クリア(空行・終端後も必ずクリア) */
+                  if (rrow < (s16)NROWS && credits[rrow][0]) { rx = center_x(credits[rrow]); rci = 0; }  /* 範囲内で文字あり→描画開始 */
+                  /* 空行/終端後は rci=0xFF のまま=次フレームで次行へ(クリアのみ) */
               }
           } else {                                  /* 行の途中: 1文字だけ描く(最小blit=cmd_wait無し) */
               end_putc((u8)(rx + rci * 8), (u8)(((u16)rrow * 16) & 0xFF), credits[rrow][rci]);
