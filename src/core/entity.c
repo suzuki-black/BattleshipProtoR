@@ -293,14 +293,6 @@ u8 g_miss;
 u8 g_hitstop;
 u8 g_shake;
 
-/* 16x16 実体の AABB 重なり(やや甘めのマージン14)。 */
-static u8 overlap(const Entity *a, const Entity *b) {
-    s16 dx = a->x - b->x, dy = a->y - b->y;
-    if (dx < 0) dx = -dx;
-    if (dy < 0) dy = -dy;
-    return (dx < 14 && dy < 14);
-}
-
 void ent_resolve_collisions(void) {
     /* ★プール全走査を1回に統合。従来は「敵ターゲット収集」「自機弾探索」「自機探索＋脅威内側30走査」で
        都合3〜4回プールを舐めていた(各回で active/type を読み直し)。1走査で以下へ分類し、以後はコンパクト
@@ -332,20 +324,31 @@ void ent_resolve_collisions(void) {
             th[nth++] = e;                               /* ミサイルは浮上後(相2以上)のみ危険 */
         }
     }
-    /* 自機弾(TEAM_PLAYER) × 敵戦闘機/砲台 → 弾消滅、戦闘機は即撃破、砲台は hp 減算 */
+    /* 自機弾(TEAM_PLAYER) × 敵戦闘機/砲台 → 弾消滅、戦闘機は即撃破、砲台は hp 減算
+       ★最重ホットパス(実測: 当たり判定=毎フレーム最大コスト。pb×tgt の二乗)。定数削減のため:
+         (1)overlap()の関数呼びを **インライン化**(最悪225回/フレームの call/ret を排除)
+         (2)弾座標 bx/by を外ループで **ホイスト**(内ループの b->x/b->y 再デリファレンスを排除)
+         (3)**X軸で早期棄却**(dx>=14 なら dy 計算前に continue=大半のペアを最短で捨てる)
+         (4)t->type を1回だけ読み **tt にキャッシュ**。判定・スコア・効果は従来と完全同一。 */
     for (i = 0; i < npb; i++) {
+        s16 bx, by;
         b = pb[i];
         if (!b->active) continue;
+        bx = b->x; by = b->y;
         for (j = 0; j < nt; j++) {
+            s16 dx, dy; u8 tt;
             t = tgt[j];
             if (!t->active) continue;   /* 先に別の弾で消えた可能性(集合はstale許容) */
-            if ((t->type == ET_FIGHTER || t->type == ET_PURSUER || t->type == ET_PARKED) && overlap(b, t)) {
+            dx = t->x - bx; if (dx < 0) dx = -dx; if (dx >= 14) continue;   /* X早期棄却 */
+            dy = t->y - by; if (dy < 0) dy = -dy; if (dy >= 14) continue;   /* Y(=overlap成立) */
+            tt = t->type;
+            if (tt == ET_FIGHTER || tt == ET_PURSUER || tt == ET_PARKED) {
                 b->active = 0; t->active = 0; g_kills++;
-                g_score += (t->type == ET_PURSUER) ? 20 : 10;   /* 追尾機20 / 戦闘機・停泊機10 */
+                g_score += (tt == ET_PURSUER) ? 20 : 10;   /* 追尾機20 / 戦闘機・停泊機10 */
                 ent_spawn_explosion(t->x, t->y);   /* 停泊機も自機弾で破壊(体当り判定は持たない) */
                 break;
             }
-            if (t->type == ET_TURRET && t->hp && overlap(b, t)) {
+            if (tt == ET_TURRET && t->hp) {
                 b->active = 0;
                 if (--t->hp == 0) { t->hidden = 1; g_gun_kills++; g_score += 60; ent_spawn_explosion(t->x, t->y);
                                     sfx(2, SFX_BOOM);              /* ★主砲撃破の爆発音(欠落バグ修正。AAだけ鳴っていた) */
