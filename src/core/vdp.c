@@ -433,6 +433,8 @@ void vdp_sprite_hide_from(u8 slot) {
    ★色表(SPR_COLOR=別テーブル)は従来通り直書き(A1の差分キャッシュが効く)。HUD/結果/エンディングは
      直接 vdp_sprite_pos のまま(このバッチ経路は ent_draw_all 専用=影響範囲を局所化)。 */
 static u8 sat_shadow[128];   /* 32枚×4B(Y,X,pattern,予約) */
+static const u8 *sat_src;    /* ★OTIRのソース(vdp_sat_flushが設定→asmが参照)。名前は_始まり不可(sdcc__二重化) */
+static u8 sat_n;             /* ★OTIRのバイト数(1..128)。0のときはバーストしない(OTIRはB=0で256回動く為) */
 void vdp_sat_pos(u8 slot, u8 x, u8 y, u8 patnum) {
     u8 *p = &sat_shadow[(u16)slot * 4];
     p[0] = (u8)(y + g_vscroll - 1);   /* 表示Y=属性Y+1のため-1。縦スクロール量を足して画面固定に補正(直書き版と同一) */
@@ -442,11 +444,23 @@ void vdp_sat_pos(u8 slot, u8 x, u8 y, u8 patnum) {
 }
 /* シャドウの from..live-1(=生存スプライト)を SAT へ一括バーストし、live<32なら続けて停止マーカを直書き。
    ★バースト後 VRAMアドレスは丁度スロット live のYを指すので、停止マーカ用の別書き/別関数が不要。
-   ★0x98(VRAMデータ)はオートインクリメントでアドレスラッチのFFを使わない=di不要(vdp_blit_bank_vram と同理由)。 */
+   ★0x98(VRAMデータ)はオートインクリメントでアドレスラッチのFFを使わない=di不要(vdp_blit_bank_vram と同理由)。
+   ★従来のCループ(1バイト毎に inc/cmp/16bit index load/out ≒40-50T/byte)を **OTIR(21T/byte)** に置換
+     =毎フレーム最大96B(24枚)のSATバーストを約半分のTで流す(vdp_cmd_flush と同じ定石)。OTIRは
+     アドレスラッチFFを使わない0x98連続outなので割込安全(Cループ版と同じ前提)。 */
 void vdp_sat_flush(u8 from, u8 live) {
-    u8 i, n = (u8)((u16)(live - from) * 4);
-    const u8 *src = &sat_shadow[(u16)from * 4];
+    sat_n = (u8)((u16)(live - from) * 4);
+    sat_src = &sat_shadow[(u16)from * 4];
     vdp_write_addr((u16)(SPR_ATTR + (u16)from * 4));
-    for (i = 0; i < n; i++) VDP_DAT = src[i];
+    __asm
+        ld   a, (_sat_n)
+        or   a
+        jr   z, 00002$        ; n==0(可視0枚)ならバーストしない(B=0のOTIR=256回を回避)
+        ld   b, a             ; B = バイト数
+        ld   hl, (_sat_src)   ; HL = シャドウ先頭
+        ld   c, #0x98         ; VDP_DAT
+        otir                  ; [HL]→(0x98) を B 回。VDPアドレスは各writeで自動+1
+    00002$:
+    __endasm;
     if (live < 32) VDP_DAT = 216;   /* 停止マーカ(=スロットliveのY)。以降のスプライト非表示 */
 }
