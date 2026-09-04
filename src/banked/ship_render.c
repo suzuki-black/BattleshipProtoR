@@ -369,7 +369,8 @@ static u8 gameover_impl(void) {
     u8 sel = 0; s8 prev = -1;
     __asm ei __endasm;   /* ★同上: 入力待ち/フレーム待ちに割込みが要る(di のままだとフリーズ) */
     play_sink();
-    vdp_set_vscroll(0); vdp_sprite_hide_from(0); vdp_set_display_page(0);
+    vdp_set_vscroll(0); vdp_set_hscroll(0, 0);   /* ★縦横ともスクロール解除(蛇行weaveXの横ズレが残ると画面全体が右に寄る) */
+    vdp_sprite_hide_from(0); vdp_set_display_page(0);
     vdp_fill(0, 0, 256, 212, 0);
     vdp_text_s(56, 44, 11, 0, 2, "GAME OVER");
     if (g_score > g_hiscore) g_hiscore = g_score;

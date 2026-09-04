@@ -133,6 +133,7 @@ static s8  wdir;
 static u8  dmode;     /* 撃破演出モード(0=通常 / 1=炎上スペクタクル中) */
 static u8  dtimer;    /* 撃破演出の残フレーム */
 static u8  raided;    /* 1=戦艦出現時に空襲(戦闘機/敵弾)を一掃済み */
+static u8  spd_off;   /* ★デバッグ: 1=スプライト表示OFF(SPD)。M(TRIGB)でトグル。実機turboRで「処理落ち=VDPスプライトフェッチ起因か」を確認する用 */
 
 /* weaveX を横HWスクロール(R#26/27)へ。滑らかな左寄せは R#26=ceil(s/8)/R#27=(8-frac)。 */
 static void apply_weave(void) {
@@ -519,6 +520,14 @@ void stage_init(void) {
     g_kills = 0; g_playerhit = 0;
     g_lives = lives_init();
     curstage = (g_stage_sel < STAGE_COUNT) ? g_stage_sel : 0;
+    /* ★VRAMキャッシュ無効化(リセット漏れ対策): タイトル(SCREEN12)→ゲーム(SCREEN5)入場で scene_video_enter が
+       CHGMOD を実行し、実機turboR BIOSはこれで海テンプレ/艦バッファB領域(VRAM 0x10000〜=page2/3)まで消す。
+       同一面をやり直すと rendered_stage==curstage で prerender_ship(=scroll_build_sea+艦描画)がスキップされ、
+       消えたテンプレが再構築されず海が崩壊する(die→GAMEOVER→タイトル→再スタートで再現。実機のみ=C-BIOSは
+       CHGMODの消去範囲が狭く再現しない)。新規ゲーム入場は必ず画面モード往復を伴うので、ここで無効化して
+       CHGMOD後の再構築を強制する。RAM状態の残留(g_scene)は既に対策済みだが、VRAMキャッシュ有効フラグと
+       実VRAMがCHGMODで乖離する同種の穴だった。 */
+    rendered_stage = -1;
     /* ★画面ビューア(config設定): 各画面を個別に表示して確認できる。表示後は stage_update が SC_TITLE を返す。 */
     if (g_view == 1) { draw_stage_card(); view_wait(); return; }              /* ステージ説明カードのみ */
     if (g_view == 2) { load_stage_data(); results_and_fanfare(); return; }    /* 撃破結果(SUNK)画面のみ */
@@ -561,6 +570,7 @@ static void blit_panel_t(u16 dstx, u16 dsty, u8 oncol) {
 static void results_and_fanfare(void) {
     u8 f;
     vdp_set_vscroll(0);                 /* 縦スクロール解除(page0テキストのズレ＋上端ゴミを防ぐ) */
+    vdp_set_hscroll(0, 0);              /* ★横スクロール(蛇行weaveX)も解除=残ると画面全体が右に寄る */
     vdp_sprite_hide_from(0);            /* スプライト全消し(停止マーカを slot0 へ) */
     vdp_set_display_page(0);            /* 結果は非スクロールの page0 に描く */
     vdp_fill(0, 0, 256, 212, 1);        /* 背景=エンディング/開始カードと同じ青(色1)。トーン統一 */
@@ -632,6 +642,10 @@ u8 stage_update(void) {
     if (dmode) return defeat_update();  /* 撃破演出中は専用処理 */
     if (sfresh) { sfresh--; g_shake = 0; g_hitstop = 0; }   /* 出だしの誤揺れを抑止(上記) */
     if (g_hitstop) { g_hitstop--; return SCENE_NONE; }   /* ★ヒットストップ=数フレーム凍結(手応え) */
+    /* ★デバッグ隠しキー: M(TRIGB)でSPD(スプライト表示)をトグル。実機turboRで「敵弾/機体が多いと処理落ち」の
+       因果=VDPスプライトフェッチ帯域か を切り分ける用(OFFにして処理落ちが消えればVDP起因)。
+       Mはゲーム中は未使用(タイトルのコナミコマンド専用)なので衝突しない。次面のprerender_shipでSPDは1に戻る。 */
+    if (g_input_edge & INP_TRIGB) { spd_off ^= 1; vdp_sprites((u8)!spd_off); }
     if (++vcnt >= 5) vcnt = 0;
 
     if (phase == 0) {

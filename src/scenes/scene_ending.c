@@ -115,6 +115,7 @@ static u8 run_ending(void) {
        RAM(bgm_ram)から読み 0xA000窓に触れないので、ここで ei しても bank7 窓は壊れない。 */
     __asm ei __endasm;
     vdp_set_vscroll(0);
+    vdp_set_hscroll(0, 0);   /* ★横スクロール(蛇行weaveX)も解除=実プレイ(クリア→エンディング)で残ると全体が右に寄る */
     vdp_set_display_page(0);
     vdp_fill(0, 0, 256, 256, END_BG);      /* page0 リングをクリア */
 
