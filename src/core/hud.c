@@ -20,7 +20,15 @@ void hud_init(void) {
     vdp_sprite_color(5, 3);    /* 残機アイコン=緑(零戦シルエット) */
     vdp_sprite_color(6, 11);   /* 残機数=黄 */
 #ifdef DEBUG_FPS
-    { u8 s; for (s = 7; s < 14; s++) vdp_sprite_color(s, 13); }   /* g_fps2桁＋カウンタ4桁＋mask1桁=ほぼ黒(視認性) */
+    /* "MASK" の文字スプライトを空きパターン144,148,152,156へ生成(数字と同じくグリフを16x16左上8x8へ) */
+    { static const char msk[4] = { 'M', 'A', 'S', 'K' }; u8 c, rr, p[32];
+      for (c = 0; c < 4; c++) {
+          const u8 *g = vdp_glyph((u8)msk[c]);
+          for (rr = 0; rr < 8;  rr++) p[rr] = g[rr];
+          for (rr = 8; rr < 32; rr++) p[rr] = 0;
+          vdp_sprite_pattern((u8)(144 + c * 4), p);
+      } }
+    { u8 s; for (s = 7; s < 14; s++) vdp_sprite_color(s, 13); }   /* FPS2桁＋"MASK"4字＋mask値1桁=ほぼ黒(視認性) */
 #endif
     g_spr_base = HUD_SLOTS;   /* 以降エンティティは slot(HUD_SLOTS) から詰める */
 }
@@ -46,16 +54,15 @@ void hud_draw(u16 score, u8 lives) {
 #ifdef DEBUG_FPS
     /* ★デバッグROMのみ。左2桁=g_fps(JIFFY基準の参考値)、右4桁=フレームカウンタ(ストップウォッチ実測用の真値)。
        使い方: 右4桁を読む→スマホで正確に10秒→もう一度読む→(差)/10=実FPS。JIFFYの進み方に依存しない。 */
-    /* ★重要: HUD(スコアslot0-4/残機slot5,6)と同じ走査線(y=2)に置くと1走査線8枚制限で桁がドロップする。
-       別の走査線(y=24)へ置き、かつFPSは低slot=高優先なのでゲームスプライト(slot13+)より必ず表示される。 */
+    /* ★1走査線8枚制限を守るため2行に分割: y=24にFPS2桁(slot7,8) / y=40に"MASK n"(slot9-13)。
+       いずれも低slot=高優先なのでゲームスプライト(slot14+)より必ず表示される。 */
     { u8 f = (g_fps > 99) ? 99 : g_fps;
-      u16 fr = g_frame;
-      vdp_sprite_pos(7,  96, 24, (u8)(SPR_DIGIT0 + (f / 10) * 4));
-      vdp_sprite_pos(8, 104, 24, (u8)(SPR_DIGIT0 + (f % 10) * 4));
-      vdp_sprite_pos(9,  120, 24, (u8)(SPR_DIGIT0 + (u8)((fr / 1000) % 10) * 4));
-      vdp_sprite_pos(10, 128, 24, (u8)(SPR_DIGIT0 + (u8)((fr / 100)  % 10) * 4));
-      vdp_sprite_pos(11, 136, 24, (u8)(SPR_DIGIT0 + (u8)((fr / 10)   % 10) * 4));
-      vdp_sprite_pos(12, 144, 24, (u8)(SPR_DIGIT0 + (u8)(fr % 10) * 4));
-      vdp_sprite_pos(13, 160, 24, (u8)(SPR_DIGIT0 + (u8)(g_dbgmask & 7) * 4)); }   /* デバッグマスク(M で巡回) */
+      vdp_sprite_pos(7,  96, 24, (u8)(SPR_DIGIT0 + (f / 10) * 4));   /* FPS十の位 */
+      vdp_sprite_pos(8, 104, 24, (u8)(SPR_DIGIT0 + (f % 10) * 4));   /* FPS一の位 */
+      vdp_sprite_pos(9,   80, 40, 144);   /* M */
+      vdp_sprite_pos(10,  88, 40, 148);   /* A */
+      vdp_sprite_pos(11,  96, 40, 152);   /* S */
+      vdp_sprite_pos(12, 104, 40, 156);   /* K */
+      vdp_sprite_pos(13, 118, 40, (u8)(SPR_DIGIT0 + (u8)(g_dbgmask & 7) * 4)); }   /* マスク値(Mで0→7巡回) */
 #endif
 }
