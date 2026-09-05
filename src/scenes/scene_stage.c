@@ -65,6 +65,7 @@ static char cur_sunk[16];   /* 現在面の「[艦名] SUNK」(NUL終端) */
 static void spawn_turret(u8 shipX, u16 shipY, u8 delay) {
     Entity *e = ent_spawn(ET_TURRET);
     if (e) {
+        g_lturret++;   /* ★生存砲台O(1)カウンタ(stage_buildで0初期化済み。当たり判定の撃破で--) */
         e->ax = (s16)shipX - 8;                /* 砲塔中心x→スプライト左上(中心x=shipX) */
         e->ay = (s16)(SC_SHIP_R0 * 16 + shipY) - 8;   /* 砲身スプライト(旋回中心=8,8)をドーム中心に合わせる */
         e->hp = 5; e->fire = fd_gun_stage[curstage]; e->ftimer = delay;   /* 耐久5(旧版) */
@@ -418,6 +419,7 @@ static void stage_build(void) {
     /* 破壊可能主砲塔(ビスマルク配置=前2/後2。海フェーズ中は画面外)。全撃破でクリア。
        艦内Yは ship_top/ship_bot のマウント位置と一致(前:72/108, 後:300/344)。 */
     g_gun_kills = 0;
+    g_lturret = 0;         /* ★生存砲台O(1)カウンタを0初期化(直後のspawn_turret×4で++) */
     aa_reset();            /* 対空砲の発射タイマ初期化 */
     nburn = 0;             /* 炎上サイト表クリア(面リスタートで炎を消す) */
     special_reset();       /* 艦種別固有兵装のタイマ初期化 */
@@ -723,6 +725,7 @@ u8 stage_update(void) {
     } else if (++seatick >= SEA0_DIV) {
         seatick = 0; sea_frame();
     }
+    ent_recount_ebul();   /* ★敵弾数を1回だけ数え直す(seed)。以降フレーム内の発砲はO(1)カウンタ判定=発砲ごとのO(30)全走査を排除 */
     ent_update_all();
     aa_update();       /* 対空砲23基の発砲(画面内のみ。エアバースト/小弾) */
     special_update();  /* 艦種別固有兵装(空母=艦載機射出 等) */

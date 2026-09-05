@@ -67,6 +67,7 @@ static void bh_aaburst(Entity *e) {
                     f->x = e->x; f->y = (s16)(e->y + k * 3);   /* Yを少しずらし同一走査線回避 */
                     f->vx = (s16)(dirdx8[shdir[k]] * 3); f->vy = (s16)(dirdy8[shdir[k]] * 3);
                     f->color = 12; f->pat = SPR_BULLET;   /* 破片=橙(敵弾統一色) */
+                    g_ebul++;   /* ★敵弾カウンタ(上限O(1)判定用) */
                 }
             }
             ent_spawn_explosion(e->x, e->y);    /* 炸裂の見た目 */
@@ -176,7 +177,7 @@ static void bh_smissile(Entity *e) {
             Entity *b = ent_spawn(ET_BULLET);
             if (b) { b->team = TEAM_ENEMY; b->x = e->x; b->y = e->y;
                      b->vx = (s16)dirdx8[k] * 2; b->vy = (s16)dirdy8[k] * 2;
-                     b->color = 12; b->pat = SPR_BULLET; } } }
+                     b->color = 12; b->pat = SPR_BULLET; g_ebul++; } } }   /* ★敵弾カウンタ */
         ent_spawn_explosion(e->x, e->y); sfx(2, SFX_HIT);
         e->active = 0;
     }
@@ -257,23 +258,23 @@ u8 ent_count(u8 type) {
 Entity *ent_at(u8 i) { return &pool[i]; }
 Entity *ent_pool(void) { return pool; }   /* 先頭ポインタ(ポインタ加算走査で乗算を避ける用) */
 
-u8 ent_live_turrets(void) {
-    u8 i, n = 0; Entity *e = pool;   /* ポインタ加算走査=pool[i]の乗算を排除 */
-    for (i = 0; i < ENT_MAX; i++, e++)
-        if (e->active && e->type == ET_TURRET && e->hp) n++;
-    return n;
-}
+/* ★生存(hp>0)砲台数のO(1)カウンタ。従来は毎フレーム2回(rage/クリア判定)プールをO(30)走査していた。
+   spawn_turretで++、当たり判定で撃破(hp→0)時に--。面リスタートは stage_build が0初期化して再spawn。 */
+u8 g_lturret;
+u8 ent_live_turrets(void) { return g_lturret; }
 
-/* ★画面弾幕リミッタ: 敵弾(TEAM_ENEMYの通常弾＋信管弾)の同時数が ENEMY_BULLET_CAP に達していれば 1。
-   全ての敵弾spawn(emit/emit_burst/炸裂破片)がこれを見て「上限突破しないなら出す/するなら出さない」。
-   上限到達で即抜け(残スロットは走査しない)＝高速。 */
-u8 ent_enemy_bullet_full(void) {
+/* ★敵弾(TEAM_ENEMY通常弾＋信管弾)の同時数のO(1)カウンタ。従来は ent_enemy_bullet_full が発砲弾ごとに
+   O(30)全走査していた(4主砲×5way＋AA＋破片で1フレーム数百〜千イテレーション=砲台/敵増で線形悪化)。
+   毎フレーム頭で ent_recount_ebul() が1回だけ数え直し(seed)、フレーム内の敵弾spawnで g_ebul++。
+   死亡時の減算は次フレームの数え直しが吸収するので不要(=減算漏れバグが原理的に起きない安全設計)。 */
+u8 g_ebul;
+void ent_recount_ebul(void) {
     u8 i, n = 0; Entity *e = pool;
     for (i = 0; i < ENT_MAX; i++, e++)
-        if (e->active && ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_AABURST))
-            if (++n >= ENEMY_BULLET_CAP) return 1;
-    return 0;
+        if (e->active && ((e->type == ET_BULLET && e->team == TEAM_ENEMY) || e->type == ET_AABURST)) n++;
+    g_ebul = n;
 }
+u8 ent_enemy_bullet_full(void) { return (u8)(g_ebul >= ENEMY_BULLET_CAP); }
 
 void ent_spawn_explosion(s16 x, s16 y) {
     Entity *e = ent_spawn(ET_EXPLOSION);
@@ -350,9 +351,9 @@ void ent_resolve_collisions(void) {
             }
             if (tt == ET_TURRET && t->hp) {
                 b->active = 0;
-                if (--t->hp == 0) { t->hidden = 1; g_gun_kills++; g_score += 60; ent_spawn_explosion(t->x, t->y);
+                if (--t->hp == 0) { t->hidden = 1; g_gun_kills++; g_lturret--; g_score += 60; ent_spawn_explosion(t->x, t->y);
                                     sfx(2, SFX_BOOM);              /* ★主砲撃破の爆発音(欠落バグ修正。AAだけ鳴っていた) */
-                                    g_hitstop = 4; g_shake = 8; }   /* 撃破=手応え(凍結＋揺れ)。activeは維持し炎上させる */
+                                    g_hitstop = 4; g_shake = 8; }   /* 撃破=手応え(凍結＋揺れ)。activeは維持し炎上させる。★g_lturret--=生存砲台O(1)カウンタ */
                 else { t->h = 6; ent_spawn_spark(b->x, b->y); }   /* 非撃破=砲身が白フラッシュ(h)＋火花 */
                 break;
             }
@@ -389,6 +390,7 @@ void ent_reset(void) {
     u8 i;
     for (i = 0; i < ENT_MAX; i++) pool[i].active = 0;
     for (i = 0; i < 32; i++) { slot_col[i] = 0xFF; slot_ctab[i] = 0; }   /* 色キャッシュ無効化(面開始/再開で色表を必ず書直す) */
+    g_ebul = 0;
 }
 
 Entity *ent_spawn(u8 type) {

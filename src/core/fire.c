@@ -34,6 +34,7 @@ Entity *emit(s16 x, s16 y, u8 dir, u8 kind, u8 spd) {
     if (ent_enemy_bullet_full()) return (Entity *)0;   /* ★弾幕上限リミッタ(全砲台・全敵共通) */
     b = ent_spawn(ET_BULLET);
     if (!b) return (Entity *)0;
+    g_ebul++;   /* ★敵弾カウンタ(上限O(1)判定用。emitは敵弾専用=自機弾はplayer.c) */
     dir &= 31;
     b->x = x; b->y = y;
     b->vx = (s16)dvx[dir] * spd / 8;
@@ -49,6 +50,7 @@ Entity *emit_burst(s16 x, s16 y, u8 dir, u8 spd, u8 fuze) {
     if (ent_enemy_bullet_full()) return (Entity *)0;   /* ★弾幕上限リミッタ(全砲台・全敵共通) */
     b = ent_spawn(ET_AABURST);
     if (!b) return (Entity *)0;
+    g_ebul++;   /* ★敵弾カウンタ(信管弾も上限対象) */
     dir &= 31;
     b->x = x; b->y = y;
     b->vx = (s16)dvx[dir] * spd / 8;
