@@ -46,13 +46,15 @@ void hud_draw(u16 score, u8 lives) {
 #ifdef DEBUG_FPS
     /* ★デバッグROMのみ。左2桁=g_fps(JIFFY基準の参考値)、右4桁=フレームカウンタ(ストップウォッチ実測用の真値)。
        使い方: 右4桁を読む→スマホで正確に10秒→もう一度読む→(差)/10=実FPS。JIFFYの進み方に依存しない。 */
+    /* ★重要: HUD(スコアslot0-4/残機slot5,6)と同じ走査線(y=2)に置くと1走査線8枚制限で桁がドロップする。
+       別の走査線(y=24)へ置き、かつFPSは低slot=高優先なのでゲームスプライト(slot13+)より必ず表示される。 */
     { u8 f = (g_fps > 99) ? 99 : g_fps;
       u16 fr = g_frame;
-      vdp_sprite_pos(7,  96, 2, (u8)(SPR_DIGIT0 + (f / 10) * 4));
-      vdp_sprite_pos(8, 104, 2, (u8)(SPR_DIGIT0 + (f % 10) * 4));
-      vdp_sprite_pos(9,  120, 2, (u8)(SPR_DIGIT0 + (u8)((fr / 1000) % 10) * 4));
-      vdp_sprite_pos(10, 128, 2, (u8)(SPR_DIGIT0 + (u8)((fr / 100)  % 10) * 4));
-      vdp_sprite_pos(11, 136, 2, (u8)(SPR_DIGIT0 + (u8)((fr / 10)   % 10) * 4));
-      vdp_sprite_pos(12, 144, 2, (u8)(SPR_DIGIT0 + (u8)(fr % 10) * 4)); }
+      vdp_sprite_pos(7,  96, 24, (u8)(SPR_DIGIT0 + (f / 10) * 4));
+      vdp_sprite_pos(8, 104, 24, (u8)(SPR_DIGIT0 + (f % 10) * 4));
+      vdp_sprite_pos(9,  120, 24, (u8)(SPR_DIGIT0 + (u8)((fr / 1000) % 10) * 4));
+      vdp_sprite_pos(10, 128, 24, (u8)(SPR_DIGIT0 + (u8)((fr / 100)  % 10) * 4));
+      vdp_sprite_pos(11, 136, 24, (u8)(SPR_DIGIT0 + (u8)((fr / 10)   % 10) * 4));
+      vdp_sprite_pos(12, 144, 24, (u8)(SPR_DIGIT0 + (u8)(fr % 10) * 4)); }
 #endif
 }
