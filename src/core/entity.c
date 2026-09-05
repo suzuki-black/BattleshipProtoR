@@ -433,15 +433,91 @@ void ent_update_all(void) {
 static void spr_col1(u8 slot, u8 color) {
     if (slot_col[slot] != color) { vdp_sprite_color(slot, color); slot_col[slot] = color; slot_ctab[slot] = 0; }
 }
-static u8 draw1(u8 slot, const Entity *e) {   /* 1体を slot へ描画し、次 slot を返す */
-    if (e->coltab) {                                                                  /* 行別色(陰影) */
-        if (slot_ctab[slot] != e->coltab) {   /* ★A1: 同一coltabが既に載っていれば16B書込みを省く */
-            vdp_sprite_color_tab(slot, e->coltab); slot_ctab[slot] = e->coltab; slot_col[slot] = 0xFF;
-        }
-    }
-    else           spr_col1(slot, e->color);                                          /* 単色(差分のみ書換) */
-    vdp_sat_pos(slot, (u8)e->x, (u8)e->y, e->pat);   /* ★A6: 属性はシャドウへ(最後にバースト) */
-    return (u8)(slot + 1);
+/* ★draw1: 描画の最ホットパス(毎フレーム最大32回)。SDCCのCコードは Entity* をレジスタに保持できず
+   フィールドアクセス毎に pop/push でスタック往復＋IXフレーム＋4引数の vdp_sat_pos 呼びでスタック渡し、と
+   膨大な殻を生んでいた(生成ASMで確認)。ここを __naked ASM で e を IY に固定=全フィールドをオフセット直読み、
+   SAT影は sat_shadow へ直書き(vdp_sat_pos呼びを排除)に置換。色判定/効果は従来と完全同一(検証: SATダンプ一致)。
+   規約: A=slot, DE=e, 戻り A=slot+1(SDCC観測)。色関数 spr_col1(A=slot,L=color)/vdp_sprite_color_tab(A=slot,DE=coltab)。
+   Entity offset: x=2, y=4, color=16, pat=17, coltab=24(2B)。sat_shadow/g_vscroll は vdp.c の非staticグローバル。 */
+static u8 d1slot;              /* ASM draw1のslot退避(呼び出しを跨いで保持) */
+static const u8 *d1ctab;      /* ASM draw1のcoltab退避(vdp_sprite_color_tab呼びでDE破壊のため) */
+static u8 draw1(u8 slot, const Entity *e) __naked {
+    (void)slot; (void)e;
+    __asm
+        ld   (_d1slot), a          ; slot保存
+        push iy
+        push de
+        pop  iy                    ; IY = e
+        ; --- SAT影書込(IYがe確実。呼び出し前に完了) ---
+        ld   a, (_d1slot)
+        ld   l, a
+        ld   h, #0
+        add  hl, hl
+        add  hl, hl                ; slot*4
+        ld   de, #_sat_shadow
+        add  hl, de                ; HL = &sat_shadow[slot*4]
+        ld   a, 4 (iy)             ; e->y(低位)
+        ld   c, a
+        ld   a, (_g_vscroll)
+        add  a, c
+        dec  a
+        ld   (hl), a               ; p[0]=y+vscroll-1
+        inc  hl
+        ld   a, 2 (iy)             ; e->x(低位)
+        ld   (hl), a               ; p[1]=x
+        inc  hl
+        ld   a, 17 (iy)            ; e->pat
+        ld   (hl), a               ; p[2]=pat
+        ; --- 色 ---
+        ld   e, 24 (iy)            ; coltab低
+        ld   d, 25 (iy)            ; coltab高
+        ld   a, d
+        or   e
+        jr   z, 00011$             ; coltab==0 → 単色
+        ; coltab有: slot_ctab[slot]==coltab? (DE=coltab)
+        ld   a, (_d1slot)
+        ld   l, a
+        ld   h, #0
+        add  hl, hl                ; slot*2
+        ld   bc, #_slot_ctab
+        add  hl, bc                ; &slot_ctab[slot]
+        ld   a, (hl)
+        inc  hl
+        ld   h, (hl)
+        ld   l, a                  ; HL=既存coltab
+        or   a
+        sbc  hl, de                ; ==coltab?
+        jr   z, 00019$             ; 同一=16B書込省略
+        ld   (_d1ctab), de         ; coltab退避
+        ld   a, (_d1slot)
+        call _vdp_sprite_color_tab ; A=slot, DE=coltab
+        ld   a, (_d1slot)          ; slot_ctab[slot]=coltab
+        ld   l, a
+        ld   h, #0
+        add  hl, hl
+        ld   bc, #_slot_ctab
+        add  hl, bc
+        ld   de, (_d1ctab)
+        ld   (hl), e
+        inc  hl
+        ld   (hl), d
+        ld   a, (_d1slot)          ; slot_col[slot]=0xFF
+        ld   l, a
+        ld   h, #0
+        ld   bc, #_slot_col
+        add  hl, bc
+        ld   (hl), #0xFF
+        jr   00019$
+    00011$:
+        ld   l, 16 (iy)            ; e->color
+        ld   a, (_d1slot)
+        call _spr_col1             ; A=slot, L=color
+    00019$:
+        pop  iy
+        ld   a, (_d1slot)
+        inc  a                     ; 戻り=slot+1
+        ret
+    __endasm;
 }
 
 /* 落ち影: 自身のパターンを暗色13で右下へオフセット描画(海面に落ちた影)。 */

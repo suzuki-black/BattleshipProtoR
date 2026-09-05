@@ -332,7 +332,7 @@ void vdp_text_s(u8 px, u8 py, u8 fg, u8 bg, u8 scale, const char *s) {
    R#23 縦スクロールは VRAM 全体(スプライト含む)を縦シフトする。g_vscroll に量を保持し、
    vdp_sprite_pos が Y へ加算 → 縦スクロール中もスプライトを画面固定に見せる。
    R#26/27 横スクロール(蛇行)はスプライトに影響しないため補正不要。 */
-static u8 g_vscroll;   /* 現在の縦スクロール量(sprite_pos がYに加算) */
+u8 g_vscroll;   /* ★entity.cのASM draw1が参照するため非static */   /* 現在の縦スクロール量(sprite_pos がYに加算) */
 
 void vdp_set_vscroll(u8 v) {
     g_vscroll = v;
@@ -432,7 +432,7 @@ void vdp_sprite_hide_from(u8 slot) {
    最後に vdp_sat_flush で「1回のアドレス設定＋連続バースト」でVRAMへ流す=アドレス設定を32回→1回へ。
    ★色表(SPR_COLOR=別テーブル)は従来通り直書き(A1の差分キャッシュが効く)。HUD/結果/エンディングは
      直接 vdp_sprite_pos のまま(このバッチ経路は ent_draw_all 専用=影響範囲を局所化)。 */
-static u8 sat_shadow[128];   /* 32枚×4B(Y,X,pattern,予約) */
+u8 sat_shadow[128];   /* ★entity.cのASM draw1が直接書くため非static */   /* 32枚×4B(Y,X,pattern,予約) */
 void vdp_sat_pos(u8 slot, u8 x, u8 y, u8 patnum) {
     u8 *p = &sat_shadow[(u16)slot * 4];
     p[0] = (u8)(y + g_vscroll - 1);   /* 表示Y=属性Y+1のため-1。縦スクロール量を足して画面固定に補正(直書き版と同一) */
