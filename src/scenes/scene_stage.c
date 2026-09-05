@@ -135,6 +135,9 @@ static u8  dmode;     /* 撃破演出モード(0=通常 / 1=炎上スペクタ�
 static u8  dtimer;    /* 撃破演出の残フレーム */
 static u8  raided;    /* 1=戦艦出現時に空襲(戦闘機/敵弾)を一掃済み */
 static u8  spd_off;   /* ★デバッグ: 1=スプライト表示OFF(SPD)。M(TRIGB)でトグル。実機turboRで「処理落ち=VDPスプライトフェッチ起因か」を確認する用 */
+#ifdef DEBUG_FPS
+u8 g_dbgmask;   /* ★デバッグ: bit0=海アニ停止/bit1=AI停止/bit2=描画停止。M(TRIGB)で0→7巡回。hud_drawが値を表示 */
+#endif
 
 /* weaveX を横HWスクロール(R#26/27)へ。滑らかな左寄せは R#26=ceil(s/8)/R#27=(8-frac)。 */
 static void apply_weave(void) {
@@ -644,10 +647,14 @@ u8 stage_update(void) {
     if (dmode) return defeat_update();  /* 撃破演出中は専用処理 */
     if (sfresh) { sfresh--; g_shake = 0; g_hitstop = 0; }   /* 出だしの誤揺れを抑止(上記) */
     if (g_hitstop) { g_hitstop--; return SCENE_NONE; }   /* ★ヒットストップ=数フレーム凍結(手応え) */
-    /* ★デバッグ隠しキー: M(TRIGB)でSPD(スプライト表示)をトグル。実機turboRで「敵弾/機体が多いと処理落ち」の
-       因果=VDPスプライトフェッチ帯域か を切り分ける用(OFFにして処理落ちが消えればVDP起因)。
-       Mはゲーム中は未使用(タイトルのコナミコマンド専用)なので衝突しない。次面のprerender_shipでSPDは1に戻る。 */
+#ifdef DEBUG_FPS
+    /* ★デバッグ(FPSビルド): M(TRIGB)で g_dbgmask を 0→7 巡回。bit0=海アニ停止/bit1=AI(更新/AA/衝突)停止/
+       bit2=描画停止。各モードのFPSを見比べて海モードの重さの内訳(描画 vs AI vs 海)を実機で切り分ける。 */
+    if (g_input_edge & INP_TRIGB) g_dbgmask = (u8)((g_dbgmask + 1) & 7);
+#else
+    /* ★デバッグ隠しキー: M(TRIGB)でSPD(スプライト表示)をトグル(VDPスプライトフェッチ帯域の切り分け用)。 */
     if (g_input_edge & INP_TRIGB) { spd_off ^= 1; vdp_sprites((u8)!spd_off); }
+#endif
     if (++vcnt >= 5) vcnt = 0;
 
     if (phase == 0) {
@@ -720,22 +727,31 @@ u8 stage_update(void) {
          VDPコマンドを出す fire_draw の CE待ちに完了を委ねる(SATバーストは直書きで完了待ち不要)。
        SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール。
        ★序盤(phase0=海モード)は全幅塗り(最重)なのでSEA0_DIVで間引く。phase1も7.9ms/fと重いので2フレームに1回。 */
-#ifndef DEBUG_NOSEA
-    if (phase != 0) {
-        if (++seatick & 1) sea_frame();   /* phase1: 2フレームに1回 */
-    } else if (++seatick >= SEA0_DIV) {
-        seatick = 0; sea_frame();
+#ifdef DEBUG_FPS
+    if (!(g_dbgmask & 1))   /* bit0=海アニ停止 */
+#endif
+    {
+        if (phase != 0) {
+            if (++seatick & 1) sea_frame();   /* phase1: 2フレームに1回 */
+        } else if (++seatick >= SEA0_DIV) {
+            seatick = 0; sea_frame();
+        }
     }
-#endif   /* ★DEBUG_NOSEA=海アニメ(sea_frame)停止=海がVDP律速の主因か切り分け(静的な海はscrollで描画済) */
-#ifndef DEBUG_NOENT
+#ifdef DEBUG_FPS
+    if (!(g_dbgmask & 2))   /* bit1=AI(更新/AA/衝突)停止 */
+#endif
+    {
     ent_recount_ebul();   /* ★敵弾数を1回だけ数え直す(seed)。以降フレーム内の発砲はO(1)カウンタ判定=発砲ごとのO(30)全走査を排除 */
     ent_update_all();
     aa_update();       /* 対空砲23基の発砲(画面内のみ。エアバースト/小弾) */
     special_update();  /* 艦種別固有兵装(空母=艦載機射出 等) */
     ent_resolve_collisions();
     aa_collide();      /* 自機弾×対空砲(座標判定=破壊可能) */
-    ent_draw_all();    /* SATバースト(直書き)。海コピーがまだ実行中でもVDPがVRAMアクセスを調停(遅くなるだけ)。完了待ちは fire_draw の CE待ちが担う */
-#endif   /* ★DEBUG_NOENT=エンティティ処理(更新/AA/衝突/描画)を全停止=処理量が主因か固定オーバーヘッドかの切り分け */
+    }
+#ifdef DEBUG_FPS
+    if (!(g_dbgmask & 4))   /* bit2=描画停止 */
+#endif
+    ent_draw_all();    /* SATバースト(直書き)。完了待ちは fire_draw の CE待ちが担う */
     fire_draw();   /* 破壊した主砲＋対空砲を炎上(常時可視=B焼込み, アニメは8fに1回=軽量) */
 
     /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。

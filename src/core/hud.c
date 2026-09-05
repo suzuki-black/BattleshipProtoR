@@ -20,7 +20,7 @@ void hud_init(void) {
     vdp_sprite_color(5, 3);    /* 残機アイコン=緑(零戦シルエット) */
     vdp_sprite_color(6, 11);   /* 残機数=黄 */
 #ifdef DEBUG_FPS
-    { u8 s; for (s = 7; s < 13; s++) vdp_sprite_color(s, 13); }   /* g_fps2桁＋カウンタ4桁=ほぼ黒(視認性) */
+    { u8 s; for (s = 7; s < 14; s++) vdp_sprite_color(s, 13); }   /* g_fps2桁＋カウンタ4桁＋mask1桁=ほぼ黒(視認性) */
 #endif
     g_spr_base = HUD_SLOTS;   /* 以降エンティティは slot(HUD_SLOTS) から詰める */
 }
@@ -55,6 +55,7 @@ void hud_draw(u16 score, u8 lives) {
       vdp_sprite_pos(9,  120, 24, (u8)(SPR_DIGIT0 + (u8)((fr / 1000) % 10) * 4));
       vdp_sprite_pos(10, 128, 24, (u8)(SPR_DIGIT0 + (u8)((fr / 100)  % 10) * 4));
       vdp_sprite_pos(11, 136, 24, (u8)(SPR_DIGIT0 + (u8)((fr / 10)   % 10) * 4));
-      vdp_sprite_pos(12, 144, 24, (u8)(SPR_DIGIT0 + (u8)(fr % 10) * 4)); }
+      vdp_sprite_pos(12, 144, 24, (u8)(SPR_DIGIT0 + (u8)(fr % 10) * 4));
+      vdp_sprite_pos(13, 160, 24, (u8)(SPR_DIGIT0 + (u8)(g_dbgmask & 7) * 4)); }   /* デバッグマスク(M で巡回) */
 #endif
 }

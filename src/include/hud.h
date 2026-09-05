@@ -8,9 +8,10 @@
 #include "types.h"
 
 #ifdef DEBUG_FPS
-#define HUD_SLOTS 13  /* 通常7 ＋ g_fps2桁(7,8) ＋ フレームカウンタ4桁(9-12)。ent_draw_all は slot13 以降 */
-extern u8  g_fps;     /* JIFFY基準の推定FPS(実機turboRでJIFFYが60Hz前提と異なり誤値。参考) */
-extern u16 g_frame;   /* ★JIFFY非依存: ループ毎+1のフレームカウンタ。ストップウォッチ実測用(真値) */
+#define HUD_SLOTS 14  /* 通常7 ＋ g_fps2桁(7,8) ＋ カウンタ4桁(9-12) ＋ dbgmask1桁(13)。ent_draw_all は slot14 以降 */
+extern u8  g_fps;     /* JIFFY増分を校正して算出した実FPS */
+extern u16 g_frame;   /* ★JIFFY非依存: ループ毎+1のフレームカウンタ。ストップウォッチ検証用 */
+extern u8  g_dbgmask; /* ★M(TRIGB)で0→7巡回。bit0=海停止/bit1=AI停止/bit2=描画停止。切り分け用 */
 #else
 #define HUD_SLOTS 7   /* スコア5桁(0-4)＋残機アイコン(5=零戦シルエット)＋残機数(6)。ent_draw_all は slot7 以降 */
 #endif
