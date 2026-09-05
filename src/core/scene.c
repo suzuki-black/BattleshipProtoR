@@ -73,6 +73,9 @@ static void call_scene(u8 cur, u8 phase) {
     }
 }
 
+#ifdef DEBUG_FPS
+u8 g_fps;   /* 実FPS(毎秒=60JIFFY窓のループ反復数)。hud_drawが表示。デバッグROMのみ */
+#endif
 void scene_run(u8 cur) {
     g_scene = cur;
     scene_video_enter(cur);  /* ビデオモード確立(SC_TITLEはSCREEN12化＋YJK流し込み)を先に */
@@ -89,6 +92,14 @@ void scene_run(u8 cur) {
             scene_bgm_enter(cur);
             call_scene(cur, 0);
         }
+#ifdef DEBUG_FPS
+        /* ★実FPS算出: ループ反復(=描画1フレーム)を数え、JIFFY(60Hz実時間)が60進む毎に確定。
+           リリースビルドでは丸ごと消える(オーバーヘッド0)。 */
+        { static u16 lastj; static u8 fc;
+          u16 j = *(volatile u16 *)0xFC9E;
+          fc++;
+          if ((u16)(j - lastj) >= 60) { g_fps = fc; fc = 0; lastj = j; } }
+#endif
         vdp_wait_frame();
     }
 }

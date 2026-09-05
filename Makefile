@@ -10,6 +10,16 @@ else
   OPT = $(OPT_DEBUG)
 endif
 
+# ── デバッグFPS表示: `make clean && make DEBUG_FPS=1` でFPS常時表示のデバッグROMを生成。
+#    未指定(通常ビルド)では -DDEBUG_FPS が付かず、FPS関連コードは #ifdef で完全に消える
+#    (=リリースはカウント負荷/スプライトslot予約ゼロ)。切替時は必ず make clean(フラグ変更は
+#    ソース不変=makeが再コンパイルを検知しないため)。
+ifdef DEBUG_FPS
+  DEFS = -DDEBUG_FPS
+else
+  DEFS =
+endif
+
 BUILD  = build
 SRC    = src
 CORE   = $(SRC)/core
@@ -85,7 +95,7 @@ $(BUILD)/version.h: FORCE | $(BUILD)
 vpath %.c $(CORE) $(SCENES)
 
 $(BUILD)/%.rel: %.c $(HDRS) | $(BUILD)
-	sdcc -m$(TARGET) -c $(OPT) $(INC) $< -o $@
+	sdcc -m$(TARGET) -c $(OPT) $(DEFS) $(INC) $< -o $@
 
 $(BUILD)/crt0rom.rel: $(SRC)/crt0rom.s | $(BUILD)
 	sdasz80 -o $@ $<

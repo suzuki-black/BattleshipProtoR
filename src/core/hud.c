@@ -19,7 +19,11 @@ void hud_init(void) {
     for (d = 0; d < 5; d++) vdp_sprite_color(d, 15);
     vdp_sprite_color(5, 3);    /* 残機アイコン=緑(零戦シルエット) */
     vdp_sprite_color(6, 11);   /* 残機数=黄 */
-    g_spr_base = HUD_SLOTS;   /* 以降エンティティは slot7 から詰める */
+#ifdef DEBUG_FPS
+    vdp_sprite_color(7, 13);   /* FPS十の位=ほぼ黒(青い海/木甲板で視認性が高い) */
+    vdp_sprite_color(8, 13);   /* FPS一の位=ほぼ黒 */
+#endif
+    g_spr_base = HUD_SLOTS;   /* 以降エンティティは slot(HUD_SLOTS) から詰める */
 }
 
 /* スコア5桁ゼロ詰め(slot0-4)＋残機=零戦アイコン(slot5)＋予備機数1桁(slot6, 右上)。
@@ -40,4 +44,10 @@ void hud_draw(u16 score, u8 lives) {
         vdp_sprite_pos(i, (u8)(8 + i * 8), 2, (u8)(SPR_DIGIT0 + dig[i] * 4));
     vdp_sprite_pos(5, 212, 1, SPR_ZERO);                          /* 残機=零戦シルエット */
     vdp_sprite_pos(6, 234, 2, (u8)(SPR_DIGIT0 + ldig * 4));       /* 予備機数(9頭打ち) */
+#ifdef DEBUG_FPS
+    /* ★デバッグROMのみ: 実FPSを画面中央上に2桁表示(scene_runが毎秒g_fpsを算出)。99頭打ち。 */
+    { u8 f = (g_fps > 99) ? 99 : g_fps;
+      vdp_sprite_pos(7, 120, 2, (u8)(SPR_DIGIT0 + (f / 10) * 4));
+      vdp_sprite_pos(8, 128, 2, (u8)(SPR_DIGIT0 + (f % 10) * 4)); }
+#endif
 }
