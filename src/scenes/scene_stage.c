@@ -727,6 +727,7 @@ u8 stage_update(void) {
         seatick = 0; sea_frame();
     }
 #endif   /* ★DEBUG_NOSEA=海アニメ(sea_frame)停止=海がVDP律速の主因か切り分け(静的な海はscrollで描画済) */
+#ifndef DEBUG_NOENT
     ent_recount_ebul();   /* ★敵弾数を1回だけ数え直す(seed)。以降フレーム内の発砲はO(1)カウンタ判定=発砲ごとのO(30)全走査を排除 */
     ent_update_all();
     aa_update();       /* 対空砲23基の発砲(画面内のみ。エアバースト/小弾) */
@@ -734,6 +735,7 @@ u8 stage_update(void) {
     ent_resolve_collisions();
     aa_collide();      /* 自機弾×対空砲(座標判定=破壊可能) */
     ent_draw_all();    /* SATバースト(直書き)。海コピーがまだ実行中でもVDPがVRAMアクセスを調停(遅くなるだけ)。完了待ちは fire_draw の CE待ちが担う */
+#endif   /* ★DEBUG_NOENT=エンティティ処理(更新/AA/衝突/描画)を全停止=処理量が主因か固定オーバーヘッドかの切り分け */
     fire_draw();   /* 破壊した主砲＋対空砲を炎上(常時可視=B焼込み, アニメは8fに1回=軽量) */
 
     /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。

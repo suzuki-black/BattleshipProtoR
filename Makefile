@@ -22,6 +22,10 @@ endif
 ifdef DEBUG_NOSEA
   DEFS += -DDEBUG_NOSEA
 endif
+# ── エンティティ処理停止(切り分け用): make clean && make DEBUG_FPS=1 DEBUG_NOENT=1
+ifdef DEBUG_NOENT
+  DEFS += -DDEBUG_NOENT
+endif
 
 BUILD  = build
 SRC    = src
