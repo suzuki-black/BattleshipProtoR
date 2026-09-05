@@ -8,7 +8,7 @@
 #include "types.h"
 
 #ifdef DEBUG_FPS
-#define HUD_SLOTS 14  /* 通常7 ＋ g_fps2桁(7,8) ＋ カウンタ4桁(9-12) ＋ dbgmask1桁(13)。ent_draw_all は slot14 以降 */
+#define HUD_SLOTS 15  /* 通常7 ＋ FPS2桁(7,8) ＋ "MASK"4字(9-12) ＋ mask値2桁(13,14)。ent_draw_all は slot15 以降 */
 extern u8  g_fps;     /* JIFFY増分を校正して算出した実FPS */
 extern u16 g_frame;   /* ★JIFFY非依存: ループ毎+1のフレームカウンタ。ストップウォッチ検証用 */
 extern u8  g_dbgmask; /* ★M(TRIGB)で0→7巡回。bit0=海停止/bit1=AI停止/bit2=描画停止。切り分け用 */

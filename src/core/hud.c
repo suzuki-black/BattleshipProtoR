@@ -28,7 +28,7 @@ void hud_init(void) {
           for (rr = 8; rr < 32; rr++) p[rr] = 0;
           vdp_sprite_pattern((u8)(144 + c * 4), p);
       } }
-    { u8 s; for (s = 7; s < 14; s++) vdp_sprite_color(s, 13); }   /* FPS2桁＋"MASK"4字＋mask値1桁=ほぼ黒(視認性) */
+    { u8 s; for (s = 7; s < 15; s++) vdp_sprite_color(s, 13); }   /* FPS2桁＋"MASK"4字＋mask値2桁=ほぼ黒(視認性) */
 #endif
     g_spr_base = HUD_SLOTS;   /* 以降エンティティは slot(HUD_SLOTS) から詰める */
 }
@@ -59,10 +59,11 @@ void hud_draw(u16 score, u8 lives) {
     { u8 f = (g_fps > 99) ? 99 : g_fps;
       vdp_sprite_pos(7,  96, 24, (u8)(SPR_DIGIT0 + (f / 10) * 4));   /* FPS十の位 */
       vdp_sprite_pos(8, 104, 24, (u8)(SPR_DIGIT0 + (f % 10) * 4));   /* FPS一の位 */
-      vdp_sprite_pos(9,   80, 40, 144);   /* M */
-      vdp_sprite_pos(10,  88, 40, 148);   /* A */
-      vdp_sprite_pos(11,  96, 40, 152);   /* S */
-      vdp_sprite_pos(12, 104, 40, 156);   /* K */
-      vdp_sprite_pos(13, 118, 40, (u8)(SPR_DIGIT0 + (u8)(g_dbgmask & 7) * 4)); }   /* マスク値(Mで0→7巡回) */
+      vdp_sprite_pos(9,   72, 40, 144);   /* M */
+      vdp_sprite_pos(10,  80, 40, 148);   /* A */
+      vdp_sprite_pos(11,  88, 40, 152);   /* S */
+      vdp_sprite_pos(12,  96, 40, 156);   /* K */
+      vdp_sprite_pos(13, 112, 40, (u8)(SPR_DIGIT0 + (u8)((g_dbgmask / 10) % 10) * 4));   /* マスク十の位 */
+      vdp_sprite_pos(14, 120, 40, (u8)(SPR_DIGIT0 + (u8)(g_dbgmask % 10) * 4)); }        /* マスク一の位 */
 #endif
 }
