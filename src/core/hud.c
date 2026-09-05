@@ -20,8 +20,7 @@ void hud_init(void) {
     vdp_sprite_color(5, 3);    /* 残機アイコン=緑(零戦シルエット) */
     vdp_sprite_color(6, 11);   /* 残機数=黄 */
 #ifdef DEBUG_FPS
-    vdp_sprite_color(7, 13);   /* FPS十の位=ほぼ黒(青い海/木甲板で視認性が高い) */
-    vdp_sprite_color(8, 13);   /* FPS一の位=ほぼ黒 */
+    { u8 s; for (s = 7; s < 13; s++) vdp_sprite_color(s, 13); }   /* g_fps2桁＋カウンタ4桁=ほぼ黒(視認性) */
 #endif
     g_spr_base = HUD_SLOTS;   /* 以降エンティティは slot(HUD_SLOTS) から詰める */
 }
@@ -45,9 +44,15 @@ void hud_draw(u16 score, u8 lives) {
     vdp_sprite_pos(5, 212, 1, SPR_ZERO);                          /* 残機=零戦シルエット */
     vdp_sprite_pos(6, 234, 2, (u8)(SPR_DIGIT0 + ldig * 4));       /* 予備機数(9頭打ち) */
 #ifdef DEBUG_FPS
-    /* ★デバッグROMのみ: 実FPSを画面中央上に2桁表示(scene_runが毎秒g_fpsを算出)。99頭打ち。 */
+    /* ★デバッグROMのみ。左2桁=g_fps(JIFFY基準の参考値)、右4桁=フレームカウンタ(ストップウォッチ実測用の真値)。
+       使い方: 右4桁を読む→スマホで正確に10秒→もう一度読む→(差)/10=実FPS。JIFFYの進み方に依存しない。 */
     { u8 f = (g_fps > 99) ? 99 : g_fps;
-      vdp_sprite_pos(7, 120, 2, (u8)(SPR_DIGIT0 + (f / 10) * 4));
-      vdp_sprite_pos(8, 128, 2, (u8)(SPR_DIGIT0 + (f % 10) * 4)); }
+      u16 fr = g_frame;
+      vdp_sprite_pos(7,  96, 2, (u8)(SPR_DIGIT0 + (f / 10) * 4));
+      vdp_sprite_pos(8, 104, 2, (u8)(SPR_DIGIT0 + (f % 10) * 4));
+      vdp_sprite_pos(9,  120, 2, (u8)(SPR_DIGIT0 + (u8)((fr / 1000) % 10) * 4));
+      vdp_sprite_pos(10, 128, 2, (u8)(SPR_DIGIT0 + (u8)((fr / 100)  % 10) * 4));
+      vdp_sprite_pos(11, 136, 2, (u8)(SPR_DIGIT0 + (u8)((fr / 10)   % 10) * 4));
+      vdp_sprite_pos(12, 144, 2, (u8)(SPR_DIGIT0 + (u8)(fr % 10) * 4)); }
 #endif
 }

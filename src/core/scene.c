@@ -74,13 +74,23 @@ static void call_scene(u8 cur, u8 phase) {
 }
 
 #ifdef DEBUG_FPS
-u8 g_fps;   /* 実FPS(毎秒=60JIFFY窓のループ反復数)。hud_drawが表示。デバッグROMのみ */
+u8  g_fps;         /* 実FPS(JIFFY増分を校正して算出)。hud_drawが2桁表示 */
+u16 g_frame;       /* ★JIFFY非依存: ループ毎+1。ストップウォッチ実測用(検証)。hud_drawが4桁表示 */
+static u16 fps_n = 1;  /* JIFFYの1VBLANKあたり増分(実機turboRでは1でない疑い=起動時に実測校正) */
 #endif
 void scene_run(u8 cur) {
     g_scene = cur;
     scene_video_enter(cur);  /* ビデオモード確立(SC_TITLEはSCREEN12化＋YJK流し込み)を先に */
     scene_bgm_enter(cur);    /* 窓=bank3 の常駐文脈で(bcall前に)曲を差替える */
     call_scene(cur, 0);
+#ifdef DEBUG_FPS
+    /* ★JIFFY(0xFC9E)の1VBLANKあたり増分を実測校正。実機turboRでは+1でない疑いがあり、
+       これを測らないとFPS換算(60=1秒)が狂う。ガード(g)付きでJIFFY停止時もハングしない。 */
+    { volatile u16 *jf = (volatile u16 *)0xFC9E; u16 a, b, g;
+      a = *jf; g = 0; while (*jf == a && ++g) { }   /* 変化境界へ整列 */
+      a = *jf; g = 0; while (*jf == a && ++g) { }   /* ちょうど1VBLANK分 */
+      b = *jf; fps_n = (u16)(b - a); if (fps_n == 0) fps_n = 1; }
+#endif
     for (;;) {
         input_poll();
         g_scene_ret = SCENE_NONE;
@@ -93,12 +103,12 @@ void scene_run(u8 cur) {
             call_scene(cur, 0);
         }
 #ifdef DEBUG_FPS
-        /* ★実FPS算出: ループ反復(=描画1フレーム)を数え、JIFFY(60Hz実時間)が60進む毎に確定。
-           リリースビルドでは丸ごと消える(オーバーヘッド0)。 */
+        g_frame++;   /* ★JIFFY非依存の真フレーム数(ストップウォッチ検証用) */
+        /* 実FPS: 校正済み fps_n を使い「JIFFYが 60*fps_n 進む=実時間1秒」あたりのループ数=FPS。 */
         { static u16 lastj; static u8 fc;
           u16 j = *(volatile u16 *)0xFC9E;
           fc++;
-          if ((u16)(j - lastj) >= 60) { g_fps = fc; fc = 0; lastj = j; } }
+          if ((u16)(j - lastj) >= (u16)(60 * fps_n)) { g_fps = (fc > 99) ? 99 : fc; fc = 0; lastj = j; } }
 #endif
         vdp_wait_frame();
     }
