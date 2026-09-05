@@ -16,6 +16,8 @@
 #include "player.h"        /* g_player_x/y(対空砲の自機狙い) */
 #include "bank.h"          /* data_read(艦体OPSをバンク→RAM) */
 #include "assets_data.h"   /* 自動生成: ship_ops_off/len, ship_hull/bowcnt/bowyb, SHIP_OPS_RAM_MAX, ASSET_BANK */
+#include "hotcode.h"       /* ent_resolve_collisions/aa_update/aa_collide のRAM実行ラッパ */
+#include "aa_hot.h"        /* AA状態(cam/curstage/aa_*)を hot.c と共有(公開=非static化) */
 /* 撃破!! パネル(1bpp)は常駐節約のためデータバンク(bank8)へ。PANEL_* / panel_off は assets_data.h。 */
 
 /* ★艦(上面視, 496px)は旧版 BattleshipProto の艦システムを忠実移植(ship.c)。海テンプレを下地に
@@ -51,9 +53,9 @@ static const u8 fighter_iv[STAGE_COUNT]   = { 40, 28, 40, 40, 28 };/* 出現間�
 static u8 cur_ctab[16];
 
 static u16 rng;
-static u8  rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }
+u8  rnd(void) { rng = rng * 25173 + 13849; return (u8)(rng >> 8); }   /* ★非static: hot.c(RAM実行のaa_update)から参照 */
 
-static u8 curstage;   /* 現在の面(0..STAGE_COUNT-1)。stage_init が g_stage_sel から設定 */
+u8 curstage;   /* 現在の面(0..STAGE_COUNT-1)。stage_init が g_stage_sel から設定。★非static: hot.c(aa)と共有 */
 /* 面名(開始カード)/撃沈メッセージ(結果画面)はデータバンク(stagename_off/sunk_off, 各16Bスロット)に置き、
    stage_build で当該面の16BをRAMへ読む(常駐節約)。旧版 g_L[10..14] の撃沈メッセージ相当。 */
 static char cur_name[16];   /* 現在面の艦名(NUL終端) */
@@ -125,7 +127,7 @@ static void draw_card_ship(void) {
 
 #define WMAX 40   /* 横揺れ(weaveX)の振幅 */
 
-static u16 cam;
+u16 cam;   /* ★非static: hot.c(aa_update の画面Y算出)と共有 */
 static u8  phase;     /* 0=海(直進) / 1=戦艦(往復蛇行) */
 static u8  sdiv, wtimer, ftick;
 static s8  camdir;    /* 往復方向: -1=船首へ / +1=船尾へ */
@@ -154,18 +156,20 @@ static void apply_weave(void) {
    艦の対空砲は バッファB に描画済みで実体は持たない。ここで座標(ship_aag_pos)を毎フレーム回し、
    画面帯[8,200]に居るものだけ自機狙いで撃つ。前14=大型→時限信管エアバースト / 後9=小型→通常小弾。
    面別間隔 aafire_iv[](小=激しい)＋砲ごとの位相ずらし。艦が画面に居る時(sy帯内)だけ発砲。 */
-static u8 aa_fire[SHIP_NAAG];
-static u8 aa_hp[SHIP_NAAG];     /* 対空砲の耐久(大型=前14基:2 / 小型=後9基:1)。0で aa_dead */
-static u8 aa_dead[SHIP_NAAG];   /* 1=破壊(発砲停止・炎上) */
+/* ★AA状態は hot.c(RAM実行の aa_update/aa_collide)と共有するため非static化(aa_hot.h で公開)。
+   実体は常駐DATA(このTU)に置き、hot.c は extern 参照する(RAM実行モジュールにDATAを持たせない規律)。 */
+u8 aa_fire[SHIP_NAAG];
+u8 aa_hp[SHIP_NAAG];     /* 対空砲の耐久(大型=前14基:2 / 小型=後9基:1)。0で aa_dead */
+u8 aa_dead[SHIP_NAAG];   /* 1=破壊(発砲停止・炎上) */
 /* ★可視AAリスト: aa_update が23基を1回走査する際、当たり範囲(-8..216)内の生存AAだけを
    sx/sy付きで記録。aa_collide は23基再走査・sx/sy再計算をせず、このリストだけを回す
    (艦496px>画面212pxで常に約半数が画面外=当たり判定の23基ループを可視分に短縮)。
    ★aa_update→(ent_resolve_collisions)→aa_collide の順で、間にAA状態は変化しないので有効。 */
-static u8  aa_nvis;
-static u8  aa_vis_i[SHIP_NAAG];   /* 可視AAの砲index */
-static s16 aa_vis_sx[SHIP_NAAG];  /* 画面X(蛇行込み) */
-static s16 aa_vis_sy[SHIP_NAAG];  /* 画面Y */
-static const u8 aafire_iv[STAGE_COUNT] = { 140, 132, 84, 64, 40 };
+u8  aa_nvis;
+u8  aa_vis_i[SHIP_NAAG];   /* 可視AAの砲index */
+s16 aa_vis_sx[SHIP_NAAG];  /* 画面X(蛇行込み) */
+s16 aa_vis_sy[SHIP_NAAG];  /* 画面Y */
+/* aa_update/aa_collide の本体は banked/hot.c(RAM実行)へ移設。aafire_iv も hot.c 側へ移した。 */
 static void aa_reset(void) {
     u8 i;
     for (i = 0; i < SHIP_NAAG; i++) {
@@ -176,76 +180,8 @@ static void aa_reset(void) {
     }
 }
 static u8 aa_alive(void) { u8 i, n = 0; for (i = 0; i < SHIP_NAAG; i++) if (!aa_dead[i]) n++; return n; }
-static void aa_update(void) {
-    u8 tbl = ship_aagtbl[curstage], i, fired = 0, nv = 0;
-    const u8 *aax; const u16 *aay;
-    ship_aag_tables(tbl, &aax, &aay);   /* ★座標表をループ外で1回取得=毎フレーム23回の関数呼び+switchを排除 */
-    for (i = 0; i < SHIP_NAAG; i++) {
-        s16 gx, sy, sx; u16 gy;
-        if (aa_dead[i]) continue;                           /* 破壊済みは撃たない/当たらない */
-        gx = (s16)aax[i]; gy = aay[i];                      /* 直接添字参照(ship_aag_pos関数呼びを回避) */
-        sy = (s16)(SC_SHIP_R0 * 16 + (s16)gy) - (s16)cam;   /* 画面Y */
-        if (sy < -8 || sy > 216) continue;                  /* ★当たり範囲外=発砲も当たりも無い(艦が視界外) */
-        sx = gx + g_meander;                                /* 画面X(蛇行に追従) */
-        aa_vis_i[nv] = i; aa_vis_sx[nv] = sx; aa_vis_sy[nv] = sy; nv++;  /* ★当たり判定用に可視AAを記録(aa_collideが再計算せず使う) */
-        if (sy < 8 || sy > 200) continue;                   /* ↓発砲はより狭い帯でのみ(画面端の砲は撃たない) */
-        if (aa_fire[i]) { aa_fire[i]--; continue; }
-        if (fired >= 2) { aa_fire[i] = 1; continue; }       /* ★同フレーム発砲上限=発砲波のもたつきを平準化(発射レートは不変=次フレームへ繰越) */
-        /* ★画面弾幕上限は emit/emit_burst 側の共通リミッタが取り締まる(全砲台・全敵で一元管理)。 */
-        { /* ★狙い±3ステップの散らし: 全砲が自機へ一直線に撃つと弾が重なって無駄なので方向を散らす。
-             rnd()&7 → -3..+4(≒±38°)。マスクのみ=除算を使わない。 */
-          u8 dir = (u8)((aim_dir(sx, sy, (s16)g_player_x, (s16)g_player_y) + (rnd() & 7) + 29) & 31);
-          if (i < 14) { emit_burst(sx, sy, dir, 2, 42); }    /* 大型=時限信管エアバースト(橙カプセル, fuze42) */
-          else { emit(sx, sy, dir, 0, 2); }                  /* 小型=通常小弾(橙ペレット) */
-        }
-        { u16 iv = (u16)aafire_iv[curstage] + (u16)i * 6;   /* ★u16で計算し255クランプ。
-             以前は (u8)(aafire_iv+i*6) が桁溢れし、高i(=艦最上部)の砲が間隔4フレーム=狂ったように連射する
-             不具合だった(例 BB:140+20*6=260→(u8)=4)。意図(高iほど間隔長=ゆっくり)どおり最遅255で頭打ち。 */
-          aa_fire[i] = diff_interval((iv > 255) ? 255 : (u8)iv); }
-        fired++;
-        sfx(1, SFX_EFIRE);
-    }
-    aa_nvis = nv;   /* ★このフレームの可視AA数(aa_collideが使う) */
-}
-
-static void burn_add(s16 cx, u16 worldY, u8 s);   /* 前方宣言(aa_collide が撃破時に炎上サイト登録。定義は下) */
-
-/* 自機弾 × 対空砲(座標当たり)。命中でHP減、0で破壊(炎上フラグ＋得点＋爆発)。旧版のarray方式移植。
-   AAは実体を持たない(BG描画)ので、プールの自機弾を走査して座標距離で判定する。 */
-static void aa_collide(void) {
-    u8 v, k, nb = 0;
-    Entity *bul[8];                     /* 画面内の自機弾を一度だけ収集(AA毎の全プール再走査=乗算を排す) */
-    Entity *e = ent_pool();
-    for (k = 0; k < ENT_MAX; k++, e++)
-        if (e->active && e->type == ET_BULLET && e->team == TEAM_PLAYER && nb < 8) bul[nb++] = e;
-    if (!nb || !aa_nvis) return;        /* 自機弾/可視AAが無ければ即終了 */
-    {
-    const u8 *aax; const u16 *aay;
-    ship_aag_tables(ship_aagtbl[curstage], &aax, &aay);   /* 撃破時のburn_add用(gx/gyを命中時だけ再読込) */
-    /* ★aa_updateが作った可視AAリスト(sx/sy計算済)だけを回す=23基走査→可視分(通常約半数)へ短縮＋sx/sy再計算を排除。 */
-    for (v = 0; v < aa_nvis; v++) {
-        u8 i = aa_vis_i[v];
-        s16 sx = aa_vis_sx[v], sy = aa_vis_sy[v];
-        for (k = 0; k < nb; k++) {
-            Entity *b = bul[k];
-            if (!b->active) continue;
-            { s16 dx = (s16)(b->x + 8) - sx, dy = (s16)(b->y + 8) - sy;
-              if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
-              if (dx < 10 && dy < 10) {
-                  b->active = 0;
-                  if (aa_hp[i]) aa_hp[i]--;
-                  if (aa_hp[i] == 0) {
-                      aa_dead[i] = 1; g_score += (i < 14) ? 30 : 20;
-                      burn_add((s16)aax[i], (u16)(SC_SHIP_R0 * 16 + aay[i]), (u8)((i < 14) ? 1 : 2));  /* 炎上サイト登録 */
-                      ent_spawn_explosion(sx, sy); sfx(2, SFX_BOOM); g_shake = 6;
-                  } else { ent_spawn_spark(b->x, b->y); sfx(2, SFX_HIT); }
-                  break;
-              }
-            }
-        }
-    }
-    }
-}
+/* aa_update / aa_collide の本体は banked/hot.c(RAM実行)へ移設。ここからは hotcode.c のラッパ
+   (aa_update/aa_collide=hot_ram のジャンプテーブル)を aa_hot.h 経由で呼ぶ。 */
 
 /* ===== 破壊した砲台/対空砲の常時炎上(BG火球ブリット。旧版 fireball 移植) =====
    スプライト枠(32/8perline)を使わず、事前ベイクした火球を page1リングへ透過コピーで毎フレーム重ねる。
@@ -289,7 +225,7 @@ static void burn_bake(u8 left, u16 wtop, u8 box, u8 src) {
 }
 /* ★撃破時に1回: 表へ登録＋frame0をBへ焼込み＋その世界行だけ即リングへ反映(画面内で死んでも即炎)。
    アニメ上書きは fire_draw が8フレームに1回。 */
-static void burn_add(s16 cx, u16 worldY, u8 s) {
+void burn_add(s16 cx, u16 worldY, u8 s) {   /* ★非static: hot.c(aa_collide)が撃破時に呼ぶ */
     u8 box = fb_box[s]; s16 left = (s16)(cx - box / 2); u16 wtop;
     if (nburn >= BURN_MAX) return;
     if (left < 0) left = 0; else if (left > (s16)(256 - box)) left = (s16)(256 - box);

@@ -59,6 +59,7 @@ RESIDENT_RELS = \
   $(BUILD)/ops.rel \
   $(BUILD)/scroll.rel \
   $(BUILD)/ship_aag.rel \
+  $(BUILD)/hotcode.rel \
   $(BUILD)/hud.rel \
   $(BUILD)/scene.rel \
   $(BUILD)/scene_stage.rel \
@@ -75,6 +76,7 @@ ROMPACK_BANKS = --bank 4 assets/cards.bin \
                 --bank 7 $(BUILD)/scene_ending.ihx \
                 --bank 8 $(BUILD)/assets.bin \
                 --bank 16 $(BUILD)/ship_render.ihx \
+                --bank 17 $(BUILD)/hot.bin \
                 --asset 9 assets/title.yjk
 
 .PHONY: all rom clean run
@@ -122,6 +124,9 @@ $(BUILD)/resident_syms.rel: $(BUILD)/rom.ihx tools/gen_symdefs.mjs
 # バンク先頭スタブ(0xA000 に jp _banked_entry を確定)
 $(BUILD)/bankhead.rel: $(SRC)/banked/bankhead.s | $(BUILD)
 	sdasz80 -o $@ $<
+# RAM実行モジュールの先頭スタブ(hot_ram 番地に jp _hot_aa_update/_hot_aa_collide のジャンプテーブルを確定)
+$(BUILD)/hothead.rel: $(SRC)/banked/hothead.s | $(BUILD)
+	sdasz80 -o $@ $<
 # 2) バンクシーン汎用ルール(scene_<name>.c → bank .ihx)。追加は ROMPACK_BANKS に1行。
 #    bankhead + scene_<name> + resident_syms を 0xA000 リンク。data-loc は各シーン共用の退避域。
 $(BUILD)/scene_%.ihx: $(SCENES)/scene_%.c $(HDRS) $(BUILD)/version.h $(BUILD)/bankhead.rel $(BUILD)/resident_syms.rel
@@ -136,8 +141,22 @@ $(BUILD)/ship_render.ihx: $(SRC)/banked/ship_render.c $(HDRS) $(BUILD)/bankhead.
 	sdcc -m$(TARGET) --no-std-crt0 --code-loc 0xA000 --data-loc 0xE000 \
 	     $(BUILD)/bankhead.rel $(BUILD)/ship_render.rel $(BUILD)/resident_syms.rel -o $@
 
+# ── RAM実行モジュール(hot.c) ──
+# 常駐が予約した hot_ram[] の実番地(rom.noi の _hot_ram)へ --code-loc してリンク→ ihx→bin へ変換。
+# rompack は .bin を bank17 先頭から配置し、起動時 hot_load() が hot_ram[] へ転写する。
+$(BUILD)/hot.ihx: $(SRC)/banked/hot.c $(HDRS) $(BUILD)/hothead.rel $(BUILD)/resident_syms.rel
+	sdcc -m$(TARGET) -c $(OPT) $(INC) $(SRC)/banked/hot.c -o $(BUILD)/hot.rel
+	@HA=$$(awk '/^DEF _hot_ram /{print $$3}' $(BUILD)/rom.noi); \
+	 if [ -z "$$HA" ]; then echo "ERROR: rom.noi に _hot_ram が無い(hotcode.c を常駐にリンクせよ)"; exit 2; fi; \
+	 echo "  hot.c を hot_ram=$$HA へリンク"; \
+	 sdcc -m$(TARGET) --no-std-crt0 --code-loc $$HA --data-loc 0xE000 \
+	     $(BUILD)/hothead.rel $(BUILD)/hot.rel $(BUILD)/resident_syms.rel -o $@
+$(BUILD)/hot.bin: $(BUILD)/hot.ihx tools/ihx2bin.mjs
+	@HA=$$(awk '/^DEF _hot_ram /{print $$3}' $(BUILD)/rom.noi); \
+	 node tools/ihx2bin.mjs $(BUILD)/hot.ihx $$HA $@
+
 BANK_IHX = $(BUILD)/scene_title.ihx \
-           $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx
+           $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin
 
 GAME.ROM: $(BUILD)/rom.ihx $(BANK_IHX) $(BUILD)/assets.bin assets/title.yjk assets/cards.bin
 	node tools/rompack.mjs --code $(BUILD)/rom.ihx --out $@ $(ROMPACK_BANKS)

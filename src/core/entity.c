@@ -294,14 +294,13 @@ u8 g_miss;
 u8 g_hitstop;
 u8 g_shake;
 
+/* ent_resolve_collisions — 当たり判定(最重ホットパスの一つ)。
+   ★かつてRAM実行化(hot_ram)を試したが実機turboRで速度変化ゼロ(戦闘中の衝突は自機弾数発×敵数体＝
+     X早期棄却込みで数十イテレーションと元々軽く、フレーム時間の支配要因ではない)と実証されたため、
+     ROM実行へ戻した。貴重な page3 RAM枠(0xE000天井)は、効果のあった AA走査(hot.c)へ充てる。 */
 void ent_resolve_collisions(void) {
-    /* ★プール全走査を1回に統合。従来は「敵ターゲット収集」「自機弾探索」「自機探索＋脅威内側30走査」で
-       都合3〜4回プールを舐めていた(各回で active/type を読み直し)。1走査で以下へ分類し、以後はコンパクト
-       集合だけを回す(判定・スコア・効果は従来と完全同一):
-         pb[]  = 自機弾(TEAM_PLAYER)          … 自機弾×ターゲットの外側
-         tgt[] = 戦闘機/追尾/停泊/砲台         … 自機弾の当たり相手
-         th[]  = 自機に当たる脅威(敵弾/戦闘機/信管弾/追尾/浮上ミサイル) … 自機×脅威
-         player = 自機 */
+    /* ★プール全走査を1回に統合。1走査で以下へ分類し、以後はコンパクト集合だけを回す(判定・スコア・効果同一):
+         pb[]=自機弾 / tgt[]=戦闘機/追尾/停泊/砲台 / th[]=自機に当たる脅威 / player=自機 */
     u8 i, j, npb = 0, nt = 0, nth = 0;
     Entity *b, *t, *e;
     Entity *pb[ENT_MAX], *tgt[ENT_MAX], *th[ENT_MAX], *player = (Entity *)0;
@@ -325,12 +324,7 @@ void ent_resolve_collisions(void) {
             th[nth++] = e;                               /* ミサイルは浮上後(相2以上)のみ危険 */
         }
     }
-    /* 自機弾(TEAM_PLAYER) × 敵戦闘機/砲台 → 弾消滅、戦闘機は即撃破、砲台は hp 減算
-       ★最重ホットパス(実測: 当たり判定=毎フレーム最大コスト。pb×tgt の二乗)。定数削減のため:
-         (1)overlap()の関数呼びを **インライン化**(最悪225回/フレームの call/ret を排除)
-         (2)弾座標 bx/by を外ループで **ホイスト**(内ループの b->x/b->y 再デリファレンスを排除)
-         (3)**X軸で早期棄却**(dx>=14 なら dy 計算前に continue=大半のペアを最短で捨てる)
-         (4)t->type を1回だけ読み **tt にキャッシュ**。判定・スコア・効果は従来と完全同一。 */
+    /* 自機弾 × 敵戦闘機/砲台。overlap()インライン化＋弾座標ホイスト＋X早期棄却＋type1回読み。 */
     for (i = 0; i < npb; i++) {
         s16 bx, by;
         b = pb[i];
@@ -352,14 +346,14 @@ void ent_resolve_collisions(void) {
             if (tt == ET_TURRET && t->hp) {
                 b->active = 0;
                 if (--t->hp == 0) { t->hidden = 1; g_gun_kills++; g_lturret--; g_score += 60; ent_spawn_explosion(t->x, t->y);
-                                    sfx(2, SFX_BOOM);              /* ★主砲撃破の爆発音(欠落バグ修正。AAだけ鳴っていた) */
-                                    g_hitstop = 4; g_shake = 8; }   /* 撃破=手応え(凍結＋揺れ)。activeは維持し炎上させる。★g_lturret--=生存砲台O(1)カウンタ */
+                                    sfx(2, SFX_BOOM);              /* ★主砲撃破の爆発音 */
+                                    g_hitstop = 4; g_shake = 8; }   /* 撃破=手応え(凍結＋揺れ)。activeは維持し炎上。★g_lturret--=生存砲台O(1) */
                 else { t->h = 6; ent_spawn_spark(b->x, b->y); }   /* 非撃破=砲身が白フラッシュ(h)＋火花 */
                 break;
             }
         }
     }
-    /* 敵弾(TEAM_ENEMY)/敵戦闘機/… × 自機 → 敵を消し被弾+1 */
+    /* 敵弾/敵戦闘機/… × 自機 → 敵を消し被弾+1 */
     if (player) {
         Entity *p = player;
         for (j = 0; j < nth; j++) {
@@ -367,7 +361,7 @@ void ent_resolve_collisions(void) {
             s16 dx, dy;
             e = th[j];
             if (!e->active) continue;
-            /* ★自機の当たりは旧版準拠でタイト: 弾/破片=±6、体当り系=±9(共通±14だと避けても被弾で理不尽)。 */
+            /* ★自機の当たりは旧版準拠でタイト: 弾/破片=±6、体当り系=±9。 */
             tol = (e->type == ET_BULLET || e->type == ET_AABURST) ? 6 : 9;
             dx = e->x - p->x; dy = e->y - p->y;
             if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
