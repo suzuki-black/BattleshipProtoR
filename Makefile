@@ -14,10 +14,13 @@ endif
 #    未指定(通常ビルド)では -DDEBUG_FPS が付かず、FPS関連コードは #ifdef で完全に消える
 #    (=リリースはカウント負荷/スプライトslot予約ゼロ)。切替時は必ず make clean(フラグ変更は
 #    ソース不変=makeが再コンパイルを検知しないため)。
+DEFS =
 ifdef DEBUG_FPS
-  DEFS = -DDEBUG_FPS
-else
-  DEFS =
+  DEFS += -DDEBUG_FPS
+endif
+# ── 海アニメ停止(切り分け用): make clean && make DEBUG_FPS=1 DEBUG_NOSEA=1
+ifdef DEBUG_NOSEA
+  DEFS += -DDEBUG_NOSEA
 endif
 
 BUILD  = build

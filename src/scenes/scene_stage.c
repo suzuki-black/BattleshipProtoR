@@ -720,11 +720,13 @@ u8 stage_update(void) {
          VDPコマンドを出す fire_draw の CE待ちに完了を委ねる(SATバーストは直書きで完了待ち不要)。
        SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール。
        ★序盤(phase0=海モード)は全幅塗り(最重)なのでSEA0_DIVで間引く。phase1も7.9ms/fと重いので2フレームに1回。 */
+#ifndef DEBUG_NOSEA
     if (phase != 0) {
         if (++seatick & 1) sea_frame();   /* phase1: 2フレームに1回 */
     } else if (++seatick >= SEA0_DIV) {
         seatick = 0; sea_frame();
     }
+#endif   /* ★DEBUG_NOSEA=海アニメ(sea_frame)停止=海がVDP律速の主因か切り分け(静的な海はscrollで描画済) */
     ent_recount_ebul();   /* ★敵弾数を1回だけ数え直す(seed)。以降フレーム内の発砲はO(1)カウンタ判定=発砲ごとのO(30)全走査を排除 */
     ent_update_all();
     aa_update();       /* 対空砲23基の発砲(画面内のみ。エアバースト/小弾) */
