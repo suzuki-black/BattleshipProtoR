@@ -4,10 +4,16 @@
 #include "sound.h"
 #include "scene.h"
 #include "hotcode.h"
+#ifdef DEBUG_PROF
+#include "prof.h"
+#endif
 
 void main(void) {
     sys_init();           /* turboR: R800 ブースト等          */
     hot_load();           /* AA(対空砲)処理の本体を bank→hot_ram(RAM実行)へコピー(機種非依存で常時) */
+#ifdef DEBUG_PROF
+    prof_selftest();      /* 実機µs自己診断(CPUモード比/VDP I/O単価/HMMM所要)→トリガで抜ける */
+#endif
     sound_init();         /* PSG初期化 + H.TIMI 60Hz ISR 設置 */
     scene_run(SC_TITLE);  /* タイトル(SCREEN12/YJK)から。以降ここから戻らない */
 }

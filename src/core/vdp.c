@@ -4,6 +4,9 @@
 #include "vdp.h"
 #include "msx.h"
 #include "bank.h"    /* vdp_blit_bank_vram が窓めくりに使う(bank_data/bank_restore) */
+#ifdef DEBUG_PROF
+#include "prof.h"
+#endif
 
 __sfr __at(0x98) VDP_DAT;    /* VRAM データ                          */
 __sfr __at(0x99) VDP_CTRL;   /* アドレス/レジスタ                    */
@@ -116,6 +119,9 @@ void vdp_blit_bank_vram(u8 first_bank, u16 total) {
    読んでフラグを消せず→割込が消えず永久再突入でハングする。よって各ポーリングを di で囲み、
    必ず S#0 へ戻してから ei する(S#2 選択窓を最小化しつつ割込は基本 on に保つ)。 */
 void vdp_cmd_wait(void) {
+#ifdef DEBUG_PROF
+    PROF_T0(_pw);
+#endif
     __asm
     00001$:
         di
@@ -132,6 +138,9 @@ void vdp_cmd_wait(void) {
         ei
         jp   c, 00001$
     __endasm;
+#ifdef DEBUG_PROF
+    PROF_ADD(PF_CMDWAIT, _pw);
+#endif
 }
 
 /* ★VDPコマンドレジスタ(R#32-46)の一括発行 = R#17間接オートインクリメント + OTIR。
@@ -221,7 +230,11 @@ void vdp_copy_t(u16 sx, u16 sy, u16 dx, u16 dy, u16 nx, u16 ny) {
 void vdp_wait_frame(void) {
     volatile u16 *j = (volatile u16 *)0xFC9E;   /* JIFFY */
     u16 t = *j;
+#ifdef DEBUG_PROF
+    { PROF_T0(_pw); while (*j == t) { } PROF_ADD(PF_WAIT, _pw); }
+#else
     while (*j == t) { }
+#endif
 }
 
 /* ===== 自前 8x8 フォント(旧版 fontset を移植) =====

@@ -18,6 +18,9 @@
 #include "assets_data.h"   /* 自動生成: ship_ops_off/len, ship_hull/bowcnt/bowyb, SHIP_OPS_RAM_MAX, ASSET_BANK */
 #include "hotcode.h"       /* ent_resolve_collisions/aa_update/aa_collide のRAM実行ラッパ */
 #include "aa_hot.h"        /* AA状態(cam/curstage/aa_*)を hot.c と共有(公開=非static化) */
+#ifdef DEBUG_PROF
+#include "prof.h"
+#endif
 /* 撃破!! パネル(1bpp)は常駐節約のためデータバンク(bank8)へ。PANEL_* / panel_off は assets_data.h。 */
 
 /* ★艦(上面視, 496px)は旧版 BattleshipProto の艦システムを忠実移植(ship.c)。海テンプレを下地に
@@ -673,6 +676,9 @@ u8 stage_update(void) {
          VDPコマンドを出す fire_draw の CE待ちに完了を委ねる(SATバーストは直書きで完了待ち不要)。
        SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール。
        ★序盤(phase0=海モード)は全幅塗り(最重)なのでSEA0_DIVで間引く。phase1も7.9ms/fと重いので2フレームに1回。 */
+#ifdef DEBUG_PROF
+    { PROF_T0(_ps);
+#endif
     if (DBG_ON(1)) {   /* bit1=海アニ停止 */
         if (phase != 0) {
             if (++seatick & 1) sea_frame();   /* phase1: 2フレームに1回 */
@@ -680,14 +686,27 @@ u8 stage_update(void) {
             seatick = 0; sea_frame();
         }
     }
+#ifdef DEBUG_PROF
+    PROF_ADD(PF_SEASCROLL, _ps); }
+#endif
     /* ★AIを個別ゲート(切り分け用)。順序は従来通り: recount→update→aa→special→collision→aa_collide→draw。 */
+#ifdef DEBUG_PROF
+    { PROF_T0(_pa);
+#endif
     if (DBG_ON(8)) ent_recount_ebul();   /* bit8=衝突(recount+resolve)停止 */
     if (DBG_ON(4)) ent_update_all();     /* bit4=更新(behaviors=弾/砲台/敵機の移動・発砲)停止 */
     if (DBG_ON(2)) aa_update();          /* bit2=AA(対空砲23基走査+発砲)停止 */
     if (DBG_ON(4)) special_update();     /* 艦種別固有兵装(更新側に含める) */
     if (DBG_ON(8)) ent_resolve_collisions();
     if (DBG_ON(2)) aa_collide();         /* 自機弾×対空砲(AA側に含める) */
+#ifdef DEBUG_PROF
+    PROF_ADD(PF_AI, _pa); }
+    { PROF_T0(_pd);
+#endif
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
+#ifdef DEBUG_PROF
+    PROF_ADD(PF_DRAW, _pd); }
+#endif
     fire_draw();   /* 破壊した主砲＋対空砲を炎上(常時可視=B焼込み, アニメは8fに1回=軽量) */
 
     /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。

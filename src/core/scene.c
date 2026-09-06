@@ -7,6 +7,9 @@
 #include "vdp.h"
 #include "bank.h"
 #include "sound.h"
+#ifdef DEBUG_PROF
+#include "prof.h"
+#endif
 
 /* シーン入場時に鳴らす BGM トラック。BGM_KEEP=変えない(継続) / BGM_OFF=停止。
    ★bgm_play は data_read(窓差替え)を伴うので常駐(scene_run)から呼ぶ=ここが正しい場所。 */
@@ -92,6 +95,9 @@ void scene_run(u8 cur) {
       b = *jf; fps_n = (u16)(b - a); if (fps_n == 0) fps_n = 1; }
 #endif
     for (;;) {
+#ifdef DEBUG_PROF
+        u16 _pc = prof_tick();   /* 計算区間(input+update)開始 */
+#endif
         input_poll();
         g_scene_ret = SCENE_NONE;
         call_scene(cur, 1);
@@ -110,6 +116,17 @@ void scene_run(u8 cur) {
           fc++;
           if ((u16)(j - lastj) >= (u16)(60 * fps_n)) { g_fps = (fc > 99) ? 99 : fc; fc = 0; lastj = j; } }
 #endif
+#ifdef DEBUG_PROF
+        if (cur == SC_STAGE) {   /* ★計測はステージ(SCREEN5)中のみ。タイトル(SCREEN12)でpage切替すると壊れる */
+            u16 comp = (u16)(prof_tick() - _pc);   /* 計算区間tick(cmd_wait含む) */
+            g_prof_acc[PF_COMPUTE] += comp;
+            vdp_wait_frame();                       /* 空き(PF_WAIT)は vdp_wait_frame 内で計上 */
+            prof_frame_end(comp);
+        } else {
+            vdp_wait_frame();
+        }
+#else
         vdp_wait_frame();
+#endif
     }
 }

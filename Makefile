@@ -18,6 +18,10 @@ DEFS =
 ifdef DEBUG_FPS
   DEFS += -DDEBUG_FPS
 endif
+# ── 実機µs計測(S1990タイマ自己診断): make clean && make DEBUG_PROF=1
+ifdef DEBUG_PROF
+  DEFS += -DDEBUG_PROF
+endif
 # ── 海アニメ停止(切り分け用): make clean && make DEBUG_FPS=1 DEBUG_NOSEA=1
 ifdef DEBUG_NOSEA
   DEFS += -DDEBUG_NOSEA
@@ -60,6 +64,7 @@ RESIDENT_RELS = \
   $(BUILD)/scroll.rel \
   $(BUILD)/ship_aag.rel \
   $(BUILD)/hotcode.rel \
+  $(BUILD)/prof.rel \
   $(BUILD)/hud.rel \
   $(BUILD)/scene.rel \
   $(BUILD)/scene_stage.rel \
