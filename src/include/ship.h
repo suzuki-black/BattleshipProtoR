@@ -42,9 +42,11 @@ typedef struct {
 } ShipArgs;
 extern ShipArgs g_shipargs;
 
-/* 開始カードの艦画像(64x48, bank4)を data_read で入れる常駐RAM。バンク側 draw_card が2倍拡大して
-   page0へ展開(重い拡大ループを常駐から追い出す)。読み込みは常駐で済ませ、バンク内では窓を差替えない。 */
-extern u8 g_card_ram[1536];
+/* 開始カードの艦画像(64x48, bank4)を data_read で入れるRAM。バンク側 draw_card が2倍拡大して
+   page0へ展開(重い拡大ループを常駐から追い出す)。読み込みは常駐で済ませ、バンク内では窓を差替えない。
+   ★固定番地 0xE100(開始カード表示中=戦闘前だけ使う冷データ。常駐DATAを食わず hot_ram 枠を空ける。詳細は ship_aag.c)。 */
+#define CARD_RAM_ADDR 0xE100
+extern u8 __at(CARD_RAM_ADDR) g_card_ram[1536];
 void draw_card_banked(void);   /* g_card_ram を2倍拡大して page0 へ(bcall)。事前に data_read 済のこと */
 /* 冷たい終盤画面をバンクへ(常駐節約)。沈没演出＝自機位置(g_player_x/y)へ火球＋轟音を尺ぶん。
    ゲームオーバー＝黒地にGAME OVER/SCORE/HI＋(継続ON時)CONTINUE/TITLE選択。戻り 1=CONTINUE/0=TITLE。 */

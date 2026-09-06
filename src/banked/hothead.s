@@ -5,6 +5,8 @@
         .module hothead
         .globl  _hot_aa_update
         .globl  _hot_aa_collide
+        .globl  _hot_ent_update_all
         .area   _CODE
         jp      _hot_aa_update            ; slot0 (HOT_SLOT_AA_UPD)
         jp      _hot_aa_collide           ; slot1 (HOT_SLOT_AA_COL)
+        jp      _hot_ent_update_all       ; slot2 (HOT_SLOT_UPDATE)

@@ -93,7 +93,9 @@ static void spawn_parked(u8 shipX, u16 shipY) {
 
 /* 戦艦を バッファB へ事前描画(旧版忠実)。海テンプレ→OPS(+ops2)をRAMへ読み ship_render(艦種別)。
    ★重い(数千VDP塗り)ので、Bに既に現在の艦が居るなら再生成しない(ミス再挑戦=即再開)。 */
-static u8 ship_ram[SHIP_OPS_RAM_MAX];
+/* ★ship_ram: 艦体OPSの展開バッファ。stage_build 時だけ使う冷データ(gameplay中は死)なので、常駐DATAを
+   食わず hot_ram(RAM実行コード)枠を空けるため固定番地 0xE700 に置く(g_card_ram 0xE100 の直後、gameplay中フリー帯)。 */
+static u8 __at(0xE700) ship_ram[SHIP_OPS_RAM_MAX];
 static u8 ship_ram2[128];        /* ops2(空母のみ, max85) */
 static s8 rendered_stage = -1;   /* バッファBに描画済みの面(-1=未) */
 /* 面別テーブルを当該面ぶんRAMへ(艦名/撃沈文/敵機カラー/主砲座標)。★開始カードは stage_build より
@@ -192,7 +194,9 @@ static const u8  fb_box[3] = { 32, 22, 16 };            /* 0=大(主砲=ドー�
 static const u8  fb_px[6] = { 0, 32, 64, 86, 108, 124 };
 
 /* 火球6枚(丸・2コマ×3サイズ: gen_assetsがビルド時ベイク)を バンク→RAM→page0非表示域 へ展開。 */
-static u8 fb_ram[FB_RAM_MAX];
+/* ★fb_ram: 火球ベイクの一時バッファ。bake_fireballs(セットアップ時)だけ使う冷データなので、
+   常駐DATAを食わず hot_ram 枠を空けるため固定番地 0xE900 に置く(ship_ram 0xE700 の後、gameplay中フリー帯)。 */
+static u8 __at(0xE900) fb_ram[FB_RAM_MAX];
 static void bake_fireballs(void) {
     u8 k;
     for (k = 0; k < 6; k++) {

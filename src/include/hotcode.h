@@ -15,14 +15,15 @@
 #include "types.h"
 
 #define HOT_BANK 17     /* rompack --bank 17 build/hot.bin(冷たいバンク帯 bank4+ の空き) */
-#define HOT_CAP  2048   /* hot_ram 予約バイト数。hot.bin(実測=aa_update+aa_collide+表)以上、かつ常駐DATA末尾が
-                           0xE000(バンクデータ)未満に収まること。★page3のRAM実行枠は 0xE000 が天井。
-                           これ以上RAM化するなら常駐冷データ(例: g_card_ram 1.5KB)をバンク退避して枠を空ける。 */
+#define HOT_CAP  5120   /* hot_ram 予約バイト数。hot.bin(実測=aa_update+aa_collide+ent_update_all+behavior群+表)以上、
+                           かつ常駐DATA末尾が 0xE000(バンクデータ)未満に収まること。★page3のRAM実行枠は 0xE000 が天井。
+                           冷データ g_card_ram(0xE100)/ship_ram(0xE700)/fb_ram(0xE900) を高位固定へ退避して枠を確保済み。 */
 
 /* hot_ram 先頭は hothead.s のジャンプテーブル(1関数=3バイトの jp)。番地 hot_ram+3*slot が各関数の入口。
    関数を1つRAM化するたびに hothead.s へ jp を1行、下の HOT_SLOT_* を1つ追加し、対応ラッパを増やす。 */
-#define HOT_SLOT_AA_UPD   0   /* aa_update(対空砲の可視窓走査＋発砲) */
+#define HOT_SLOT_AA_UPD   0   /* aa_update(対空砲の走査＋発砲) */
 #define HOT_SLOT_AA_COL   1   /* aa_collide(自機弾×対空砲) */
+#define HOT_SLOT_UPDATE   2   /* ent_update_all(全エンティティの behavior=移動/AI/発砲) */
 
 extern u8 hot_ram[HOT_CAP];   /* RAM実行領域(常駐_DATAに予約)。リンク番地は rom.noi の _hot_ram を参照 */
 void hot_load(void);          /* 起動時1回: bank HOT_BANK の先頭 HOT_CAP バイトを hot_ram[] へ転写 */

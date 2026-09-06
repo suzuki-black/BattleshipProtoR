@@ -18,7 +18,11 @@ const u8  aag_x_nl[SHIP_NAAG] = { 62,90,62,90,62,90,76,166,194,166,194,166,194,1
 const u16 aag_y_nl[SHIP_NAAG] = { 140,140,220,220,300,300,180,140,140,220,220,300,300,180,110,260,340,340,110,260,340,340,380 };
 
 ShipArgs g_shipargs;
-u8 g_card_ram[1536];   /* 開始カード艦画像(常駐RAM。scene が data_read→draw_card_banked が拡大) */
+/* ★開始カード艦画像バッファ。開始カード表示中(=戦闘前)だけ使う冷データなので、常駐DATA(0xC000〜0xDFFF)を
+   食わずに済むよう固定番地 0xE100 に置く(gameplay中に 0xE000以降を使うのは ship_render の73Bのみ=0xE100は空き)。
+   これで常駐DATAを1.5KB空け、その枠を hot_ram(RAM実行コード)の拡張に充てる。data_read で毎回満たすので gsinit 不要。
+   ※将来バンクシーンのDATAが 0x100(256B)を超えたらここと衝突する(現状最大73B=十分な余裕。rompack/mapで監視可能)。 */
+u8 __at(CARD_RAM_ADDR) g_card_ram[1536];
 
 /* 開始カード画像の2倍拡大を冷たいバンクで実行(常駐節約)。呼ぶ前に g_card_ram を data_read で満たす。 */
 void draw_card_banked(void) {
