@@ -29,6 +29,13 @@ static const u8 kind_col[4] = { 12, 12, 12, 12 };
 static u16 fr = 0x2B7D;
 static u8 frand(void) { fr = fr * 25173 + 13849; return (u8)(fr >> 8); }
 
+/* ★s16 の /8(0方向丸め)を比較＋算術シフトで置換。SDCCの `s16/8` は符号付きなので __divsint
+   (ライブラリ呼び=数百T)を吐くが、これは弾を撃つたびに vx/vy で2回走る最悪ホット。値は /8 と完全一致
+   (負値も0方向丸め)。emit/emit_burst で使用。乗算(dvx*spd)は残るが除算は撲滅。 */
+static s16 sdiv8(s16 v) {
+    return (v < 0) ? -(s16)((u16)(-v) >> 3) : (v >> 3);
+}
+
 Entity *emit(s16 x, s16 y, u8 dir, u8 kind, u8 spd) {
     Entity *b;
     if (ent_enemy_bullet_full()) return (Entity *)0;   /* ★弾幕上限リミッタ(全砲台・全敵共通) */
@@ -37,8 +44,8 @@ Entity *emit(s16 x, s16 y, u8 dir, u8 kind, u8 spd) {
     g_ebul++;   /* ★敵弾カウンタ(上限O(1)判定用。emitは敵弾専用=自機弾はplayer.c) */
     dir &= 31;
     b->x = x; b->y = y;
-    b->vx = (s16)dvx[dir] * spd / 8;
-    b->vy = (s16)dvy[dir] * spd / 8;
+    b->vx = sdiv8((s16)dvx[dir] * spd);   /* ★/8 の __divsint を撲滅(sdiv8=比較+シフト, 値同一) */
+    b->vy = sdiv8((s16)dvy[dir] * spd);
     b->color = kind_col[kind & 3];
     b->pat = BULLET_PAT;
     return b;
@@ -53,8 +60,8 @@ Entity *emit_burst(s16 x, s16 y, u8 dir, u8 spd, u8 fuze) {
     g_ebul++;   /* ★敵弾カウンタ(信管弾も上限対象) */
     dir &= 31;
     b->x = x; b->y = y;
-    b->vx = (s16)dvx[dir] * spd / 8;
-    b->vy = (s16)dvy[dir] * spd / 8;
+    b->vx = sdiv8((s16)dvx[dir] * spd);   /* ★同上: 符号付き除算を撲滅 */
+    b->vy = sdiv8((s16)dvy[dir] * spd);
     b->ftimer = fuze;
     b->color = 12; b->pat = SPR_EBSHELL;   /* 太い信管弾=橙の大カプセル(予告的) */
     return b;
