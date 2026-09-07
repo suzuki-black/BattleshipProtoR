@@ -606,6 +606,12 @@ u8 stage_update(void) {
 #endif
     if (++vcnt >= 5) vcnt = 0;
 
+    /* ★§4-3: 早期return(g_view/dmode/hitstop)を抜けたここから page1 を RAM スロットへ。
+       以降 phase処理(scroll_to/蛇行)・HUD・ホット区間(海/AI/衝突/描画/炎)まで page1常駐コードを
+       R800で約3.8×速フェッチ。区間内で唯一バンキングする bgm_play(艦出現時1回)だけ一時cartへ退避する。
+       区間の出口(fire_draw後 と 全早期return経路)で必ず page1_use_cart() に戻す。 */
+    page1_use_ram();
+
     if (phase == 0) {
         /* 海のみ: ゆっくり前進。★毎フレーム1pxで動かす=停止フレームを作らない(整数スクロールで
            滑らかに出せる最も遅い一定速度)。旧実装は4/5コマだけ動かす=停止コマがカクつき「フレームレート
@@ -636,7 +642,9 @@ u8 stage_update(void) {
            新規戦闘機の湧きは spawn ゲート(cam>SC_CAM_SHIP)が既に止めるので、艦の上に突然湧く心配は無い。 */
         if (cam <= SC_CAM_SHIP && !raided) {
             raided = 1; sea_set_ship(curstage);
+            page1_use_cart();                /* ★§4-3: bgm_playはdata_read(バンキング)=cartが必要 */
             bgm_play(stage_bgm[curstage]);   /* ★敵艦が見えた=海イントロ共通→面別BGMへ切替 */
+            page1_use_ram();                 /* ★戻す(以降のホット区間へ) */
         }
         if (cam <= SC_CAM_SHIP) { phase = 1; camdir = -1; }   /* ★艦出現(=BGM切替)の瞬間から蛇行開始 */
     } else {
@@ -676,10 +684,6 @@ u8 stage_update(void) {
          VDPコマンドを出す fire_draw の CE待ちに完了を委ねる(SATバーストは直書きで完了待ち不要)。
        SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール。
        ★序盤(phase0=海モード)は全幅塗り(最重)なのでSEA0_DIVで間引く。phase1も7.9ms/fと重いので2フレームに1回。 */
-    /* ★§4-3: このホット区間(海/AI/衝突/描画/炎)だけ page1 を RAM スロットへ切替え、page1常駐コードの
-       フェッチをR800で約3.8倍速に。区間内は data_read/bcall(バンキング)を一切呼ばない(確認済み)。
-       ISR(snd_isr)もバンクフリーなので割込みが入ってもよい。g_ramx_ok=0(未対応機/失敗)なら何もしない。 */
-    page1_use_ram();
     /* ★§4-1 VDP-CPUオーバーラップ: 海を「1コピーずつ」VRAM非接触のCPUステップ
        (recount/update/aa_update/special/collision)の合間に発行する。各コピーはVDPが裏で実行し、
        その間にCPUが回る=次コピー発行時には完了済み(cmd_wait≒0)。海の見た目・枚数・速度は一括版と
