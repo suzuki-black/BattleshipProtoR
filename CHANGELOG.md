@@ -9,9 +9,12 @@
 - **MAJOR（x.0.0）**: 大きな節目（1.0.0＝一通り完成した最初のリリース）。
 
 ## [Unreleased]
+
+## [0.1.1] - 2026-09-08
 ### 修正
 - タイトル画面のボーダー（外枠）色が起動状況/直前シーンの残留で毎回変わる問題を修正。
   SCREEN12(タイトル)でも R#7 を黒に明示設定し、全画面でボーダーを黒に統一。
+- README のタイトル画像を、ボーダーが黒の版へ差し替え。
 
 ## [0.1.0] - 2026-09-08
 ### 追加
@@ -47,6 +50,7 @@
 - ソフトリセット堅牢化（crt0で _DATA をゼロ化）。
 - 設計ドキュメント（アルゴリズム解説／開発で苦労したこと）。
 
-[Unreleased]: https://github.com/suzuki-black/BattleshipProtoR/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/suzuki-black/BattleshipProtoR/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/suzuki-black/BattleshipProtoR/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/suzuki-black/BattleshipProtoR/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/suzuki-black/BattleshipProtoR/releases/tag/v0.0.1
