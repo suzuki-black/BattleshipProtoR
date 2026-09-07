@@ -26,8 +26,8 @@ static u8 sfxTimer[SND_CH];
 
 volatile u16 snd_ticks;
 volatile u8  snd_active;
-static u8 sfx_busy_a;   /* このフレーム tone A を SFX(SHOT)が使用中 → BGM melody は譲る */
-static u8 sfx_busy_c;   /* このフレーム noise C を SFX(HIT/BOOM)が使用中 → BGM drum は譲る */
+static u8 sfx_busy_b;   /* このフレーム tone B を SFX(SHOT/PHIT)が使用中 → BGM bass は譲る(★メロディ=chAは死守) */
+static u8 sfx_busy_c;   /* このフレーム noise C を SFX(HIT/BOOM/EFIRE)が使用中 → BGM drum は譲る */
 
 /* 効果音トリガ。type/timer の2バイト更新中に ISR が割り込むと中途半端を読むので di/ei 原子化。
    破壊音(BOOM)再生中は命中音(HIT)で上書きしない(鳴り切らせる)。 */
@@ -42,23 +42,23 @@ void sfx(u8 ch, u8 type) {
 
 /* 毎フレーム更新(ISRから呼ぶ=外部リンケージ)。各chの残り時間に応じ周波数/音量を更新(簡易エンベロープ)。 */
 void sfx_update(void) {
-    u8 ch, cnt = 0, ba = 0, bc = 0;
+    u8 ch, cnt = 0, bb = 0, bc = 0;
     for (ch = 0; ch < SND_CH; ch++) {
         u8 t, rem;
         if (sfxTimer[ch] == 0) continue;
         sfxTimer[ch]--;
         t = sfxType[ch];
         rem = sfxTimer[ch];
-        if (t == SFX_SHOT || t == SFX_PHIT) ba = 1;               /* tone A を SFX が占有 */
+        if (t == SFX_SHOT || t == SFX_PHIT) bb = 1;               /* ★tone B を SFX が占有(メロディ=A死守。ベースが譲る) */
         else if (t == SFX_HIT || t == SFX_BOOM || t == SFX_EFIRE) bc = 1;   /* noise C を占有 */
-        if (t == SFX_SHOT) {                       /* 高→低の下降レーザー */
+        if (t == SFX_SHOT) {                       /* 高→低の下降レーザー(tone B) */
             u16 p = 40 + (u16)(7 - rem) * 62;
-            psg(0, p & 0xFF); psg(1, (p >> 8) & 0x0F);
-            psg(8, (rem >= 2) ? 13 : (rem * 6));
-        } else if (t == SFX_PHIT) {                /* 自機被弾: 低い下降の痛み音(tone A) */
+            psg(2, p & 0xFF); psg(3, (p >> 8) & 0x0F);   /* ★chB tone period */
+            psg(9, (rem >= 2) ? 13 : (rem * 6));          /* ★chB volume */
+        } else if (t == SFX_PHIT) {                /* 自機被弾: 低い下降の痛み音(tone B) */
             u16 p = (u16)(120 + (u16)(15 - rem) * 30);   /* 周期↑=音程↓(下降) */
-            psg(0, p & 0xFF); psg(1, (p >> 8) & 0x0F);
-            psg(8, (rem >= 2) ? 12 : (u8)(rem * 5));
+            psg(2, p & 0xFF); psg(3, (p >> 8) & 0x0F);   /* ★chB */
+            psg(9, (rem >= 2) ? 12 : (u8)(rem * 5));      /* ★chB volume */
         } else if (t == SFX_HIT) {                 /* 短いノイズ "コッ" */
             psg(6, 15); psg(10, rem * 3);
         } else if (t == SFX_EFIRE) {               /* 敵発砲: 静かな短いノイズ "プッ" */
@@ -73,7 +73,7 @@ void sfx_update(void) {
         else cnt++;
     }
     snd_active = cnt;
-    sfx_busy_a = ba;
+    sfx_busy_b = bb;
     sfx_busy_c = bc;
 }
 
@@ -179,8 +179,8 @@ static void bgm_drum(u8 busy) {
 /* ISR から毎フレーム(sfx_update の後)。SFX が使う ch は譲る。 */
 void bgm_update(void) {
     if (!bgmOn) return;
-    bgm_voice(&mIdx, &mTrem, &mCl, mel_n, mel_l, nMel, 0,       0, melPeak, melSus, melVib, 0,         sfx_busy_a);
-    bgm_voice(&bIdx, &bTrem, &bCl, bas_n, (const u8 *)0, nBas, basStep, 1, basPeak, basSus, 0, bassSweep, 0);
+    bgm_voice(&mIdx, &mTrem, &mCl, mel_n, mel_l, nMel, 0,       0, melPeak, melSus, melVib, 0,         0);           /* ★メロディ(chA)は死守=SFXに絶対譲らない */
+    bgm_voice(&bIdx, &bTrem, &bCl, bas_n, (const u8 *)0, nBas, basStep, 1, basPeak, basSus, 0, bassSweep, sfx_busy_b);  /* ★ベース(chB)がSFX(SHOT/PHIT)に譲る */
     if (drumOn) bgm_drum(sfx_busy_c);
 }
 
@@ -261,7 +261,7 @@ static void psg_init(void) {
     sfxTimer[0] = sfxTimer[1] = sfxTimer[2] = 0;
     snd_ticks = 0;
     snd_active = 0;
-    sfx_busy_a = 0;
+    sfx_busy_b = 0;
     bgmOn = 0;
 }
 
