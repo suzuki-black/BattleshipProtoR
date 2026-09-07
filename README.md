@@ -4,8 +4,8 @@
   <img src="docs/media/title.png" width="640" alt="ZERO NO HOUKOU KAI — title screen">
 </p>
 
-> ⚠️ **This is a prototype** (**v0.0.1**), published for feedback and experimentation.
-> **試作品（プロトタイプ）です（v0.0.1）。** フィードバックと実験のために公開しています。
+> ⚠️ **This is a prototype** (**v0.1.0**), published for feedback and experimentation.
+> **試作品（プロトタイプ）です（v0.1.0）。** フィードバックと実験のために公開しています。
 
 A single-player, vertically–scrolling shoot-'em-up for the **MSX turboR** (V9958 VDP · Z80/R800),
 built as a ground-up successor to *Zero no Houkou*. Fly a lone naval fighter from the open sea
@@ -73,8 +73,8 @@ public once ready. This game is an **improved successor to
 - **H.TIMI 60 Hz interrupt PSG sound driver** (frame-rate independent), with per-stage **original
   music** — every track is composed for this game and is **not** derived from any existing work —
   a two-tier soundtrack (calm sea intro → stage battle theme) and a victory fanfare.
-- **Difficulty scaling, hit-stop and screen-shake feedback, a high-score, and a "rage" escalation**
-  when a ship is nearly destroyed.
+- **Difficulty scaling, hit-stop and screen-shake feedback, on-kill score pop-ups above the
+  destroyed target, a high-score, and a "rage" escalation** when a ship is nearly destroyed.
 
 ### Controls
 | Input | Action |
@@ -209,8 +209,8 @@ silhouettes may differ from the real thing.)
 - **H.TIMI 60Hz 割込みで回すフレームレート非依存の PSG 音ドライバ**。面別の**オリジナル楽曲**
   （すべて本作のための書き下ろしで、既存楽曲を元にしたものではありません）、2段構成のサウンド
   （穏やかな海イントロ→各面の戦闘曲）、勝ちどきのファンファーレ。
-- **難易度スケーリング／被弾・撃破のヒットストップと画面揺れ／ハイスコア／艦が残り僅かになると
-  発砲が激化するレイジ**。
+- **難易度スケーリング／被弾・撃破のヒットストップと画面揺れ／撃破時に加算点を撃破位置へ表示する
+  点数ポップアップ／ハイスコア／艦が残り僅かになると発砲が激化するレイジ**。
 
 ### 操作
 | 入力 | 動作 |

@@ -155,8 +155,10 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 
 ### 3.7 サウンド＋BGM (`sound.c`) とデータバンク運用 (`bank.c` / `gen_assets.mjs`)
 - **ISR(H.TIMI 60Hz)**: `snd_isr`(`__naked`, 全レジスタ退避)が毎フレーム `sfx_update`→`bgm_update`。ゲーム負荷非依存。
-- **PSG割当**: melody=tone A(SFX SHOTと共有), bass=tone B, noise C=SFX命中/破壊(将来drum)。**SFX優先**: `sfx_update`が
-  tone A使用中フラグ `sfx_busy_a` を立て、`bgm_update`はその間 melody を譲る(SFXが鳴り終えると即復帰)。
+- **PSG割当**: melody=tone A(**効果音から死守＝絶対に譲らない**), bass=tone B(自機発射音SFX_SHOT/被弾音PHITが
+  一時占有＝**ベース側が譲る**), noise C=SFX命中/破壊/敵発砲＋drum。**SFX優先はベース(B)/ノイズ(C)のみ**:
+  `sfx_update`が tone B使用中フラグ `sfx_busy_b`(noiseは `sfx_busy_c`)を立て、`bgm_update`はその間 bass/drum を
+  譲る（メロディAはSFXに一切譲らない＝どのステージでも撃つ/被弾でメロディが途切れない。鳴り終えると即復帰）。
 - **ファンファーレ** `play_fanfare`: ループBGMとは別に、`bgmOn=0` にして前景で mel(A)+har(B) を直接鳴らし
   `vdp_wait_frame` で尺を取る**同期(ブロッキング)再生**。撃破演出の勝ちどきで使用(終了まで戻らない)。
 - **BGM曲データ**: `[nMel,nBas,basStep, melPeak,melSus,melVib, basPeak,basSus, drumOn, melNote, melLen, basNote]`。
