@@ -68,12 +68,14 @@ void    ent_draw_all(void);         /* active をスプライトへ(hidden除く
 u8      ent_count(u8 type);         /* active な type の数(撃破判定用) */
 Entity *ent_at(u8 i);               /* プールの i 番目(0..ENT_MAX-1)。active は呼び側で確認 */
 Entity *ent_pool(void);             /* プール先頭ポインタ(ポインタ加算で走査=添字乗算を避ける) */
+void    scorepop_add(s16 sx, s16 sy, u16 val);  /* ★破壊点数ポップアップ登録(画面座標＋加算点)。撃破サイトから呼ぶ */
 u8      ent_live_turrets(void);     /* 生存(hp>0)砲台の数(O(1)=g_lturretを返す)。撃破済みは active のまま炎上させるため別カウント */
 extern u8 g_lturret;                /* ★生存砲台のO(1)カウンタ。spawn_turretで++、当たり判定の撃破で--、stage_buildで0初期化 */
 
 /* ★画面弾幕リミッタ(全砲台・全敵で一元管理)。敵弾(通常弾＋信管弾＋炸裂破片)の同時数が上限に
-   達していれば 1 を返す=以降の敵弾spawnを一律に取り締まる。体感で20相当に見えたため15へ引き下げ。 */
-#define ENEMY_BULLET_CAP 15
+   達していれば 1 を返す=以降の敵弾spawnを一律に取り締まる。★30fps固定で計算に余裕が出たため
+   負荷軽減で下げていた15を元の設計値20へ復帰(弾幕の濃さを原状回復)。 */
+#define ENEMY_BULLET_CAP 20
 u8      ent_enemy_bullet_full(void);
 extern u8 g_ebul;                   /* ★敵弾同時数のO(1)カウンタ(emit系で++、毎フレーム再計数) */
 void      ent_recount_ebul(void);   /* ★毎フレーム頭で敵弾数を1回だけ数え直す(seed) */

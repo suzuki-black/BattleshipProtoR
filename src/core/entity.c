@@ -71,6 +71,23 @@ u8 g_miss;
 u8 g_hitstop;
 u8 g_shake;
 
+/* ===== 破壊点数ポップアップ: 撃破位置の真上に加算点を数字スプライトで数フレーム表示 ===== */
+#define SPOP_MAX    5
+#define SPOP_FRAMES 45           /* 30fps固定で約1.5秒 */
+static s16 spop_x[SPOP_MAX], spop_y[SPOP_MAX];   /* 撃破オブジェクトの画面座標(左上) */
+static u16 spop_val[SPOP_MAX];                    /* 加算点(10/20/30/60 等) */
+static u8  spop_t[SPOP_MAX];                      /* 残表示フレーム(0=空き) */
+/* 撃破サイトから呼ぶ: 画面座標(x,y)＋点数を登録。空きが無ければ最も残り少ないものを上書き。 */
+void scorepop_add(s16 sx, s16 sy, u16 val) {
+    u8 i, slot = 0, tmin = 0xFF;
+    for (i = 0; i < SPOP_MAX; i++) {
+        if (!spop_t[i]) { slot = i; break; }              /* 空き優先 */
+        if (spop_t[i] < tmin) { tmin = spop_t[i]; slot = i; }
+    }
+    spop_x[slot] = sx; spop_y[slot] = sy; spop_val[slot] = val; spop_t[slot] = SPOP_FRAMES;
+}
+static void scorepop_reset(void) { u8 i; for (i = 0; i < SPOP_MAX; i++) spop_t[i] = 0; }
+
 /* ent_resolve_collisions — 当たり判定(最重ホットパスの一つ)。
    ★かつてRAM実行化(hot_ram)を試したが実機turboRで速度変化ゼロ(戦闘中の衝突は自機弾数発×敵数体＝
      X早期棄却込みで数十イテレーションと元々軽く、フレーム時間の支配要因ではない)と実証されたため、
@@ -116,13 +133,15 @@ void ent_resolve_collisions(void) {
             tt = t->type;
             if (tt == ET_FIGHTER || tt == ET_PURSUER || tt == ET_PARKED) {
                 b->active = 0; t->active = 0; g_kills++;
-                g_score += (tt == ET_PURSUER) ? 20 : 10;   /* 追尾機20 / 戦闘機・停泊機10 */
+                { u16 pts = (tt == ET_PURSUER) ? 20 : 10; g_score += pts;   /* 追尾機20 / 戦闘機・停泊機10 */
+                  scorepop_add(t->x, t->y, pts); }                          /* ★破壊点数ポップアップ */
                 ent_spawn_explosion(t->x, t->y);   /* 停泊機も自機弾で破壊(体当り判定は持たない) */
                 break;
             }
             if (tt == ET_TURRET && t->hp) {
                 b->active = 0;
                 if (--t->hp == 0) { t->hidden = 1; g_gun_kills++; g_lturret--; g_score += 60; ent_spawn_explosion(t->x, t->y);
+                                    scorepop_add(t->x, t->y, 60);  /* ★破壊点数ポップアップ */
                                     sfx(2, SFX_BOOM);              /* ★主砲撃破の爆発音 */
                                     g_hitstop = 4; g_shake = 8; }   /* 撃破=手応え(凍結＋揺れ)。activeは維持し炎上。★g_lturret--=生存砲台O(1) */
                 else { t->h = 6; ent_spawn_spark(b->x, b->y); }   /* 非撃破=砲身が白フラッシュ(h)＋火花 */
@@ -162,6 +181,7 @@ void ent_reset(void) {
     for (i = 0; i < ENT_MAX; i++) pool[i].active = 0;
     for (i = 0; i < 32; i++) { slot_col[i] = 0xFF; slot_ctab[i] = 0; }   /* 色キャッシュ無効化(面開始/再開で色表を必ず書直す) */
     g_ebul = 0;
+    scorepop_reset();   /* ★破壊点数ポップアップも面開始/再開でクリア */
 }
 
 Entity *ent_spawn(u8 type) {
@@ -336,6 +356,30 @@ void ent_draw_all(void) {
     }
     /* 落ち影パス: 影は最後=最も高いslot=最低優先(混雑ラインではゲーム弾/敵機に譲って先に落ちる)。 */
     for (i = 0; i < nsh && slot < 32; i++) slot = draw_shadow(slot, sh[i]);
+    /* ★破壊点数ポップアップ: 撃破位置の"真上"(中心の16px上)に加算点を数字スプライトで表示。
+       エンティティの後=高slot=低優先なので混雑走査線ではゲームスプライトへ譲る。ここで残フレームも減らす。
+       ★画面内へクランプ: 真上が上端外だとスプライトYがu8回り込みで画面下へ飛び"消える"ため、
+         上端(=艦首側の一個目の砲台等)/下端/左右で画面内に留めて必ず見えるようにする。 */
+    for (i = 0; i < SPOP_MAX && slot < 32; i++) {
+        if (!spop_t[i]) continue;
+        { u16 v = spop_val[i]; u8 dbuf[4], nd = 0;
+          if (v == 0) dbuf[nd++] = 0; else while (v && nd < 4) { dbuf[nd++] = (u8)(v % 10); v /= 10; }
+          { s16 x0 = (s16)(spop_x[i] + 8 - (s16)nd * 4);   /* 中心(x+8)へnd桁(各8px)を中央寄せ */
+            s16 y0 = (s16)(spop_y[i] - 16);                /* 真上=1タイル上 */
+            s16 xmax = (s16)(256 - (s16)nd * 8);           /* nd桁が右端で切れない上限 */
+            u8 k;
+            if (y0 < 2)   y0 = 2;                          /* 上端クランプ(見切れて消えるのを防ぐ) */
+            if (y0 > 204) y0 = 204;                        /* 下端クランプ */
+            if (x0 < 0)   x0 = 0;
+            if (x0 > xmax) x0 = xmax;
+            for (k = 0; k < nd && slot < 32; k++) {
+                spr_col1(slot, 15);                        /* 白(HUDスコアと同色) */
+                vdp_sat_pos(slot, (u8)(x0 + (s16)k * 8), (u8)y0, (u8)(SPR_DIGIT0 + dbuf[nd - 1 - k] * 4));
+                slot++;
+            } }
+        }
+        spop_t[i]--;   /* 表示時間を1減らす(0で次フレームから消える) */
+    }
     /* ★A6: 溜めた属性(g_spr_base..slot-1)を1回のバーストでSATへ(flush内で停止マーカも直書き)。 */
     vdp_sat_flush(g_spr_base, slot);
     rot++;

@@ -309,7 +309,9 @@ void hot_aa_collide(void) {
                   b->active = 0;
                   if (aa_hp[i]) aa_hp[i]--;
                   if (aa_hp[i] == 0) {
-                      aa_dead[i] = 1; g_score += (i < 14) ? 30 : 20;
+                      u16 pts = (i < 14) ? 30 : 20;
+                      aa_dead[i] = 1; g_score += pts;
+                      scorepop_add(sx, sy, pts);                     /* ★破壊点数ポップアップ(AA画面座標) */
                       burn_add((s16)aax[i], (u16)(SC_SHIP_R0 * 16 + aay[i]), (u8)((i < 14) ? 1 : 2));  /* 炎上サイト登録 */
                       ent_spawn_explosion(sx, sy); sfx(2, SFX_BOOM); g_shake = 6;
                   } else { ent_spawn_spark(b->x, b->y); sfx(2, SFX_HIT); }
