@@ -116,17 +116,24 @@ void scene_run(u8 cur) {
           fc++;
           if ((u16)(j - lastj) >= (u16)(60 * fps_n)) { g_fps = (fc > 99) ? 99 : fc; fc = 0; lastj = j; } }
 #endif
+    /* ★30fps固定(ステージのみ): §4-1/§4-3の高速化で1フレームの計算が1 VBLANK内に収まり60fps化した
+       結果、ゲーム速度(=フレームレート依存の設計)が2倍になった。ステージは 2 VBLANK 待ちで意図した
+       30fpsへ固定し、元の手触り(敵速/弾速/スクロール/spawn)を維持する。計算に余裕があるので"絶対に
+       落ちない安定30fps"になる(従来の20〜30fps揺れの本質的解決)。他シーンは高速化対象外=従来通り1 VBLANK。
+       ★60fpsぬるぬる化(全速度定数を1/2へ再調整)へ進めたくなったら、この2回目のwaitを外す。 */
 #ifdef DEBUG_PROF
         if (cur == SC_STAGE) {   /* ★計測はステージ(SCREEN5)中のみ。タイトル(SCREEN12)でpage切替すると壊れる */
             u16 comp = (u16)(prof_tick() - _pc);   /* 計算区間tick(cmd_wait含む) */
             g_prof_acc[PF_COMPUTE] += comp;
             vdp_wait_frame();                       /* 空き(PF_WAIT)は vdp_wait_frame 内で計上 */
+            vdp_wait_frame();                       /* ★2 VBLANK目=30fps固定 */
             prof_frame_end(comp);
         } else {
             vdp_wait_frame();
         }
 #else
         vdp_wait_frame();
+        if (cur == SC_STAGE) vdp_wait_frame();      /* ★2 VBLANK目=30fps固定 */
 #endif
     }
 }
