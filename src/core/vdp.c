@@ -89,6 +89,9 @@ void vdp_screen12(void) {
         call 0x005F            ; CHGMOD
     __endasm;
     vdp_wreg(25, 0x08);        /* R#25: YJK=1 → SCREEN12 */
+    vdp_wreg(7, 0x00);         /* ★ボーダー=黒で固定。CHGMOD/前シーンの残留でタイトルのボーダー色が
+                                  毎回変わっていたため、SCREEN5(vdp_palette_game)と同様にここでも明示設定。
+                                  GRAPHIC7ではR#7は直接8bit色(GRB332)＝0x00で黒。 */
 }
 
 /* bank から連続する生データ(total バイト)を現行スクリーンの VRAM 先頭(0)へ流し込む。
