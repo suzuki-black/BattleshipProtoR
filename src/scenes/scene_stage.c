@@ -18,8 +18,12 @@
 #include "assets_data.h"   /* 自動生成: ship_ops_off/len, ship_hull/bowcnt/bowyb, SHIP_OPS_RAM_MAX, ASSET_BANK */
 #include "hotcode.h"       /* ent_resolve_collisions/aa_update/aa_collide のRAM実行ラッパ */
 #include "aa_hot.h"        /* AA状態(cam/curstage/aa_*)を hot.c と共有(公開=非static化) */
+#include "ramexec.h"       /* ★§4-3: page1_use_ram/use_cart(ホット区間だけpage1をRAM実行化) */
 #ifdef DEBUG_PROF
 #include "prof.h"
+#define PROF_CALL(grp, call) do { PROF_T0(_pt); call; PROF_ADD(grp, _pt); } while (0)
+#else
+#define PROF_CALL(grp, call) do { call; } while (0)
 #endif
 /* 撃破!! パネル(1bpp)は常駐節約のためデータバンク(bank8)へ。PANEL_* / panel_off は assets_data.h。 */
 
@@ -141,7 +145,6 @@ static s8  wdir;
 static u8  dmode;     /* 撃破演出モード(0=通常 / 1=炎上スペクタクル中) */
 static u8  dtimer;    /* 撃破演出の残フレーム */
 static u8  raided;    /* 1=戦艦出現時に空襲(戦闘機/敵弾)を一掃済み */
-static u8  spd_off;   /* ★デバッグ: 1=スプライト表示OFF(SPD)。M(TRIGB)でトグル。実機turboRで「処理落ち=VDPスプライトフェッチ起因か」を確認する用 */
 #ifdef DEBUG_FPS
 u8 g_dbgmask;   /* ★デバッグ: bit1=海/bit2=AA/bit4=更新/bit8=衝突/bit16=描画 を個別停止。M(TRIGB)でプリセット巡回。hud_drawが値表示 */
 #define DBG_ON(bit) (!(g_dbgmask & (bit)))
@@ -600,9 +603,6 @@ u8 stage_update(void) {
         static const u8 pr[8] = { 0, 2, 4, 8, 16, 14, 1, 31 };
         static u8 di; di = (u8)((di + 1) & 7); g_dbgmask = pr[di];
     }
-#else
-    /* ★デバッグ隠しキー: M(TRIGB)でSPD(スプライト表示)をトグル(VDPスプライトフェッチ帯域の切り分け用)。 */
-    if (g_input_edge & INP_TRIGB) { spd_off ^= 1; vdp_sprites((u8)!spd_off); }
 #endif
     if (++vcnt >= 5) vcnt = 0;
 
@@ -646,7 +646,7 @@ u8 stage_update(void) {
         cam = (u16)((s16)cam + (s16)camdir * (s16)vstep);
         if (camdir < 0) { if ((s16)cam <= SC_CAM_BOW)   { cam = SC_CAM_BOW;   camdir = 1;  } }
         else            { if (cam >= SC_CAM_STERN)      { cam = SC_CAM_STERN; camdir = -1; } }
-        scroll_to(cam);
+        PROF_CALL(PF_SCROLL, scroll_to(cam));
         /* 蛇行(横揺れ, 速め) */
         if (++wtimer >= 2) {
             wtimer = 0;
@@ -676,38 +676,42 @@ u8 stage_update(void) {
          VDPコマンドを出す fire_draw の CE待ちに完了を委ねる(SATバーストは直書きで完了待ち不要)。
        SEA13: 海コラムを1strip位相流し=水が艦に対して流れる擬似多重スクロール。
        ★序盤(phase0=海モード)は全幅塗り(最重)なのでSEA0_DIVで間引く。phase1も7.9ms/fと重いので2フレームに1回。 */
-#ifdef DEBUG_PROF
-    { PROF_T0(_ps);
-#endif
-    if (DBG_ON(1)) {   /* bit1=海アニ停止 */
-        if (phase != 0) {
-            if (++seatick & 1) sea_frame();   /* phase1: 2フレームに1回 */
-        } else if (++seatick >= SEA0_DIV) {
-            seatick = 0; sea_frame();
-        }
+    /* ★§4-3: このホット区間(海/AI/衝突/描画/炎)だけ page1 を RAM スロットへ切替え、page1常駐コードの
+       フェッチをR800で約3.8倍速に。区間内は data_read/bcall(バンキング)を一切呼ばない(確認済み)。
+       ISR(snd_isr)もバンクフリーなので割込みが入ってもよい。g_ramx_ok=0(未対応機/失敗)なら何もしない。 */
+    page1_use_ram();
+    /* ★§4-1 VDP-CPUオーバーラップ: 海を「1コピーずつ」VRAM非接触のCPUステップ
+       (recount/update/aa_update/special/collision)の合間に発行する。各コピーはVDPが裏で実行し、
+       その間にCPUが回る=次コピー発行時には完了済み(cmd_wait≒0)。海の見た目・枚数・速度は一括版と
+       定義上同一(状態機械は sea_begin/sea_step に1本化=H-B無し)。
+       aa_collide は撃破時 burn_add(VDPコマンド)を出すので、その前に海を完全ドレイン(cmd_wait)する。
+       ★SEASCRL区間は分散のため計測不可(=0表示)。海のVDP待ちは挟んだ区間へ吸収される。 */
+    { u8 sea_on = 0;
+      if (DBG_ON(1)) {   /* bit1=海アニ停止 */
+          if (phase != 0) { if (++seatick & 1) sea_on = 1; }        /* phase1: 2フレームに1回 */
+          else if (++seatick >= SEA0_DIV) { seatick = 0; sea_on = 1; }
+      }
+      if (sea_on) sea_begin();
+      if (sea_on) sea_step();  if (DBG_ON(8)) PROF_CALL(PF_COL,    ent_recount_ebul());
+      if (sea_on) sea_step();  if (DBG_ON(4)) PROF_CALL(PF_UPDATE, ent_update_all());
+      if (sea_on) sea_step();  if (DBG_ON(2)) PROF_CALL(PF_AA,     aa_update());
+      if (sea_on) sea_step();  if (DBG_ON(4)) PROF_CALL(PF_UPDATE, special_update());
+      if (sea_on) sea_step();  if (DBG_ON(8)) PROF_CALL(PF_COL,    ent_resolve_collisions());
+      if (sea_on) { while (sea_step()) { } vdp_cmd_wait(); }   /* ★aa_collide(burn=VDPコマンド)前に海完全完了 */
+      if (DBG_ON(2)) PROF_CALL(PF_AA,     aa_collide());
     }
 #ifdef DEBUG_PROF
-    PROF_ADD(PF_SEASCROLL, _ps); }
-#endif
-    /* ★AIを個別ゲート(切り分け用)。順序は従来通り: recount→update→aa→special→collision→aa_collide→draw。 */
-#ifdef DEBUG_PROF
-    { PROF_T0(_pa);
-#endif
-    if (DBG_ON(8)) ent_recount_ebul();   /* bit8=衝突(recount+resolve)停止 */
-    if (DBG_ON(4)) ent_update_all();     /* bit4=更新(behaviors=弾/砲台/敵機の移動・発砲)停止 */
-    if (DBG_ON(2)) aa_update();          /* bit2=AA(対空砲23基走査+発砲)停止 */
-    if (DBG_ON(4)) special_update();     /* 艦種別固有兵装(更新側に含める) */
-    if (DBG_ON(8)) ent_resolve_collisions();
-    if (DBG_ON(2)) aa_collide();         /* 自機弾×対空砲(AA側に含める) */
-#ifdef DEBUG_PROF
-    PROF_ADD(PF_AI, _pa); }
     { PROF_T0(_pd);
 #endif
     if (DBG_ON(16)) ent_draw_all();      /* bit16=描画停止 */
 #ifdef DEBUG_PROF
     PROF_ADD(PF_DRAW, _pd); }
 #endif
-    fire_draw();   /* 破壊した主砲＋対空砲を炎上(常時可視=B焼込み, アニメは8fに1回=軽量) */
+    /* ★炎はここ(ent_draw_allの後)で一括。ent_draw_allはSAT/色をVRAM直書きするため、その最中に
+       VDPコマンド(炎コピー)を走らせると競合して双方遅くなる(実測でDRAW+1ms悪化→前に出す案は撤回)。
+       VDP並列化はVRAM非接触の純CPU(=海interleaveのAI)とだけ行う。 */
+    PROF_CALL(PF_FIRE, fire_draw());
+    page1_use_cart();   /* ★§4-3: ホット区間終了→page1をカートリッジへ戻す(以降のバンキング=ミス/クリア/setup可) */
 
     /* 自機撃墜(ミス): 残機を1減らし、残っていれば面最初から全砲台復活でやり直し。
        尽きたら 継続ONでコンティニュー(残機を初期値へ戻して再挑戦=無限) / OFFでタイトルへ。 */

@@ -29,7 +29,12 @@ void scroll_build_sea(void);
 /* SEA13 初期化(イントロ=全幅アニメ)。艦が出たら sea_set_ship で艦回避帯へ切替。 */
 void sea_init(u8 stage);
 void sea_set_ship(u8 stage);
-/* SEA13 毎フレーム: 1stripの海コラムを位相流し(vdp_frame/scroll_to の後に呼ぶ)。 */
+/* ★§4-1: 海コピーをCPUと並列化するための分割API(=海の状態機械の唯一の実装)。sea_begin()で1フレーム
+   準備→AI各ステップの合間に sea_step()を挟む(1コピーずつ発行)。 */
+void sea_begin(void);
+u8   sea_step(void);   /* 次の1コピーを発行。残1/終0 */
+/* SEA13 毎フレーム一括版: sea_begin()＋sea_step()×N の一括実行(状態進行・座標は分割APIと定義上同一)。
+   vdp_frame/scroll_to の後に呼ぶ。呼ぶ頻度は呼び元が制御。 */
 void sea_frame(void);
 
 void scroll_init(void);                 /* 表示page1へ＋開始窓を描画(艦はB既描画前提) */

@@ -50,6 +50,7 @@ HDRS := $(wildcard $(SRC)/include/*.h) config.mk $(BUILD)/assets_data.h
 # ── 常駐(bank0-2, <=24KB)にリンクするソース。crt0 は先頭に別途リンク。
 #    ここへ足すたびに常駐サイズが増える。冷たいものは足さず bcall バンクへ回すこと。
 RESIDENT_RELS = \
+  $(BUILD)/ramexec.rel \
   $(BUILD)/sys.rel \
   $(BUILD)/vdp.rel \
   $(BUILD)/bank.rel \

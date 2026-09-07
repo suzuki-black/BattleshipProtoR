@@ -79,24 +79,45 @@ void sea_set_ship(u8 stage) {
     }
 }
 
-/* 1帯を16px周期wrapでテンプレから塗る(上[p..16]＋下[0..p])。source X=dest X の縦コピー。
-   ★以前 端接地帯を YMMM(0xE0) 化したが、YMMMは「DXから画面端まで」で残留VDP状態に敏感=WebMSXの
-     ソフトリセット後に海帯が崩れる不具合が出たため HMMM に戻した(効果は-0.8msと最小で堅牢性を優先)。 */
-static void sea13_paint_range(u16 vy, u8 rx, u8 rw, u8 p) {
-    u8 t = (u8)(16 - p);
-    vdp_copy(rx, (u16)(SC_SEATMPL_Y + p), rx, vy, rw, t);
-    if (p) vdp_copy(rx, SC_SEATMPL_Y, rx, (u16)(vy + t), rw, p);
+/* ===== SEA13 海コラム位相流し: 「1コピーずつ」発行する分割APIが唯一の実装 =====
+   状態(sea_vy/sea_p/sea_si/sea_total)を持ち、sea_begin()で1フレーム準備→sea_step()を必要回数呼ぶ。
+   ★H-B対策(炎BG文字化けの構造的封じ): 海の状態進行(sea_strip/sea_phase/sea_acc)と座標計算(source/dest)は
+     「この分割APIだけ」が実装する。一括版 sea_frame() も下でこのAPIの一括実行として定義する=状態機械を
+     物理的に1本化。これで「一括版」と「分割版(§4-1オーバーラップ)」の間で状態が二重進行したり座標が
+     食い違って dest がフォント/艦外へ逸れる(→文字化け)経路を、設計上あり得なくする。
+   海コラム塗りは vdp_copy=HMMM(0xD0)。HMMM は LMMM の約2.4倍速(実測 CE待ち 155→64反復/コピー)。
+   ★以前 端接地帯を YMMM(0xE0) 化したが残留VDP状態に敏感でソフトリセット後に崩れたため HMMM に戻した。 */
+static u16 sea_vy;
+static u8  sea_p, sea_si, sea_total;
+void sea_begin(void) {
+    sea_vy = (u16)(PAGE1_Y + (u16)sea_strip * 16);
+    sea_p  = (u8)(sea_phase & 15);
+    sea_si = 0;
+    sea_total = (u8)(sea_nranges * 2);           /* 各range 2コピー(上+wrap。wrapはp=0で空発行) */
+    sea_strip = (u8)((sea_strip + 7) & 15);       /* 歩幅7(16と互素)=掃引を散らす。進行はbeginで1回だけ */
+    if (++sea_acc >= 8) { sea_acc = 0; sea_phase += 1; }   /* 0.125px/f */
+}
+/* 次の1コピーを発行(vdp_copy=HMMM)。上[p..16]＋wrap下[0..p](p=0なら下は空発行)。残1/終0。 */
+u8 sea_step(void) {
+    u8 ri, part, rx, rw, t;
+    if (sea_si >= sea_total) return 0;
+    ri = (u8)(sea_si >> 1); part = (u8)(sea_si & 1);
+    rx = sea_ranges[2 * ri]; rw = sea_ranges[2 * ri + 1];
+    t = (u8)(16 - sea_p);
+    if (part == 0) {
+        vdp_copy(rx, (u16)(SC_SEATMPL_Y + sea_p), rx, sea_vy, rw, t);      /* 上[p..16] */
+    } else if (sea_p) {
+        vdp_copy(rx, SC_SEATMPL_Y, rx, (u16)(sea_vy + t), rw, sea_p);      /* 下[0..p](wrap) */
+    }
+    sea_si++;
+    return (u8)(sea_si < sea_total);
 }
 
+/* 一括版: 分割APIを1フレーム分まとめて実行するだけ(=状態機械の唯一の実装は sea_begin/sea_step)。
+   ★呼ぶ頻度は呼び元(scene_stage)が制御: 戦闘中は毎フレーム、序盤(全幅=最重)は SEA0_DIV 間引き。 */
 void sea_frame(void) {
-    /* 海コラム塗りは vdp_copy=HMMM(0xD0)。HMMM は LMMM の約2.4倍速(実測 CE待ち 155→64反復/コピー)。
-       ★呼ぶ頻度は呼び元(scene_stage)が制御: 戦闘中は毎フレーム、序盤(全幅=最重)は SEA0_DIV 間引き。 */
-    u16 vy = (u16)(PAGE1_Y + (u16)sea_strip * 16);
-    u8 p = (u8)(sea_phase & 15), i;
-    for (i = 0; i < sea_nranges; i++)
-        sea13_paint_range(vy, sea_ranges[2 * i], sea_ranges[2 * i + 1], p);
-    sea_strip = (u8)((sea_strip + 7) & 15);      /* 歩幅7(16と互素)=掃引を散らす */
-    if (++sea_acc >= 8) { sea_acc = 0; sea_phase += 1; }   /* 0.125px/f */
+    sea_begin();
+    while (sea_step()) { }
 }
 
 void scroll_init(void) {

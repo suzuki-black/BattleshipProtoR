@@ -15,7 +15,7 @@ void prof_selftest(void);   /* 起動時1回: 自己診断を画面表示しト�
 
 /* ===== 実行時 区間計測 =====
    ゲームループの各区間の滞在tickを60フレーム蓄積→凍結表示(Mキーで進む)。「何に何ms」を実機で確定する。 */
-enum { PF_COMPUTE, PF_CMDWAIT, PF_WAIT, PF_DRAW, PF_AI, PF_SEASCROLL, PF_N };
+enum { PF_COMPUTE, PF_CMDWAIT, PF_WAIT, PF_DRAW, PF_UPDATE, PF_AA, PF_COL, PF_SEASCROLL, PF_FIRE, PF_SCROLL, PF_N };
 extern u32 g_prof_acc[PF_N];   /* 区間別 蓄積tick(60フレーム窓)。★u32(フルフレーム4200tick×60=25万でu16溢れ) */
 extern u16 g_prof_over;        /* 窓内で1VBLANK(4262tick)を超えた計算フレーム数 */
 
