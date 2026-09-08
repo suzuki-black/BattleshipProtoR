@@ -9,13 +9,13 @@
 ## 1. メモリ地図(Z80 64KB空間 と ASCII8 MegaROM)
 
 ```
-Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 8KB)
+Z80アドレス空間                         ASCII8 MegaROM(256KB = 32 bank × 8KB)
 ┌───────────────────────────┐          ┌──────────────────────────────────┐
 │ 0x0000-0x3FFF page0 = BIOS │          │ bank0  ROM 0x00000  ┐             │
 │ 0x4000-0x5FFF ← bank0      │◀────────▶│ bank1  ROM 0x02000  ├ 常駐コード   │
 │ 0x6000-0x7FFF ← bank1      │  ASCII8  │ bank2  ROM 0x04000  ┘ (<=24KB)    │
 │ 0x8000-0x9FFF ← bank2      │  4窓      │ bank3  ROM 0x06000  = スワップ窓予約 │
-│ 0xA000-0xBFFF ← スワップ窓  │◀────────▶│ bank4..15 ROM 0x08000.. = 冷コード  │
+│ 0xA000-0xBFFF ← スワップ窓  │◀────────▶│ bank4..31 ROM 0x08000.. = 冷コード  │
 │ 0xC000-0xFFFF page3 = RAM  │          │                        ＋データ    │
 └───────────────────────────┘          └──────────────────────────────────┘
    窓の切替は 0x6000/0x6800/0x7000/0x7800 への書込。0x7800 = 0xA000窓(スワップ)。
@@ -25,8 +25,37 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
   `rompack.mjs` が **24KB超過をビルドエラー**にし、毎ビルドで残量を表示する(硬い天井を機械強制)。
 - **bank3 = スワップ窓の既定ページ**: 前作はここまでコードに使い窓を潰した=失敗。**本作は温存**。
   データ先読み/バンクコールのときだけ 0xA000 窓を別バンクへ差替え、済んだら bank3 に戻す。
-- **bank4-15 = 冷たいコード＋データ(各8KB)**: シーン別演出/設定/エンディング等の“冷たい”コードと、
+- **bank4-31 = 冷たいコード＋データ(各8KB)**: シーン別演出/設定/エンディング等の“冷たい”コードと、
   艦/発砲スクリプト/BGM/文字列/スプライトパターン等のデータ。ステージを足すほどここを使う。
+  ★タイトル YJK 画(SCREEN12)が bank9-15 を占有し 128KB では空きが枯れたため **256KB(32バンク)へ拡張**。
+
+**バンク割り当ての現状**:
+
+| バンク | 用途 |
+|--------|------|
+| 0–2 | **常駐コード＋定数（上限 24KB）**。超過は rompack がビルドエラー |
+| 3 | ASCII8 スワップ窓（0xA000–0xBFFF）を温存するため未使用 |
+| 4 | 開始カードの艦画像（`assets/cards.bin`, 5 艦連結） |
+| 5–7 | 冷たいバンクシーン（title / config / ending） |
+| 8 | データバンク：BGM 曲・艦体 OPS・火球ビットマップ・撃破パネル・敵機カラー表 |
+| 9–15 | タイトル YJK 画像（SCREEN12, `assets/title.yjk`） |
+| 16 | 冷たい艦レンダラ本体（`ship_render`） |
+| 17 | ★RAM 実行コード `hot.bin`（起動時に page3 RAM `hot_ram[]` へコピー。§4-3） |
+
+**RAM(page3 = 0xC000-0xFFFF)**:
+- data-loc 以降に各モジュールの `static`。**初期値付き static は避ける**（ROM では `_INITIALIZER` の
+  配置に注意が要るため、`init` 関数で実行時に書く）。大物は「小さな RAM バッファ＋`data_read`」で扱う。
+- §4-3 の `hot_ram[HOT_CAP]` は常駐 _DATA 末尾に予約（0xE000 が RAM 実行枠の天井）。冷データ
+  `g_card_ram`(0xE100)/ship_ram(0xE700)/fb_ram(0xE900) は高位固定へ退避して枠を確保。
+
+**VRAM（SCREEN5 = GRAPHIC4, 128KB, 4 ページ）**:
+
+| VRAM Y | 用途 |
+|--------|------|
+| page0 (0–255) | スプライトテーブル（属性 0x7600 / 色 0x7400 / パターン 0x7800, Y232–255）。Y0–231 はゲーム中は非表示＝**火球のベイク先やカード/結果の一時描画**に流用（炎ソースは y0–31） |
+| page1 (256–511) | **表示リング**（256px の環状バッファ）。R#23 で縦スクロール |
+| 512–527 | 海テンプレート（256×16, タイル可能な水） |
+| 528–1023 | **艦バッファ B**（256×496 = 31 行。海を下地に艦を事前描画） |
 
 ---
 
@@ -56,7 +85,7 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 ### 3.1 シーンFSM (`scene.h` / `scene.c`)
 `Scene { init(); update()->次ID; bank }` の表 `registry[]` を1か所に集約。
 `scene_run()` が「入場時 init 1回 → 毎フレーム update → 戻り値で遷移」を回す。**巨大 main() を作らない**。
-- **現在のフロー**: `SC_BOOT`(疎通) → `SC_TITLE`(bank5)。タイトルで**トリガ(SPACE/ジョイ)→ `SC_STAGE`** で即ゲーム開始。
+- **現在のフロー**: 起動＝`SC_TITLE`(bank5, ID=0。旧 `SC_BOOT` 疎通シーンは土台実証済で撤去)。タイトルで**トリガ(SPACE/ジョイ)→ `SC_STAGE`** で即ゲーム開始。
   **設定は隠しコマンド(コナミ ↑↑↓↓←→←→ B A)で `SC_CONFIG`(bank6)** を開く(→STARTで `SC_STAGE`)。
   `SC_STAGE`(★連続面: 海→戦艦 地続き) → `SC_ENDING`(bank7) → `SC_TITLE`。ミスは面リスタート、残機尽きは
   継続ONでコンティニュー(無限)/OFFで `SC_STAGE`→`SC_TITLE`。
@@ -178,6 +207,54 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 - **アセットパッカ** `tools/gen_assets.mjs`: 曲を手書き(音名)→ `build/assets.bin`(bank8内容) と
   `build/bgm_data.h`(常駐用: notetp/曲オフセット/長さ)を生成。Makefileが自動実行し rompack が bank8 へ配置。
   ※旧版 `bgm_tracks.h` の実曲(タイトル等)移植はこのパイプラインに曲データを足すだけ。
+- **面別ドラム/ベース(設計拡張)**: 曲ヘッダの `drumStyle`(1=標準マーチ/2=重い/3=激しい)で `bgm_drmPat*` と
+  テンポ・音量を切替(BB=標準・空母=重い・フッド/アイオワ=激しい)。`bassSweep` は chB をロックマン風
+  シンセドラムに(立上り1oct 上→基音へ急降下＋速い減衰)。
+- **2段構成**: 海イントロは全面共通のスロー曲、敵艦が見えたら面別の戦闘曲へ切替(`bgm_play`)。勝ちどきは
+  13 音のファンファーレ。
+
+### 3.8 破壊・炎上システム (`scene_stage.c` / `entity.c` / bank8火球)
+火点＝**主砲 4 基＋対空砲 23 基**。すべて破壊可能で、全滅(`ent_live_turrets()==0 && aa_alive()==0`)でクリア。
+- **主砲(`ET_TURRET`)**: スプライト実体。8方向の可動砲身(`SPR_BARREL0`＋`dir8`/`step_dir` で自機を狙って
+  段階回転、行別カラー `barrel_col` で金属シェード)。命中で白フラッシュ。撃破後も `active` 維持のまま
+  `hidden` にし、scene が炎上残骸を焼き付ける。
+- **対空砲(array 方式)**: 実体を持たず `aa_hp[]`/`aa_dead[]` 配列で管理(大型HP2/小型HP1)。`aa_collide` が
+  自機弾を座標判定で当てる＝**スプライト枠を消費せず 23 基を破壊対応**(可視区間のみ走査＝§性能)。
+- **常時炎上(BG 火球)**: 火球は `gen_assets` がビルド時に丸くベイクし bank8 へ。破壊時に `burn_bake` が
+  艦バッファ B へ透過焼き込み(以後スクロールで炎ごと流れる)＋表示リングへ即1回重ねる。スプライト枠を
+  使わないので全火点が同時に燃えても破綻しない。★炎ソースタイルは page0 y0–31(隠し保管域)。
+- **撃破スペクタクル**: `defeat_update` が艦全体へ火球を escalating に撒いて炎まみれにし、「撃破!!」
+  パネル→スコア→勝ちどきファンファーレ→SC_ENDING。
+
+### 3.9 §4-3 ホットコードの RAM 実行（R800 の ROMフェッチ律速対策）★性能の要
+R800 は DRAM モードでも**カートリッジ ROM のコードフェッチが内蔵 RAM 実行の約3.8倍遅い**(実機 S1990
+タイマ実測)。毎フレームのホットパスを RAM で実行して律速を外す。詳細は [性能と高速化.md](性能と高速化.md)。
+- **hot_ram + ジャンプテーブル**(`hotcode.c` / `banked/hot.c` / `hothead.s`): behavior 群・AA(aa_update/
+  aa_collide)・エンティティ更新を bank17(`hot.bin`)に置き、起動時に `hot_load()` が page3 RAM の
+  `hot_ram[HOT_CAP]` へコピー。常駐は `__naked` asm の `jp hot_ram+3*slot` ラッパで呼ぶ。番地二重管理を
+  避けるため Makefile が `rom.noi` の `_hot_ram` を hot.c の `--code-loc` に供給。
+  **★HOT_CAP は hot.bin 実サイズ以上に保つこと**(不足すると転写が末尾を落とし常駐グローバルを破壊＝
+  暴走。Makefile が超過をビルド時検出。詳細は [苦労と教訓.md](苦労と教訓.md))。
+- **page1 動的 RAM 実行**(`ramexec.c`): ゲームループのホット区間だけ page1(0x4000-0x7FFF, 常駐ホットコード)を
+  マッパー RAM スロットへ切替える(`page1_use_ram`/`page1_use_cart`)。切替 blob は page3 RAM へ退避して
+  実行(足元を切替えるため)。バンキング(0x6000-0x7800)・被弾・BGM 切替の直前は cart へ戻す。空きセグメントの
+  RAM プローブに失敗したら**何もしない=ROM のまま**(`g_ramx_ok=0`)で安全側。C-BIOS でも同経路で動き
+  openMSX で正当性検証可能(速度差は turboR のみ)。
+
+### 3.10 敵戦闘機の8方向スプライト（手続き生成 `sprites.c`）
+海イントロの敵戦闘機と空母艦載機は、**移動方向に機首を向ける 8 方向 × 3 サイズ(小/中/大)** のスプライトを
+`build_plane`/`load_planes` が手続き生成し面別に VRAM へ投入(`SPR_PLANE_S/M/L=160/192/224`)。胴体/主翼/尾翼/
+エンジンを線分で描き、国別の雰囲気は翼幅デルタ(`pl_wingd`)で作り分ける。★斜め方向で胴体が縞々に途切れる
+旧版の罠は「斜め時の隙間埋めピクセル」で回避。空戦機は `dir8(vx,vy)` で向きを、空母停泊機は自機方向
+`dir8(player-self)` で追尾しつつ発艦後に小→中→大へ成長する浮上アニメを見せる(`bh_fighter`/`bh_pursuer`)。
+海イントロ機は出現を倍増し各面の固有挙動(急降下/直進/蛇行)に蛇行を50%混在させて8方向を活かす。
+
+### 3.11 固定タイムステップ（30fps）と“ジュース”
+- **フレームレート依存の罠**: ゲーム速度(敵速/弾速/スクロール/spawn/アニメ)がすべてフレーム数指定だったため、
+  §4-1/§4-3 で 60fps 相当に達した瞬間に全部が 2 倍速になった。→ `scene.c` の SC_STAGE で `vdp_wait_frame()`
+  を **2 回**待つ固定タイムステップにし**安定 30fps**を担保(★2 VBLANK 目=30fps 固定)。
+- **ジュース(余力の使い道)**: 破壊点数ポップアップ(`entity.c` の scorepop。撃破位置の真上に加算点を数字
+  スプライトで約1.5秒表示)、敵機の8方向スプライト化(§3.10)、海機の倍増など。
 
 ---
 
@@ -208,11 +285,12 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 `$(BUILD)/scene_%.ihx` と `ROMPACK_BANKS` に1行。効果: **title/config/ending のコードは常駐24KBを1バイトも食わない**。
 ※data-loc(0xE000)は各バンクシーンで共用(同時にアクティブなのは1つ=衝突しない)。gsinit無しなので初期化付き変数は
 避け、RAM変数は `init` で書く。
-- `rompack` 出力例(空き容量の可視化):
+- `rompack` 出力例(空き容量の可視化。現状 v0.2.0 付近):
   ```
-  常駐コード(bank0-2): 686B / 24576B  残り 23890B (23.3KB)
-  bank3(スワップ窓)  : 予約(既定 0xFF)
-  空きバンク(bank4-15): 12 / 12  (= 96.0KB 未使用)
+  常駐コード(bank0-2): 21049B / 24576B  残り 3527B (3.4KB)
+  bank16          : 7372B / 8192B  残り 820B
+  bank17          : 5199B / 8192B  残り 2993B
+  空きバンク: 14 / 28  (= 112.0KB 未使用)
   ```
 
 ### turboR 専用の前提
@@ -225,7 +303,8 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 
 ## 5. 実機/エミュ検証
 
-- ビルド: `make rom` → `GAME.ROM`(128KB ASCII8)。
+- ビルド: `make rom` → `GAME.ROM`(256KB ASCII8 MegaROM)。バージョンは `VERSION` ファイルが単一の真実で
+  `build/version.h`(GAME_VERSION/BUILD_VER)を自動生成。デバッグ ROM は `make DEBUG_FPS=1`/`DEBUG_PROF=1`。
 - 起動検証: `make run`(openMSX headless, 既定 `C-BIOS_MSX2+_JP`)→ `build/boot.png`。
   - turboR実機ROM(`Panasonic_FS-A1GT`)は著作物のため未同梱 → **R800経路/ラスタ/バンク切替の
     タイミングは最終的に実機 or turboR ROM で要確認**(前作の引き継ぎ通り)。
@@ -256,18 +335,23 @@ Z80アドレス空間                         ASCII8 MegaROM(128KB = 16 bank × 
 | 常駐 | `src/core/player.c` | 自機(ET_PLAYER): 入力で移動＋発砲、位置を公開(AIMED/UI用) |
 | 常駐 | `src/core/fire.c` | emit＋run_fire(FIXED/RING/AIMED/AIMFAN, 32分割, 狙い散らし, ★ゼロ距離抑え込み) |
 | 常駐 | `src/core/ops.c` | データ駆動描画 run_ops(艦体等)。OPS_RECTのx/yはu8(255まで) |
-| 常駐 | `src/core/scroll.c` | ★連続縦スクロール地形(page1リング+R#23、艦をBから流し込み) |
+| 常駐 | `src/core/scroll.c` | ★連続縦スクロール地形(page1リング+R#23、艦をBから流し込み、SEA13海アニメ) |
 | 常駐 | `src/core/hud.c` | ★スプライトHUD(スコア5桁＋残機)。数字はBIOSフォントを16x16へ写す。slot0-5確保 |
-| シーン | `src/scenes/scene_stage.c` | ★1本の連続面(空戦→戦艦 往復蛇行)。ビスマルク艦体＋ゼロ距離抑え込み＋撃破演出(炎上/スコア/ファンファーレ) |
-| 常駐 | `src/core/sprites.c` | スプライトパターン定義＋一括投入(sprites_load) |
-| 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry |
-| バンク | `src/banked/bank_demo.c` | 実バンクコール実証(bank4, 0xA000エントリ, 自己完結) |
-| バンク | `src/banked/bankhead.s` | バンク先頭スタブ(0xA000 に jp _banked_entry) |
+| 常駐 | `src/core/ramexec.c` | ★§4-3: page1(0x4000-0x7FFF)を区間限定でマッパーRAMへ動的切替(page1_use_ram/cart) |
+| 常駐 | `src/core/hotcode.c` | ★§4-3: hot_ram[HOT_CAP]予約＋起動時コピー(hot_load)＋RAM実行スロットへのラッパ |
+| 常駐 | `src/core/prof.c` | µs計測(DEBUG_PROF時のみ)。凍結表示はy32以降(炎ソースタイルy0-31を触らない) |
+| シーン | `src/scenes/scene_stage.c` | ★1本の連続面(空戦→戦艦 往復蛇行)。艦体＋ゼロ距離抑え込み＋撃破演出(炎上/スコア/ファンファーレ)＋30fps固定 |
+| 常駐 | `src/core/sprites.c` | 常駐色表(zcol/barrel_col)＋パターン投入ラッパ＋★戦闘機8方向の手続き生成(build_plane/load_planes) |
+| 常駐 | `src/core/scene.c` | シーンFSM ディスパッチャ＋registry(SC_STAGEは2 VBLANK待ち=30fps固定) |
+| バンク | `src/banked/hot.c` | ★RAM実行される毎フレームのホットパス(behavior群/AA/エンティティ更新)。bank17→hot_ram |
+| バンク | `src/banked/ship_render.c` | 冷たい艦レンダラ本体(bank16, mode4 bcall)。静的スプライトパターンもここで投入 |
+| 常駐 | `src/core/ship_aag.c` | 艦レンダラの薄いラッパ(引数をg_shipargsへ退避しbcall)＋毎フレーム参照の対空砲座標表 |
+| バンク | `src/banked/bankhead.s` / `hothead.s` | バンク/RAM実行の先頭スタブ(jp _banked_entry / jpジャンプテーブル) |
 | シーン(bank) | `src/scenes/scene_title.c` | ★タイトル(bank5)。常駐APIを注入番地で呼ぶ |
 | シーン(bank) | `src/scenes/scene_config.c` | ★隠し設定(bank6, コナミで開く)。難易度/残機/耐久/ステージ/継続/無敵。行単位再描画 |
 | シーン(bank) | `src/scenes/scene_ending.c` | ★エンディング(bank7)。静かなED曲(track2)＋スタッフロール(クレジットのページ送り→THE END) |
-| ツール | `tools/gen_symdefs.mjs` | rom.noi→常駐シンボル絶対番地(.s)。バンクシーンのリンク用 |
-| シーン | `src/scenes/scene_boot.c` | Hello VDP(疎通確認)→SC_TITLEへ遷移 |
-| ツール | `tools/rompack.mjs` | .ihx＋バンク → MegaROM。常駐24KB超過をエラー、空き表示 |
+| ツール | `tools/gen_symdefs.mjs` | rom.noi→常駐シンボル絶対番地(.s)。バンクシーン/RAM実行のリンク用 |
+| ツール | `tools/ihx2bin.mjs` | hot.ihx→hot.bin(hot_ram番地起点の生バイト列。rompackがbank17へ) |
+| ツール | `tools/rompack.mjs` | .ihx＋バンク → 256KB MegaROM。常駐24KB超過とバンク溢れをエラー、空き表示 |
 | ツール | `tools/gen_assets.mjs` | BGM曲(音名手書き)＋艦体OPS→ `build/assets.bin`(bank8)＋`build/assets_data.h`(offset/len定数) |
 | ツール | `tools/test_{boot,sound,bank,spr,stage,hud}.tcl` | openMSX headless 検証(起動/音/バンク/スプライト/連続面/HUD) |

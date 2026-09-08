@@ -120,11 +120,15 @@ docs/          design & development notes
 ```
 
 ### Documentation
+- **[Architecture / アーキテクチャ](docs/ARCHITECTURE.md)** — memory/bank/VRAM maps, the resident-vs-bank
+  discipline, scene FSM, and the turboR-specific machinery (RAM code execution, §4-3).
+- **[Game spec / 仕様書](docs/仕様書.md)** — play spec: stages, weapons, scoring, difficulty.
 - **[Algorithm notes / 各処理アルゴリズム解説](docs/アルゴリズム解説.md)** — the algorithm chosen
-  per subsystem, why, and its measured effect (mostly speed). A reusable playbook for building a
-  fast turboR vertical shooter.
-- **[Development notes / 開発で苦労したこと](docs/苦労したこと.md)** — misdiagnoses, traps, and
-  root-cause hunts, with the lessons learned.
+  per subsystem, why, and its measured effect. A reusable playbook for building a fast turboR shooter.
+- **[Performance / 性能と高速化](docs/性能と高速化.md)** — the full 60fps investigation: measurements,
+  what was tried (success/failure/deferred), profiling pitfalls, and the R800 ROM-fetch findings.
+- **[Development notes / 苦労と教訓](docs/苦労と教訓.md)** — misdiagnoses, traps, MSX-specific issues,
+  and root-cause hunts, with the lessons learned.
 
 ### Origin
 The **prototype was first built in [Function BASIC](https://github.com/suzuki-black/FunctionBASIC)**;
@@ -255,9 +259,14 @@ docs/          設計・開発ノート
 ```
 
 ### ドキュメント
+- **[アーキテクチャ](docs/ARCHITECTURE.md)** — メモリ/バンク/VRAM 地図、常駐 vs バンクの規律、
+  シーン FSM、turboR 固有の機構（ホットコードの RAM 実行＝§4-3）。
+- **[仕様書](docs/仕様書.md)** — プレイ仕様（ステージ・兵装・スコア・難易度）。
 - **[各処理アルゴリズム解説](docs/アルゴリズム解説.md)** — 各処理でどのアルゴリズムを選び、なぜ、
-  どれだけ効いたか（多くは速度改善）を実測値つきで記述。**次の高速な縦STGを作るための土台**。
-- **[開発で苦労したこと](docs/苦労したこと.md)** — 誤診・地雷・原因究明の記録と教訓。
+  どれだけ効いたかを実測値つきで記述。**次の高速な縦STGを作るための土台**。
+- **[性能と高速化](docs/性能と高速化.md)** — 60fps への全調査記録（実測・試行の成功/失敗/見送り・
+  計測手法の落とし穴・R800 ROMフェッチ律速の結論）。
+- **[苦労と教訓](docs/苦労と教訓.md)** — 誤診・地雷・MSX 固有課題・原因究明の記録と教訓。
 
 ### 開発の背景
 **原型（プロトタイプ）は [Function BASIC](https://github.com/suzuki-black/FunctionBASIC) で作成**
