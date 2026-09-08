@@ -4,8 +4,8 @@
   <img src="docs/media/title.png" width="640" alt="ZERO NO HOUKOU KAI — title screen">
 </p>
 
-> ⚠️ **This is a prototype** (**v0.1.1**), published for feedback and experimentation.
-> **試作品（プロトタイプ）です（v0.1.1）。** フィードバックと実験のために公開しています。
+> ⚠️ **This is a prototype** (**v0.2.0**), published for feedback and experimentation.
+> **試作品（プロトタイプ）です（v0.2.0）。** フィードバックと実験のために公開しています。
 
 A single-player, vertically–scrolling shoot-'em-up for the **MSX turboR** (V9958 VDP · Z80/R800),
 built as a ground-up successor to *Zero no Houkou*. Fly a lone naval fighter from the open sea
