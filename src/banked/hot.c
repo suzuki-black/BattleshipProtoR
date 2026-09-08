@@ -112,6 +112,7 @@ static void bh_fighter(Entity *e) {
         if ((++e->ay & 15) == 0) e->vx = (s16)(-e->vx);
     }
     if (e->x < 0 || e->x > (s16)(SCR_W - e->w)) e->vx = (s16)(-e->vx);  /* 端で横反転 */
+    e->pat = (u8)(SPR_PLANE_L + dir8(e->vx, e->vy) * 4);  /* ★8方向: 移動方向に機首を向ける(大サイズ) */
     if (e->fire) run_fire(e);
     if (e->y > SCR_H + 8) e->active = 0;                  /* 下へ抜けたら消滅 */
 }
@@ -143,6 +144,9 @@ static void bh_pursuer(Entity *e) {
         e->x += (s16)dirdx8[e->ax & 7] * 2;
         e->y += (s16)dirdy8[e->ax & 7] * 2;
     }
+    /* ★浮上アニメ: ホバー中 ftimer で 小→中、飛行(ftimer=0)で 大。8方向を機首へ反映。 */
+    { u8 base = (e->ftimer > 22) ? SPR_PLANE_S : (e->ftimer ? SPR_PLANE_M : SPR_PLANE_L);
+      e->pat = (u8)(base + ((u8)e->ax & 7) * 4); }
     if (e->x < -18 || e->x > 274 || e->y < -18 || e->y > 226) e->active = 0;
 }
 

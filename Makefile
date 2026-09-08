@@ -157,9 +157,16 @@ $(BUILD)/hot.ihx: $(SRC)/banked/hot.c $(HDRS) $(BUILD)/hothead.rel $(BUILD)/resi
 	 echo "  hot.c を hot_ram=$$HA へリンク"; \
 	 sdcc -m$(TARGET) --no-std-crt0 --code-loc $$HA --data-loc 0xE000 \
 	     $(BUILD)/hothead.rel $(BUILD)/hot.rel $(BUILD)/resident_syms.rel -o $@
-$(BUILD)/hot.bin: $(BUILD)/hot.ihx tools/ihx2bin.mjs
+$(BUILD)/hot.bin: $(BUILD)/hot.ihx tools/ihx2bin.mjs $(SRC)/include/hotcode.h
 	@HA=$$(awk '/^DEF _hot_ram /{print $$3}' $(BUILD)/rom.noi); \
-	 node tools/ihx2bin.mjs $(BUILD)/hot.ihx $$HA $@
+	 node tools/ihx2bin.mjs $(BUILD)/hot.ihx $$HA $@; \
+	 CAP=$$(awk '/^#define[ \t]+HOT_CAP/{print $$3}' $(SRC)/include/hotcode.h); \
+	 SZ=$$(wc -c < $@ | tr -d ' '); \
+	 if [ "$$SZ" -gt "$$CAP" ]; then \
+	   echo "ERROR: hot.bin=$${SZ}B が HOT_CAP=$${CAP}B を超過($$((SZ-CAP))B)。hot_load のコピーが末尾を落とし常駐グローバル(g_scene/curstage)を破壊します。hotcode.h の HOT_CAP を上げてください(0xE000天井まで)。"; \
+	   exit 3; \
+	 fi; \
+	 echo "  hot.bin=$${SZ}B / HOT_CAP=$${CAP}B (残り$$((CAP-SZ))B)"
 
 BANK_IHX = $(BUILD)/scene_title.ihx \
            $(BUILD)/scene_config.ihx $(BUILD)/scene_ending.ihx $(BUILD)/ship_render.ihx $(BUILD)/hot.bin

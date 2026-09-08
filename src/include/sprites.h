@@ -30,10 +30,15 @@
 #define SPR_EXP3    104
 #define SPR_FLASH   108  /* マズルフラッシュ(自機発砲時の一瞬の光) */
 #define SPR_BARREL0 112  /* 主砲の可動砲身(8方向, dir d = SPR_BARREL0 + d*4)。自機を狙って回転。112..140 */
+/* ★敵戦闘機/艦載機の8方向スプライト(手続き生成, 面別ロード)。各サイズ 8方向×4パターン=32枠。
+   小=浮上初期/中=浮上後期/大=飛行。パターン番号 = base + dir*4 (dir 0=上,時計回り=dir8と一致)。 */
+#define SPR_PLANE_S 160  /* 小(発艦ホバー初期)   160..188 */
+#define SPR_PLANE_M 192  /* 中(発艦ホバー後期)   192..220 */
+#define SPR_PLANE_L 224  /* 大(通常飛行)         224..252 */
 extern const u8 zcol[16];        /* 零戦の16行カラーテーブル(緑系+ハイライト) */
 extern const u8 barrel_col[16];  /* 砲身の行別シェード(金属感の多色) */
 extern const u8 barrel_flash[16];/* 砲身の命中フラッシュ(白) */
 
-void sprites_load(void);   /* 全パターンを VRAM(0x7800)へ投入 */
+void sprites_load(u8 stage);   /* 全静的パターン＋その面の戦闘機8方向×3サイズ を VRAM へ投入 */
 
 #endif /* SPRITES_H */

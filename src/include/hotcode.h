@@ -15,9 +15,12 @@
 #include "types.h"
 
 #define HOT_BANK 17     /* rompack --bank 17 build/hot.bin(冷たいバンク帯 bank4+ の空き) */
-#define HOT_CAP  5120   /* hot_ram 予約バイト数。hot.bin(実測=aa_update+aa_collide+ent_update_all+behavior群+表)以上、
+#define HOT_CAP  5312   /* hot_ram 予約バイト数。hot.bin(実測=aa_update+aa_collide+ent_update_all+behavior群+表)以上、
                            かつ常駐DATA末尾が 0xE000(バンクデータ)未満に収まること。★page3のRAM実行枠は 0xE000 が天井。
-                           冷データ g_card_ram(0xE100)/ship_ram(0xE700)/fb_ram(0xE900) を高位固定へ退避して枠を確保済み。 */
+                           冷データ g_card_ram(0xE100)/ship_ram(0xE700)/fb_ram(0xE900) を高位固定へ退避して枠を確保済み。
+                           ★hot.c 肥大時はここを必ず更新すること(不足すると hot_load のコピーが末尾を落とし、
+                             かつ hot_ram[] を超えて後続の常駐グローバル g_scene/curstage を破壊→海イントロで暴走。
+                             8方向スプライト化で hot.c=5199B に増えたため 5120→5312 へ。Makefile が超過をビルド時検出)。 */
 
 /* hot_ram 先頭は hothead.s のジャンプテーブル(1関数=3バイトの jp)。番地 hot_ram+3*slot が各関数の入口。
    関数を1つRAM化するたびに hothead.s へ jp を1行、下の HOT_SLOT_* を1つ追加し、対応ラッパを増やす。 */

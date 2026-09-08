@@ -48,7 +48,7 @@ static const u8 fd_faim[] = { 40,  0, FIRE_AIMED, 3, 1, 3, FIRE_END };
 
 /* ★海イントロ敵機=各面ボス艦の所属国の典型機(主人公=零戦/日本なので敵は各国海軍)。
    面順=BB(独)/Carrier(米)/Hood(英)/Twins(独)/Iowa(米)。形(pat)＋視認性優先色(col)で識別。 */
-static const u8 fighter_pat[STAGE_COUNT]  = { SPR_BF109, SPR_CORSAIR, SPR_SPITFIRE, SPR_FW190, SPR_HELLCAT };
+/* ★空戦戦闘機は8方向手続き生成(SPR_PLANE_*)へ移行。機種の雰囲気は生成器の翼幅(pl_wingd)で出す。 */
 static const u8 fighter_col[STAGE_COUNT]  = { 3, 12, 9, 14, 11 };  /* 独緑/米橙/英オリーブ/独灰/米赤(単色fallback) */
 static const u8 fighter_arch[STAGE_COUNT] = { 0, 2, 1, 0, 2 };     /* 挙動: 独=急降下/米=直進/英=蛇行 */
 static const u8 fighter_iv[STAGE_COUNT]   = { 40, 28, 40, 40, 28 };/* 出現間隔(米面は数で押す=短い) */
@@ -332,7 +332,7 @@ static void special_update(void) {
                 e->x = (rnd() & 1) ? -16 : 268;          /* 左右端 交互 */
                 e->y = (s16)(16 + (rnd() % 168));
                 e->ax = 4; e->ftimer = 0;                /* 展開無し=即追尾 */
-                e->pat = SPR_CORSAIR; e->coltab = cur_ctab; e->shadow = 1;  /* F4U(橙)＋落ち影 */
+                e->pat = (u8)(SPR_PLANE_L + 4 * 4); e->coltab = cur_ctab; e->shadow = 1;  /* F4U(生成8方向・下向き大初期)＋落ち影 */
             }
             sfx(1, SFX_EFIRE);
             spc_timer = diff_interval(45);                              /* 総攻撃=短間隔 */
@@ -354,7 +354,7 @@ static void stage_build(void) {
     load_stage_data();    /* 艦名/撃沈文/敵機カラー/主砲座標を当該面ぶんRAMへ(ミス再開経路も網羅) */
     prerender_ship();     /* 艦をバッファB(オフスクリーン)へ。stage_begin_display の前に必須 */
     vdp_sprite_init();
-    sprites_load();
+    sprites_load(curstage);   /* ★静的パターン＋この面の戦闘機8方向×3サイズを生成 */
     hud_init();           /* 数字パターン投入＋HUDスロット確保(g_spr_base) */
     ent_reset();
     cam = SC_CAM_START; phase = 0; sdiv = 0; wtimer = 0; ftick = 0;
@@ -621,16 +621,18 @@ u8 stage_update(void) {
         scroll_to(cam);
         /* 空戦(イントロ)は「戦艦が未出現の開けた海」の間だけ。艦が入り始めたら空襲終了
            (でないと戦闘機が上端=艦の上に突然湧いてゴミに見える。HANDOFF §2: 空戦→戦艦)。 */
-        if (cam > SC_CAM_SHIP && (++ftick % diff_interval(fighter_iv[curstage])) == 0) {
+        if (cam > SC_CAM_SHIP && (++ftick % diff_interval((u8)(fighter_iv[curstage] >> 1))) == 0) {  /* ★出現間隔を半分=海モードの戦闘機を倍増 */
             Entity *f = ent_spawn(ET_FIGHTER);
             if (f) {
-                u8 arch = fighter_arch[curstage];
+                /* ★各面の固有挙動(急降下/直進/蛇行)に「蛇行」を50%混在させる=どの面でも一部が斜めにバンク
+                   して8方向スプライトが活きる(1面=急降下+蛇行/2面=直進+蛇行/4面=急降下+蛇行…英3面は元々蛇行)。 */
+                u8 arch = (rnd() & 1) ? 1 : fighter_arch[curstage];
                 f->x = 24 + (rnd() % 200); f->y = -16;
                 f->ax = arch;                                  /* 挙動archetype(bh_fighterが解釈) */
                 if (arch == 0)      { f->vx = (rnd() & 1) ? 1 : -1; f->vy = 4; }              /* 独 急降下(以後加速) */
                 else if (arch == 1) { f->vx = (rnd() & 1) ? 3 : -3; f->vy = 3; }              /* 英 蛇行 */
                 else                { f->vx = (rnd() & 1) ? 1 : -1; f->vy = 3 + (rnd() % 2); }/* 米 直進 */
-                f->color = fighter_col[curstage]; f->pat = fighter_pat[curstage];
+                f->color = fighter_col[curstage]; f->pat = (u8)(SPR_PLANE_L + 4 * 4);  /* 初期=下向き大。bh_fighterが毎フレーム8方向へ */
                 f->coltab = cur_ctab;   /* 行別色=陰影 */
                 f->shadow = 1;                        /* 海面へ落ち影(旧版に無い新規) */
                 if (rnd() & 1) { f->fire = fd_faim; f->ftimer = 20 + (rnd() % 30); }
