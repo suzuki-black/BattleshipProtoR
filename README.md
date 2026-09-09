@@ -12,12 +12,12 @@ built as a ground-up successor to *Zero no Houkou*. Fly a lone naval fighter fro
 into the guns of an enemy capital ship, and take the whole vessel apart, emplacement by emplacement.
 
 **Repository:** <https://github.com/suzuki-black/BattleshipProtoR> — currently private; it will be made
-public once ready. This game is an **improved successor to
+public once ready. This game is a **successor to
 [BattleshipProto](https://github.com/suzuki-black/BattleshipProto)** (private).
 
 <p align="center">
   <img src="docs/media/stage1_combat.gif" width="300" alt="Stage 1 — battleship-mode combat">
-  <br><sub>Stage 1 · battleship-mode combat / ステージ1 戦艦モードの激闘</sub>
+  <br><sub>Stage 1 · battleship-mode combat / ステージ1 戦艦モードの戦闘</sub>
 </p>
 
 **Language:** [🇬🇧 English](#english) · [🇯🇵 日本語](#japanese)
@@ -66,7 +66,7 @@ public once ready. This game is an **improved successor to
 - **5 stages / bosses:** Bismarck-class battleship → Essex-class carrier → HMS Hood battlecruiser →
   Nelson & Rodney twin battleships → USS Iowa-class fast battleship. Sea-intro fighters are
   contemporary aircraft chosen to match each ship's navy.
-- **V9958 R#23 hardware vertical scroll** plus a **pseudo multi-scroll sea** — a fast engine with
+- **V9958 R#23 hardware vertical scroll** plus a **pseudo multi-scroll sea** — an engine with
   no full-screen redraw.
 - **Rotating, aiming main guns** rendered as shaded sprites that track the player.
 - **Ship-specific weapons** so each boss fights differently.
@@ -125,8 +125,9 @@ docs/          design & development notes
 - **[Game spec / 仕様書](docs/仕様書.md)** — play spec: stages, weapons, scoring, difficulty.
 - **[Algorithm notes / 各処理アルゴリズム解説](docs/アルゴリズム解説.md)** — the algorithm chosen
   per subsystem, why, and its measured effect. A reusable playbook for building a fast turboR shooter.
-- **[Performance / 性能と高速化](docs/性能と高速化.md)** — the full 60fps investigation: measurements,
-  what was tried (success/failure/deferred), profiling pitfalls, and the R800 ROM-fetch findings.
+- **[Performance / 性能と高速化](docs/性能と高速化.md)** — the performance investigation aimed at 60fps
+  (the game ships at a deliberate, fixed **30fps**): measurements, what was tried
+  (success/failure/deferred), profiling pitfalls, and the R800 ROM-fetch findings.
 - **[Development notes / 苦労と教訓](docs/苦労と教訓.md)** — misdiagnoses, traps, MSX-specific issues,
   and root-cause hunts, with the lessons learned.
 
@@ -138,9 +139,29 @@ vs. capital ships. That theme fell out naturally: the graphics are produced with
 way to get the shapes right was to have it work from real **blueprints**, which had to be
 **public-domain** — and those turned out to be WWII ships and aircraft. *1943* ran on then-monster
 arcade hardware, and no MSX could ever rival a board that moved whole battleships as sprites. It
-cannot hope to *surpass* Capcom's *1943* — but it is an earnest, flagship attempt to get even a
-little closer to the thrill of playing it. The two documents above describe the algorithms and the
+does not pretend to rival Capcom's *1943*; it is simply an attempt to get a little closer to that
+arcade feel. The two documents above describe the algorithms and the
 struggles of getting that arcade feel onto the turboR.
+
+### Scope & honest positioning
+This is an **experimental / study project**, and it is worth being plain about what it is and isn't.
+
+- **As a game, it is deliberately conventional.** No power-ups, no bombs — a pure, *1943*-style
+  arcade loop of dodging and destroying. That plainness is the intended style, not an unfinished
+  feature list.
+- **Where it may be useful is as an engineering reference.** The MSX turboR was commercially short-lived,
+  and almost no commercial arcade-style scrolling shooter ever demonstrated what the R800 could
+  really do for a game loop. This repository is a small, working, and honestly-documented data
+  point: the ROM-fetch bottleneck and the RAM-execution fix (§4-3), the emulator-vs-real-hardware
+  traps, and a candid log that keeps the wrong turns and dead ends, not just the wins.
+- **It is not a showcase of turboR spectacle.** The genuinely flashy, "only-on-turboR" ideas —
+  real-time rotation/zoom of a boss, hundreds of on-screen bullets, full-screen distortion,
+  thousands of physics particles, palette-driven lighting — are intentionally **out of scope here**
+  and will be pursued in a **separate, forthcoming repository that reuses these same assets**. This
+  repo stays the clean, playable baseline engine and its study notes.
+
+In short: a niche but useful reference and dev log for anyone squeezing a game loop out of the R800
+— not a groundbreaking title, and not trying to be one.
 
 ### Feedback & Contributing
 This is an experimental prototype released for feedback. Once the repository is public, please use
@@ -207,7 +228,7 @@ silhouettes may differ from the real thing.)
   ネルソン&ロドニー 双子戦艦 → USS アイオワ級 高速戦艦。海イントロの戦闘機は各艦の所属海軍に
   合わせた当時の典型機です。
 - **V9958 の R#23 垂直ハードウェアスクロール**＋**海の疑似多重スクロール**。全画面再描画ゼロの
-  高速エンジン。
+  エンジン。
 - **狙って旋回する主砲**（行別カラーで陰影を付けたスプライト砲身が自機を追尾）。
 - **艦種ごとに異なる固有兵装**でボス戦の性格が変わります。
 - **H.TIMI 60Hz 割込みで回すフレームレート非依存の PSG 音ドライバ**。面別の**オリジナル楽曲**
@@ -264,8 +285,8 @@ docs/          設計・開発ノート
 - **[仕様書](docs/仕様書.md)** — プレイ仕様（ステージ・兵装・スコア・難易度）。
 - **[各処理アルゴリズム解説](docs/アルゴリズム解説.md)** — 各処理でどのアルゴリズムを選び、なぜ、
   どれだけ効いたかを実測値つきで記述。**次の高速な縦STGを作るための土台**。
-- **[性能と高速化](docs/性能と高速化.md)** — 60fps への全調査記録（実測・試行の成功/失敗/見送り・
-  計測手法の落とし穴・R800 ROMフェッチ律速の結論）。
+- **[性能と高速化](docs/性能と高速化.md)** — 60fps を目指した性能調査の記録（製品版は意図して
+  **30fps固定**）。実測・試行の成功/失敗/見送り・計測手法の落とし穴・R800 ROMフェッチ律速の結論。
 - **[苦労と教訓](docs/苦労と教訓.md)** — 誤診・地雷・MSX 固有課題・原因究明の記録と教訓。
 
 ### 開発の背景
@@ -277,9 +298,27 @@ docs/          設計・開発ノート
 でしたが、参照する図面は権利上**パブリックドメインである必要**があり、その条件を満たすのが結果
 的に第二次大戦期の艦船・航空機だったため、**自ずと 1943 的な題材**に落ち着きました。1943 は
 オールドアーケードながら**当時としては“化け物スペック”の基板**で動いた作品で、戦艦をまるごと
-スプライトで動かすような基板に MSX が敵うはずもありません。本作は、**凌駕は叶わないまでも、あの
-カプコン『1943』を遊んだときの感動に少しでも近づくための“本命作”**です。アーケードらしい手応えを
-turboR で成立させるために何をしたかは、上のドキュメントにまとめています。
+スプライトで動かすような基板に MSX が敵うはずもありません。本作は、カプコンの『1943』に遠く及ばないと
+承知のうえで、**あのアーケードの手応えに少しでも近づけたら——という試みにすぎません。**アーケードらしい
+手応えを turboR で成立させるために何をしたかは、上のドキュメントにまとめています。
+
+### 位置づけ（正直な自己評価）
+本作は**実験的な習作**です。何であって何でないかを、正直に書いておきます。
+
+- **ゲームとしては意図して王道・平凡**です。自機強化もボムもない、避けて壊すだけの『1943』的
+  アーケード原理主義。この素っ気なさは狙った作風であって、未完成の機能一覧ではありません。
+- **強いて言えば、参照価値があるのはエンジニアリングの記録としての面**です。MSX turboR は商業的に短命で、R800 が
+  ゲームループで何をできるのかを示した市販のアーケード級スクロールSTGはほとんど存在しませんでした。
+  本リポジトリはその空白に対する、小さいが実際に動く・正直に文書化された一データ点です——ROMフェッチ
+  律速とその回避（RAM実行＝§4-3）、実機とエミュの食い違いの罠、そして成功だけでなく外した仮説や
+  行き止まりも残した開発ログ。
+- **turboR のスペクタクルを見せる作品ではありません**。真に派手な“turboR ならでは”のギミック——
+  ボスのリアルタイム回転・拡縮、画面を埋める数百発の弾幕、全画面歪み、数千のパーティクル物理、
+  パレット駆動のライティング——は**ここでは意図的に対象外**とし、**同じ素材を再利用する別リポジトリ
+  （準備中）**で実現していきます。本リポジトリは、遊べる素の基盤エンジンとその研究ノートに徹します。
+
+要するに——R800 でゲームループを絞り出したい人にとってのニッチだが有用な参照・開発ログであって、
+画期的な作品ではないし、それを狙ってもいません。
 
 ### フィードバック
 本作はフィードバックのために公開している実験的な試作品です。リポジトリ公開後は、不具合報告や
